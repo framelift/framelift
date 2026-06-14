@@ -17,7 +17,7 @@ TEST(SettingsTest, DefaultsAreSane)
     EXPECT_FLOAT_EQ(s.panelWidth, 320.f);
     EXPECT_EQ(s.dynaudnormFrameLen, 100);
     EXPECT_EQ(s.videoExtensions.rfind("mp4", 0), 0u); // starts with "mp4"
-    EXPECT_EQ(s.enabledPlugins.size(), 7u);
+    EXPECT_EQ(s.enabledPlugins.size(), 8u);
 }
 
 TEST(SettingsTest, ThemeDefaults)
