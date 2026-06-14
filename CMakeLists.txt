@@ -192,7 +192,7 @@ endif ()
 # --component sdk` + `cpack` (see .github/workflows/ci.yml). The package version tracks the
 # ABI version so find_package(FrameLiftSdk) can gate on SameMajorVersion.
 # ABI version is parsed from the SDK header — single source of truth.
-set(_FrameLift_abi_header "${CMAKE_SOURCE_DIR}/sdk/include/FrameLift/PluginABI.h")
+set(_FrameLift_abi_header "${CMAKE_SOURCE_DIR}/sdk/include/framelift/PluginABI.h")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_FrameLift_abi_header}")
 foreach (_part MAJOR MINOR PATCH)
     file(STRINGS "${_FrameLift_abi_header}" _FrameLift_abi_line
