@@ -1,0 +1,39 @@
+#!/bin/sh
+# FrameLift pre-commit hook — auto-formats staged src/ files with clang-format.
+#
+# Install once per clone:
+#   git config core.hooksPath .github/hooks
+#
+# Requires clang-format on PATH (ships with LLVM / Visual Studio).
+# If not found the hook warns and lets the commit through unchanged.
+
+# ── Collect staged .cpp / .h files under src/, plugins/, sdk/ ─────────────────
+FILES=$(git diff --cached --name-only --diff-filter=ACMR \
+    -- 'src/*.cpp' 'src/*.h' 'plugins/*.cpp' 'plugins/*.h' \
+       'sdk/*.cpp' 'sdk/*.h' 'sdk/*.hpp')
+[ -z "$FILES" ] && exit 0
+
+# ── Soft-fail when clang-format is unavailable ────────────────────────────────
+if ! command -v clang-format >/dev/null 2>&1; then
+    echo "framelift-format: clang-format not found — skipping (install LLVM to enable)"
+    exit 0
+fi
+
+# ── Format each file; re-stage only those that actually changed ───────────────
+CHANGED=""
+for f in $FILES; do
+    [ -f "$f" ] || continue
+    BEFORE=$(git hash-object "$f")
+    clang-format -i "$f"
+    AFTER=$(git hash-object "$f")
+    if [ "$BEFORE" != "$AFTER" ]; then
+        git add "$f"
+        CHANGED="$CHANGED\n  $f"
+    fi
+done
+
+if [ -n "$CHANGED" ]; then
+    printf "framelift-format: auto-formatted and re-staged:%b\n" "$CHANGED"
+fi
+
+exit 0

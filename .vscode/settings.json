@@ -1,0 +1,4 @@
+{
+    "cmake.useVsDeveloperEnvironment": "always",
+    "cmake.useCMakePresets": "always"
+}
