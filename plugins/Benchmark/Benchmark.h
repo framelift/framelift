@@ -38,14 +38,16 @@ struct Stat
     }
 };
 
-// Performance benchmark overlay (F10 to toggle).
-// Shows live process performance — CPU %, memory, GPU % with running
-// min/avg/max — alongside player playback stats (dropped/mistimed frames and
-// the active hardware/software decoder) in a dark semi-transparent panel
-// anchored to the top-right corner. A "Load file" button starts a chosen video
-// from position 0 for a reproducible run; an optional duration limit pauses
-// playback and freezes the results once playback reaches the configured length.
-// Polled stats refresh once per second; idle state is pushed via OnMediaEvent.
+// Performance benchmark window (F10 to toggle).
+// Shows live UI rendering performance — frame rate and frame time with running
+// min/avg/max — alongside process performance (CPU %, memory, GPU %) and player
+// playback stats (dropped/mistimed frames and the active hardware/software
+// decoder), in a movable/resizable window that spawns as its own OS window
+// beside the app. A "Load file" button starts a chosen video from position 0 for
+// a reproducible run; an optional duration limit pauses playback and freezes the
+// results once playback reaches the configured length. Frame timing is sampled
+// every frame; the polled process/player stats refresh once per second; idle
+// state is pushed via OnMediaEvent.
 class Benchmark final : public SafeRenderable, public PluginBase
 {
 public:
@@ -57,6 +59,10 @@ public:
     void Toggle()
     {
         open_ = !open_;
+        if (open_)
+        {
+            justSeeded_ = true; // seed the window beside the app on this open
+        }
     }
 
     [[nodiscard]] bool IsOpen() const
@@ -80,6 +86,7 @@ private:
     void ResetStats();
 
     bool open_ = false;
+    bool justSeeded_ = false; // seed window pos/size beside the app on the next open frame
     std::string toggleBenchmarkKey_ = "F10";
 
     SysSampler sampler_;
@@ -92,6 +99,8 @@ private:
     int64_t mistimed_ = 0;
 
     // ── Benchmark run state ─────────────────────────────────────────────────────
+    Stat frameStat_;             // UI frame time (ms)
+    double frameMsSmoothed_ = 0.0; // EMA of frame time for the live fps readout
     Stat cpuStat_;
     Stat memStat_; // bytes
     Stat gpuStat_;

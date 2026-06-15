@@ -56,6 +56,7 @@ void Benchmark::RenderSettings(UIContext& ctx)
 
 void Benchmark::ResetStats()
 {
+    frameStat_.Reset();
     cpuStat_.Reset();
     memStat_.Reset();
     gpuStat_.Reset();
@@ -166,6 +167,19 @@ void Benchmark::OnRender(UIContext& ctx)
         return;
     }
 
+    // ── UI frame timing (every frame) ───────────────────────────────────────────
+    // Folded outside the 1 Hz refresh below so min/avg/max capture real per-frame
+    // jitter; frameMsSmoothed_ drives the live fps readout (raw 1/dt is too noisy).
+    const double dtMs = static_cast<double>(ctx.GetDeltaTime()) * 1000.0;
+    if (dtMs > 0.0)
+    {
+        frameMsSmoothed_ = frameMsSmoothed_ <= 0.0 ? dtMs : frameMsSmoothed_ + (dtMs - frameMsSmoothed_) * 0.1;
+        if (accumulating_ && !complete_ && !isIdle_)
+        {
+            frameStat_.Add(dtMs);
+        }
+    }
+
     const auto now = std::chrono::steady_clock::now();
     const double elapsed = std::chrono::duration<double>(now - lastRefresh_).count();
     if (elapsed >= refreshInterval)
@@ -185,24 +199,46 @@ void Benchmark::OnRender(UIContext& ctx)
         }
     }
 
-    constexpr float kPadX = 10.f;
-    constexpr float kPadY = 10.f;
     constexpr float kW = 300.f;
+    constexpr float kH = 360.f;
 
-    ctx.SetNextWindowPos({ctx.GetMainWindowSize().x - kW - kPadX, kPadY});
-    ctx.SetNextWindowBgAlpha(0.82f);
+    // Seed the window beside the app once per open so the multi-viewport backend
+    // spawns it as its own OS window (positioned past the main window's edge)
+    // rather than nesting it inside the main viewport. Mirrors Panel::RenderPoppedOut.
+    if (justSeeded_)
+    {
+        constexpr float gap = 30.f;
+        const UI::Vec2 mainPos = ctx.GetMainWindowScreenPos();
+        const UI::Vec2 mainSize = ctx.GetMainWindowSize();
+        float screenX = mainPos.x + mainSize.x + gap;
+        float screenY = mainPos.y + 40.f;
 
-    const UI::WindowFlags flags = UI::WindowFlags::NoTitleBar | UI::WindowFlags::NoResize | UI::WindowFlags::NoMove |
-                                  UI::WindowFlags::NoScrollbar | UI::WindowFlags::NoSavedSettings |
-                                  UI::WindowFlags::NoBringToFrontOnFocus;
+        if (auto* win = ctx_ ? ctx_->GetService<IAppWindow>() : nullptr)
+        {
+            // Keep the whole window on the display the main window lives on.
+            const Rect b = win->GetDisplayUsableBounds();
+            if (b.w > 0 && b.h > 0)
+            {
+                screenX = std::clamp(screenX, static_cast<float>(b.x), static_cast<float>(b.x + b.w) - kW);
+                screenY = std::clamp(screenY, static_cast<float>(b.y), static_cast<float>(b.y + b.h) - kH);
+            }
+        }
+
+        ctx.SetNextWindowPos({screenX - mainPos.x, screenY - mainPos.y}, UI::Cond::Always);
+        ctx.SetNextWindowSize({kW, kH}, UI::Cond::Always);
+        justSeeded_ = false;
+    }
+
+    // A normal titled/movable/resizable window. NoSavedSettings: the seeded pop-out
+    // placement is per-session and must not leak into imgui.ini.
+    const UI::WindowFlags flags =
+        UI::WindowFlags::NoScrollbar | UI::WindowFlags::NoCollapse | UI::WindowFlags::NoSavedSettings;
 
     ctx.PushStyleVar(UI::StyleVar::WindowRounding, 4.f);
     ctx.PushStyleVar(UI::StyleVar::WindowPadding, {10.f, 8.f});
-    ctx.PushStyleColor(UI::ColorSlot::WindowBg, UI::Color4f(0.04f, 0.04f, 0.04f, 0.88f));
+    ctx.PushStyleColor(UI::ColorSlot::WindowBg, UI::Color4f(0.04f, 0.04f, 0.04f, 1.f)); // opaque for an OS window
 
-    ctx.SetNextWindowSize({kW, 0.f});
-
-    if (ctx.Begin("##benchmark", nullptr, flags))
+    if (ctx.Begin("Benchmark", &open_, flags))
     {
         constexpr UI::Color4f kLabel = {0.65f, 0.65f, 0.65f, 1.f};
         constexpr UI::Color4f kValue = {1.f, 1.f, 0.f, 1.f};
@@ -230,6 +266,11 @@ void Benchmark::OnRender(UIContext& ctx)
             std::snprintf(buf, sizeof(buf), fmt, s.min * scale, s.Avg() * scale, s.max * scale);
             ctx.TextColored(kStat, buf);
         };
+
+        const double fps = frameMsSmoothed_ > 0.0 ? 1000.0 / frameMsSmoothed_ : 0.0;
+        std::snprintf(buf, sizeof(buf), "%.0f fps (%.1f ms)", fps, frameMsSmoothed_);
+        row("UI: ", buf);
+        statRow(frameStat_, 1.0, "   min %.1f / avg %.1f / max %.1f ms");
 
         std::snprintf(buf, sizeof(buf), "%.0f%%", sys_.cpuPercent);
         row("CPU: ", buf);
