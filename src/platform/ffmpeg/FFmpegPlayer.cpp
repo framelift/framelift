@@ -363,42 +363,54 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
         if (!std::isnan(seekTo))
         {
             const auto ts = static_cast<int64_t>(seekTo * AV_TIME_BASE);
-            av_seek_frame(fmt, -1, ts, AVSEEK_FLAG_BACKWARD);
-            if (aud.external && aud.fmt)
+            // A failed seek leaves the demuxer position untouched. Flushing the
+            // decoders / clock anyway would blank the picture for a seek that never
+            // happened, so only tear down and refresh when the seek actually landed.
+            const int ret = av_seek_frame(fmt, -1, ts, AVSEEK_FLAG_BACKWARD);
+            if (ret < 0)
             {
-                av_seek_frame(aud.fmt, -1, ts, AVSEEK_FLAG_BACKWARD);
+                Log::Warn("FFmpegPlayer: seek to {}s failed ({})", seekTo, ret);
             }
-            if (vDec)
+            else
             {
-                avcodec_flush_buffers(vDec);
+                if (aud.external && aud.fmt && av_seek_frame(aud.fmt, -1, ts, AVSEEK_FLAG_BACKWARD) < 0)
+                {
+                    Log::Warn("FFmpegPlayer: external audio seek to {}s failed", seekTo);
+                }
+                if (vDec)
+                {
+                    avcodec_flush_buffers(vDec);
+                }
+                if (aud.dec)
+                {
+                    avcodec_flush_buffers(aud.dec);
+                }
+                if (sDec)
+                {
+                    avcodec_flush_buffers(sDec);
+                }
+                // Embedded subtitles re-decode from the seek point; drop their buffered
+                // events. External subs are pre-loaded with absolute times — leave them.
+                if (subIdx >= 0)
+                {
+                    subtitles_->FlushEvents();
+                }
+                audioOut_->Flush();
+                {
+                    std::lock_guard lock(mutex_);
+                    videoClockSet_ = false;
+                }
+                // Exact (hr-seek): drop decoded frames before the target. Keyframe seek
+                // (-inf) presents straight from the keyframe the demuxer landed on.
+                seekSkipPts_ = hrSeek_.load() ? seekTo : -1e18;
+                seekRefresh_ = true;
+                eofReached_ = false;
+                EmitFlag(PlayerProperty::EofReached, false);
+                QueueEvent(MakeLifecycle(MediaEventType::PlaybackRestart));
             }
-            if (aud.dec)
-            {
-                avcodec_flush_buffers(aud.dec);
-            }
-            if (sDec)
-            {
-                avcodec_flush_buffers(sDec);
-            }
-            // Embedded subtitles re-decode from the seek point; drop their buffered
-            // events. External subs are pre-loaded with absolute times — leave them.
-            if (subIdx >= 0)
-            {
-                subtitles_->FlushEvents();
-            }
-            audioOut_->Flush();
-            {
-                std::lock_guard lock(mutex_);
-                videoClockSet_ = false;
-            }
-            // Exact (hr-seek): drop decoded frames before the target. Keyframe seek
-            // (-inf) presents straight from the keyframe the demuxer landed on.
-            seekSkipPts_ = hrSeek_.load() ? seekTo : -1e18;
-            seekRefresh_ = true;
+            // Clear the pending seek and the UI "seeking" state regardless of outcome,
+            // so a failed seek doesn't leave the player stuck mid-seek.
             seekTo = std::numeric_limits<double>::quiet_NaN();
-            eofReached_ = false;
-            EmitFlag(PlayerProperty::EofReached, false);
-            QueueEvent(MakeLifecycle(MediaEventType::PlaybackRestart));
             EmitFlag(PlayerProperty::Seeking, false);
             UpdateCoreIdle();
         }
