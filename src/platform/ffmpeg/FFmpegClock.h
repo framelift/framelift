@@ -61,7 +61,8 @@ inline FrameAction DecideFrame(double framePts, double masterClock, double dropT
 // A presented frame counts as "mistimed" only when it lags the master clock by more
 // than `tolerance` seconds. A frame always wakes a hair late (never early — that would
 // re-Wait), so sub-frame pacing jitter must not be counted or smooth playback reads
-// ~100% mistimed. Callers pass half the frame interval as the tolerance (≈ libmpv ~0).
+// ~100% mistimed. Callers pass half the frame interval as the tolerance, so only
+// frames that slip a genuine fraction of a frame behind are flagged.
 inline bool IsMistimedFrame(double framePts, double masterClock, double tolerance)
 {
     return (masterClock - framePts) > tolerance;
