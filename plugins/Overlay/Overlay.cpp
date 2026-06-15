@@ -106,21 +106,6 @@ void Overlay::HandleMediaEvent(const MediaEvent& event)
     }
 }
 
-bool Overlay::RedrawNeeded() const
-{
-    const double hudElapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - shownAt_).count();
-    const bool hudActive = !commandLabel_.empty() && hudElapsed < fadeDelay + fadeDur;
-
-    if (isIdle_)
-    {
-        // Idle screen is otherwise static (window-expose events handle redraws),
-        // but a notification (e.g. "File not found") must still fade in/out.
-        return hudActive;
-    }
-    const double barElapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - mouseActiveAt_).count();
-    return hudActive || barElapsed < barVisible + barFade;
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 static std::string FormatTime(const double sec)
@@ -268,10 +253,11 @@ void Overlay::RenderControlsBar(const float w, const float h, UIContext& ctx)
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
-void Overlay::OnRender(const int windowW, const int windowH, UIContext& ctx)
+void Overlay::OnRender(UIContext& ctx)
 {
-    const float w = static_cast<float>(windowW);
-    const float h = static_cast<float>(windowH);
+    const UI::Vec2 mainSize = ctx.GetMainWindowSize();
+    const float w = mainSize.x;
+    const float h = mainSize.y;
 
     // ── Idle / welcome screen ─────────────────────────────────────────────────
     if (isIdle_)

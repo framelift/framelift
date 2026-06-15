@@ -5,11 +5,11 @@
 TEST(DebugOverlayTest, TogglesVisibility)
 {
     DebugOverlay d;
-    EXPECT_FALSE(d.NeedsRedraw()); // closed by default
+    EXPECT_FALSE(d.IsOpen()); // closed by default
     d.Toggle();
-    EXPECT_TRUE(d.NeedsRedraw());
+    EXPECT_TRUE(d.IsOpen());
     d.Toggle();
-    EXPECT_FALSE(d.NeedsRedraw());
+    EXPECT_FALSE(d.IsOpen());
 }
 
 TEST(DebugOverlayTest, MediaEventsDoNotCrashWhileClosed)

@@ -15,11 +15,10 @@ MediaEvent IdleEvent(const bool idle)
 }
 } // namespace
 
-TEST(OverlayTest, StartsIdleAndStatic)
+TEST(OverlayTest, StartsIdle)
 {
     const Overlay o;
     EXPECT_TRUE(o.IsIdle());
-    EXPECT_FALSE(o.NeedsRedraw()); // idle screen is static
 }
 
 TEST(OverlayTest, IdleActivePropertyTogglesIdleState)
@@ -31,20 +30,12 @@ TEST(OverlayTest, IdleActivePropertyTogglesIdleState)
     EXPECT_TRUE(o.IsIdle());
 }
 
-TEST(OverlayTest, ShowCommandRequestsRedrawWhilePlaying)
+TEST(OverlayTest, ShowCommandWhileIdleDoesNotChangeIdleState)
 {
     Overlay o;
-    o.OnMediaEvent(IdleEvent(false)); // playing
-    o.ShowCommand("Mute: On");
-    EXPECT_TRUE(o.NeedsRedraw()); // HUD fade window is active
-}
-
-TEST(OverlayTest, ShowCommandRequestsRedrawWhileIdle)
-{
-    Overlay o;
-    ASSERT_TRUE(o.IsIdle());       // no file loaded
-    o.ShowCommand("File not found"); // e.g. selecting a missing history item
-    EXPECT_TRUE(o.NeedsRedraw());  // notification must repaint over the idle screen
+    ASSERT_TRUE(o.IsIdle());          // no file loaded
+    o.ShowCommand("File not found");  // e.g. selecting a missing history item — must not crash
+    EXPECT_TRUE(o.IsIdle());
 }
 
 TEST(OverlayTest, NonPropertyEventsAreIgnored)

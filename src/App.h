@@ -47,10 +47,9 @@ private:
     void Render();
     void ResizeToVideo() const;
 
-    void DrainEvents();
+    void DrainEvents(int timeoutMs);
     void Dispatch(const AppEvent& e);
     void DrainMediaEvents();
-    void UpdateRedrawState();
     void RenderFrame();
 
     void LoadPlugins();
@@ -63,7 +62,6 @@ private:
 
     bool pendingResize_ = false;
     bool running_ = true;
-    bool redraw_ = false;
     // Mirrors the player's idle state (true = no file loaded); tracked in
     // DrainMediaEvents() so TogglePauseAction can decide without asking plugins.
     bool playerIdle_ = true;

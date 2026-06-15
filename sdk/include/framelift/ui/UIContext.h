@@ -188,6 +188,11 @@ public:
     // the monitor. Zero unless multi-viewport is active.
     [[nodiscard]] virtual UI::Vec2 GetMainWindowScreenPos() const noexcept = 0;
 
+    // Size in pixels of the main OS window's client area. This is what the old
+    // Render(windowW, windowH, ...) parameters carried; fetch it on demand instead.
+    // Valid during a Render() call (after the host has begun the frame).
+    [[nodiscard]] virtual UI::Vec2 GetMainWindowSize() const noexcept = 0;
+
     // Pin the next window to the main OS window's viewport so it never detaches
     // into its own platform window when positioned past the main window's edge —
     // e.g. a docked panel sliding off-screen during its close animation. Such a

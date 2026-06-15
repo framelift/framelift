@@ -57,9 +57,7 @@ public:
     }
 
     // Animate and draw the panel frame. Sealed so subclasses override RenderContent().
-    void Render(int windowW, int windowH, UIContext& ctx) noexcept final;
-    // Returns true while the panel is animating or open (drives continuous redraws).
-    [[nodiscard]] bool NeedsRedraw() const noexcept override;
+    void Render(UIContext& ctx) noexcept final;
 
 protected:
     // Called once each time the panel transitions from closed to open.
@@ -88,6 +86,9 @@ private:
 
     // Draw the panel content in its own OS window (multi-viewport).
     void RenderPoppedOut(int windowW, int windowH, UIContext& ctx);
+    // True while the panel is animating, open, or popped out — i.e. its window
+    // should still be submitted this frame.
+    [[nodiscard]] bool IsActive() const noexcept;
     // Draw the small pop-out/dock toggle in the panel's top-right corner.
     // Returns true on the click that flips poppedOut_ this frame.
     bool DrawPopToggle(UIContext& ctx);

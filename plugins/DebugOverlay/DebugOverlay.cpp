@@ -151,7 +151,7 @@ static std::string FormatTime(const double sec)
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
-void DebugOverlay::OnRender(const int windowW, const int windowH, UIContext& ctx)
+void DebugOverlay::OnRender(UIContext& ctx)
 {
     if (!open_)
     {
@@ -229,7 +229,8 @@ void DebugOverlay::OnRender(const int windowW, const int windowH, UIContext& ctx
         std::snprintf(buf, sizeof(buf), "%.0f%%", volume_);
         row("Volume: ", buf);
 
-        std::snprintf(buf, sizeof(buf), "%dx%d", windowW, windowH);
+        const UI::Vec2 winSize = ctx.GetMainWindowSize();
+        std::snprintf(buf, sizeof(buf), "%dx%d", static_cast<int>(winSize.x), static_cast<int>(winSize.y));
         row("Window dimensions: ", buf);
 
         const char* status = isIdle_ ? "Idle" : (isPaused_ ? "Paused" : "Playing");

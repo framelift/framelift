@@ -932,7 +932,7 @@ void SettingsMenu::RenderPageConfig(UIContext& ctx)
 
 // ── Top-level render ──────────────────────────────────────────────────────────
 
-void SettingsMenu::OnRender(const int windowW, const int windowH, UIContext& ctx)
+void SettingsMenu::OnRender(UIContext& ctx)
 {
     if (!open_)
     {
@@ -966,7 +966,7 @@ void SettingsMenu::OnRender(const int windowW, const int windowH, UIContext& ctx
     }
 
     ctx.SetNextWindowPos({0.f, 0.f});
-    ctx.SetNextWindowSize({static_cast<float>(windowW), static_cast<float>(windowH)});
+    ctx.SetNextWindowSize(ctx.GetMainWindowSize());
 
     // The dark purple chrome is designed for dark text-on-light contrast. Under a
     // light preset it would clash with the theme's dark text, so skip the

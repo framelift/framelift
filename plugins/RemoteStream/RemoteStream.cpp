@@ -131,7 +131,7 @@ void RemoteStream::OnInstall(IPluginContext& ctx)
     );
 }
 
-void RemoteStream::OnRender(int windowW, int windowH, UIContext& ctx)
+void RemoteStream::OnRender(UIContext& ctx)
 {
     if (requestOpen_)
     {
@@ -140,10 +140,9 @@ void RemoteStream::OnRender(int windowW, int windowH, UIContext& ctx)
     }
 
     constexpr float kWidth = 460.f;
+    const UI::Vec2 winSize = ctx.GetMainWindowSize();
     ctx.SetNextWindowSize({kWidth, 0.f}, UI::Cond::FirstUseEver);
-    ctx.SetNextWindowPos(
-        {(static_cast<float>(windowW) - kWidth) * 0.5f, static_cast<float>(windowH) * 0.3f}, UI::Cond::FirstUseEver
-    );
+    ctx.SetNextWindowPos({(winSize.x - kWidth) * 0.5f, winSize.y * 0.3f}, UI::Cond::FirstUseEver);
 
     modalOpen_ = ctx.BeginPopupModal(kModalId);
     if (!modalOpen_)
@@ -177,11 +176,6 @@ void RemoteStream::OnRender(int windowW, int windowH, UIContext& ctx)
     }
 
     ctx.EndPopup();
-}
-
-bool RemoteStream::RedrawNeeded() const
-{
-    return modalOpen_ || requestOpen_;
 }
 
 FRAMELIFT_PLUGIN_EXPORT(

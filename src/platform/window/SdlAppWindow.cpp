@@ -173,6 +173,13 @@ void SdlAppWindow::SetVSync(const bool enabled) noexcept
     SDL_GL_SetSwapInterval(enabled ? 1 : 0);
 }
 
+bool SdlAppWindow::IsRenderable() const noexcept
+{
+    // No point painting (and no vsync pacing) when the window can't be seen.
+    constexpr SDL_WindowFlags hidden = SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN | SDL_WINDOW_OCCLUDED;
+    return (SDL_GetWindowFlags(window_) & hidden) == 0;
+}
+
 // ── Events ────────────────────────────────────────────────────────────────────
 
 bool SdlAppWindow::WaitNextEvent(AppEvent& out, const int timeoutMs) noexcept
@@ -382,8 +389,8 @@ AppEvent SdlAppWindow::TranslateEvent(SDL_Event e) const
     case SDL_EVENT_WINDOW_EXPOSED:
     case SDL_EVENT_WINDOW_RESIZED:
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-        // All three mean the window content must be repainted. Without this, a
-        // resize while idle (when RedrawNeeded() is false) would expose black.
+        // All three mean the window content must be repainted; the event wakes the
+        // loop from its idle WaitNextEvent so the next frame is painted promptly.
         out.type = AppEventType::WindowExposed;
         break;
     case SDL_EVENT_KEY_DOWN:

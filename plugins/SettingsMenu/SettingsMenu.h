@@ -47,12 +47,7 @@ public:
     // Register a callback invoked after settings are saved to disk.
     void RegisterChangeCallback(std::function<void(const Settings&)> cb);
 
-    void OnRender(int windowW, int windowH, UIContext& ctx) override;
-
-    [[nodiscard]] bool RedrawNeeded() const override
-    {
-        return open_;
-    }
+    void OnRender(UIContext& ctx) override;
 
 protected:
     const char* PluginName() const override

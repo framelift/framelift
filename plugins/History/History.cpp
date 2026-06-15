@@ -34,6 +34,31 @@ std::string History::FilenameOf(const std::string& path)
     }
 }
 
+void History::FormatEntry(Entry& e)
+{
+    try
+    {
+        e.dir = std::filesystem::path(e.path).parent_path().string();
+    }
+    catch (...)
+    {
+        e.dir.clear();
+    }
+
+    const int total = static_cast<int>(e.resumePos);
+    const int h = total / 3600, m = (total % 3600) / 60, s = total % 60;
+    char posBuf[16];
+    if (h > 0)
+    {
+        std::snprintf(posBuf, sizeof(posBuf), "%d:%02d:%02d", h, m, s);
+    }
+    else
+    {
+        std::snprintf(posBuf, sizeof(posBuf), "%d:%02d", m, s);
+    }
+    e.meta = e.playbackDate + "  \xc2\xb7  " + posBuf;
+}
+
 // ── Constructor ───────────────────────────────────────────────────────────────
 
 History::History() : Panel(Side::Right, 320.f, "History")
@@ -181,8 +206,10 @@ void History::Load()
             }
             const double pos = item.value("r", 0.0);
             std::string date = item.value("d", std::string{});
-            const std::string label = FilenameOf(path);
-            entries_.push_back({std::move(path), label, pos, std::move(date)});
+            std::string label = FilenameOf(path);
+            Entry e{std::move(path), std::move(label), pos, std::move(date)};
+            FormatEntry(e);
+            entries_.push_back(std::move(e));
         }
     }
     catch (...)
@@ -373,7 +400,9 @@ void History::AddEntry(const char* path) noexcept
     char dateBuf[20];
     std::strftime(dateBuf, sizeof(dateBuf), "%Y-%m-%d %H:%M:%S", &tm);
 
-    entries_.push_front({path, FilenameOf(path), existingPos, dateBuf});
+    Entry e{path, FilenameOf(path), existingPos, dateBuf};
+    FormatEntry(e);
+    entries_.push_front(std::move(e));
 
     if (static_cast<int>(entries_.size()) > MaxEntries())
     {
@@ -395,6 +424,7 @@ void History::UpdateResumePos(const char* path, const double pos) noexcept
         if (e.path == path)
         {
             e.resumePos = pos;
+            FormatEntry(e); // refresh cached meta string with the new position
             return;
         }
     }
@@ -565,25 +595,11 @@ void History::RenderContent(const float panelW, float /*panelH*/, UIContext& ctx
 
         ctx.SetCursorPosX(padding);
         ctx.SetCursorPosY(rowTop + 24.f);
-        const std::string dir = std::filesystem::path(entries_[ei].path).parent_path().string();
-        ctx.TextColored(UI::Color4f(0.45f, 0.42f, 0.55f, 1.f), dir.c_str());
+        ctx.TextColored(UI::Color4f(0.45f, 0.42f, 0.55f, 1.f), entries_[ei].dir.c_str());
 
         ctx.SetCursorPosX(padding);
         ctx.SetCursorPosY(rowTop + 40.f);
-        const double pos = entries_[ei].resumePos;
-        const int total = static_cast<int>(pos);
-        const int h = total / 3600, m = (total % 3600) / 60, s = total % 60;
-        char posBuf[16];
-        if (h > 0)
-        {
-            std::snprintf(posBuf, sizeof(posBuf), "%d:%02d:%02d", h, m, s);
-        }
-        else
-        {
-            std::snprintf(posBuf, sizeof(posBuf), "%d:%02d", m, s);
-        }
-        const std::string meta = entries_[ei].playbackDate + "  \xc2\xb7  " + posBuf;
-        ctx.TextColored(UI::Color4f(0.35f, 0.32f, 0.45f, 1.f), meta.c_str());
+        ctx.TextColored(UI::Color4f(0.35f, 0.32f, 0.45f, 1.f), entries_[ei].meta.c_str());
 
         dl.AddLine(
             {rowMin.x + padding, rowMax.y - 1.f}, {rowMax.x - padding, rowMax.y - 1.f}, UI::MakeColor32(70, 55, 100, 80)

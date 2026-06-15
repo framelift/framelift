@@ -76,6 +76,7 @@ public:
     float GetWindowWidth() const noexcept override;
     float GetWindowHeight() const noexcept override;
     UI::Vec2 GetMainWindowScreenPos() const noexcept override;
+    UI::Vec2 GetMainWindowSize() const noexcept override;
     void PinNextWindowToMainViewport() noexcept override;
     void SetCursorPosX(float x) noexcept override;
     void SetCursorPosY(float y) noexcept override;
@@ -146,4 +147,7 @@ private:
     // multi-viewport enabled this is non-zero; the host adds it to window-relative
     // coordinates (and subtracts it from mouse position) so plugins stay unaware.
     float mainPosX_ = 0.f, mainPosY_ = 0.f;
+    // Main OS window client-area size in pixels, cached each BeginFrame. Replaces
+    // the Render(windowW, windowH) parameters.
+    float mainW_ = 0.f, mainH_ = 0.f;
 };

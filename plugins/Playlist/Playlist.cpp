@@ -696,9 +696,14 @@ void Playlist::RenderContent(const float panelW, float /*panelH*/, UIContext& ct
         {
             ctx.SetCursorPosY(10.f);
             ctx.SetCursorPosX(counterX);
-            const std::string counter =
-                (current_ >= 0 ? std::to_string(current_ + 1) : "-") + " / " + std::to_string(entries_.size());
-            ctx.TextColored(UI::Color4f(0.5f, 0.45f, 0.65f, 1.f), counter.c_str());
+            if (current_ != counterCur_ || entries_.size() != counterTotal_)
+            {
+                counterCur_ = current_;
+                counterTotal_ = entries_.size();
+                counterText_ =
+                    (current_ >= 0 ? std::to_string(current_ + 1) : "-") + " / " + std::to_string(entries_.size());
+            }
+            ctx.TextColored(UI::Color4f(0.5f, 0.45f, 0.65f, 1.f), counterText_.c_str());
         }
 
         // ─ Shuffle button (S) ──────────────────────────────────────────────────

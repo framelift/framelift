@@ -78,10 +78,16 @@ private:
         std::string label;        // display name (filename without directory) — not persisted
         double resumePos = 0.0;   // JSON: "r" — last known playback position in seconds
         std::string playbackDate; // JSON: "d" — ISO 8601 local timestamp of last play
+        // Cached display strings, recomputed only on mutation (not per frame) — the
+        // panel renders every frame, so per-row path parsing/formatting would be hot.
+        std::string dir;  // parent directory of path
+        std::string meta; // "<playbackDate>  ·  <resume position>"
     };
 
     // Extract the filename component of a path for use as a display label.
     static std::string FilenameOf(const std::string& path);
+    // Refresh an entry's cached display strings (dir, meta) from its path/pos/date.
+    static void FormatEntry(Entry& e);
     // Deserialise entries from storagePath_; called from SetStoragePath().
     void Load();
     // Maximum number of entries to retain, sourced from settings (or a fallback).

@@ -35,12 +35,7 @@ public:
     // menu is assembled, between the core items and Quit.
     void EmitSections();
 
-    void Render(int windowW, int windowH, UIContext& ctx) noexcept override;
-
-    [[nodiscard]] bool NeedsRedraw() const noexcept override
-    {
-        return menuOpen_;
-    }
+    void Render(UIContext& ctx) noexcept override;
 
 private:
     struct Item
@@ -67,5 +62,4 @@ private:
     std::vector<Item> items_;
     std::vector<Section> sections_;
     Hotkeys* keys_ = nullptr;
-    bool menuOpen_ = false;
 };

@@ -114,16 +114,11 @@ void ContextMenuImpl::RenderItems(UIContext& ctx, std::vector<Item>& items)
     }
 }
 
-void ContextMenuImpl::Render(int /*w*/, int /*h*/, UIContext& ctx) noexcept
+void ContextMenuImpl::Render(UIContext& ctx) noexcept
 {
     if (ctx.BeginPopupContextVoid("##main_ctx"))
     {
-        menuOpen_ = true;
         RenderItems(ctx, items_);
         ctx.EndPopup();
-    }
-    else
-    {
-        menuOpen_ = false;
     }
 }

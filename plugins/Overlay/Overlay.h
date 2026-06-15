@@ -34,8 +34,7 @@ public:
     bool HandleEvent(const AppEvent& e) override;
     void HandleMediaEvent(const MediaEvent& event) override;
 
-    void OnRender(int windowW, int windowH, UIContext& ctx) override;
-    [[nodiscard]] bool RedrawNeeded() const override;
+    void OnRender(UIContext& ctx) override;
 
 protected:
     const char* PluginName() const override

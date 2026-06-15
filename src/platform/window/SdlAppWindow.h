@@ -25,6 +25,7 @@ public:
     [[nodiscard]] void* GetGLProcAddr(const char* name) const noexcept override;
     void SwapBuffers() noexcept override;
     void SetVSync(bool enabled) noexcept override;
+    [[nodiscard]] bool IsRenderable() const noexcept override;
 
     bool WaitNextEvent(AppEvent& out, int timeoutMs) noexcept override;
     bool PollNextEvent(AppEvent& out) noexcept override;

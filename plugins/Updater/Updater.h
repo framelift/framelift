@@ -42,8 +42,7 @@ public:
     // Write a replacement batch script and launch it; call just before app exit.
     void ApplyUpdate() const;
 
-    void OnRender(int windowW, int windowH, UIContext& ctx) override;
-    [[nodiscard]] bool RedrawNeeded() const override;
+    void OnRender(UIContext& ctx) override;
 
 protected:
     const char* PluginName() const override

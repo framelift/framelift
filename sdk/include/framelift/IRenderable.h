@@ -11,13 +11,7 @@ public:
     static constexpr const char* InterfaceId = "framelift.IRenderable";
     virtual ~IRenderable() = default;
 
-    // Draw UI for this frame. windowW/windowH are the current client area in pixels.
-    virtual void Render(int windowW, int windowH, UIContext& ctx) noexcept = 0;
-
-    // Return true to request a render pass this frame even when no events are pending.
-    // Returning false prevents unnecessary GPU work while the UI is static.
-    [[nodiscard]] virtual bool NeedsRedraw() const noexcept
-    {
-        return false;
-    }
+    // Draw UI for this frame. The host renders every frame while the window is
+    // visible; query the client-area size via ctx.GetMainWindowSize() if needed.
+    virtual void Render(UIContext& ctx) noexcept = 0;
 };

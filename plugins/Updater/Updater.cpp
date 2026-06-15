@@ -523,13 +523,7 @@ void Updater::ApplyUpdate() const
 
 // ── IRenderable ───────────────────────────────────────────────────────────────
 
-bool Updater::RedrawNeeded() const
-{
-    const auto s = state_.load();
-    return s != UpdaterState::Idle && s != UpdaterState::UpToDate;
-}
-
-void Updater::OnRender(const int windowW, const int /*windowH*/, UIContext& ctx)
+void Updater::OnRender(UIContext& ctx)
 {
     const auto s = state_.load();
     if (s == UpdaterState::Idle || s == UpdaterState::UpToDate)
@@ -562,7 +556,7 @@ void Updater::OnRender(const int windowW, const int /*windowH*/, UIContext& ctx)
     constexpr float padY = 4.f;
     constexpr float margin = 8.f;
 
-    const float x = static_cast<float>(windowW) - w - margin;
+    const float x = ctx.GetMainWindowSize().x - w - margin;
     constexpr float y = margin;
 
     auto& dl = ctx.GetForegroundDrawList();

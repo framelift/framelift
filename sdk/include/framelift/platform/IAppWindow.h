@@ -33,6 +33,9 @@ public:
     virtual void SwapBuffers() noexcept = 0;
     // Enable/disable vsync (GL swap interval). On = present synced to the display refresh.
     virtual void SetVSync(bool enabled) noexcept = 0;
+    // False while the window is minimized, hidden, or fully occluded — the host
+    // skips rendering and idles on events instead of spinning the GPU.
+    [[nodiscard]] virtual bool IsRenderable() const noexcept = 0;
 
     // ── Events ────────────────────────────────────────────────────────────────
     [[nodiscard]] virtual bool WaitNextEvent(AppEvent& out, int timeoutMs) noexcept = 0;

@@ -6,11 +6,11 @@
 TEST(BenchmarkTest, TogglesVisibility)
 {
     Benchmark b;
-    EXPECT_FALSE(b.NeedsRedraw()); // closed by default
+    EXPECT_FALSE(b.IsOpen()); // closed by default
     b.Toggle();
-    EXPECT_TRUE(b.NeedsRedraw());
+    EXPECT_TRUE(b.IsOpen());
     b.Toggle();
-    EXPECT_FALSE(b.NeedsRedraw());
+    EXPECT_FALSE(b.IsOpen());
 }
 
 TEST(BenchmarkTest, MediaEventsDoNotCrashWhileClosed)

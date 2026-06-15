@@ -12,7 +12,7 @@ namespace
 class RenderingDummy final : public IPlugin, public IRenderable
 {
 public:
-    void Render(int, int, UIContext&) noexcept override
+    void Render(UIContext&) noexcept override
     {
     }
 };

@@ -115,6 +115,13 @@ private:
     int current_ = -1; // index of the currently playing entry, or -1 if none
     int cursor_ = -1;  // keyboard-navigation cursor, or -1 if none
 
+    // ── Header counter cache ──────────────────────────────────────────────────
+    // "<current+1> / <total>", rebuilt only when current_ or the entry count
+    // changes — the panel renders every frame, so this avoids per-frame allocs.
+    std::string counterText_;
+    int counterCur_ = -2;             // current_ the cache was built for (-2 = unset)
+    std::size_t counterTotal_ = 0;    // entries_.size() the cache was built for
+
     // ── Shuffle ─────────────────────────────────────────────────────
     bool shuffleEnabled_ = false;
     std::vector<Entry> sortedEntries_; // sorted backup; populated when shuffle is on

@@ -154,12 +154,14 @@ void UIContextImpl::BeginFrame() noexcept
     backgroundDL_.SetTarget(nullptr);
     foregroundDL_.SetTarget(nullptr);
 
-    // Cache the main viewport (OS window) screen position for this frame so
-    // window-relative coordinates can be mapped to/from screen space. Zero unless
-    // multi-viewport is enabled.
-    const ImVec2 mp = ImGui::GetMainViewport()->Pos;
-    mainPosX_ = mp.x;
-    mainPosY_ = mp.y;
+    // Cache the main viewport (OS window) screen position and size for this frame.
+    // Position maps window-relative coordinates to/from screen space (zero unless
+    // multi-viewport is enabled); size replaces the old Render(windowW, windowH).
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    mainPosX_ = vp->Pos.x;
+    mainPosY_ = vp->Pos.y;
+    mainW_ = vp->Size.x;
+    mainH_ = vp->Size.y;
 }
 
 float UIContextImpl::GetDeltaTime() const noexcept
@@ -253,6 +255,11 @@ float UIContextImpl::GetWindowHeight() const noexcept
 UI::Vec2 UIContextImpl::GetMainWindowScreenPos() const noexcept
 {
     return {mainPosX_, mainPosY_};
+}
+
+UI::Vec2 UIContextImpl::GetMainWindowSize() const noexcept
+{
+    return {mainW_, mainH_};
 }
 
 void UIContextImpl::PinNextWindowToMainViewport() noexcept

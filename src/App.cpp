@@ -416,7 +416,7 @@ void App::Render()
     uiCtx_.BeginFrame();
     for (auto* r : renderables_)
     {
-        r->Render(w, h, uiCtx_);
+        r->Render(uiCtx_);
     }
     appWindow_->UIEndFrame();
 
@@ -459,22 +459,13 @@ void App::Dispatch(const AppEvent& e)
         running_ = false;
         return;
     case AppEventType::WindowExposed:
-        redraw_ = true;
-        return;
     case AppEventType::RenderUpdate:
-        if (player_->HasNewFrame())
-        {
-            redraw_ = true;
-        }
+        // The loop renders every frame while visible, so these only need to wake
+        // WaitNextEvent; the new video frame is consumed by player_->RenderFrame().
         return;
     case AppEventType::PlayerWakeup:
         DrainMediaEvents();
         return;
-    case AppEventType::MouseButtonDown:
-    case AppEventType::MouseMotion:
-    case AppEventType::MouseWheel:
-        redraw_ = true;
-        break;
     default:
         break;
     }
@@ -511,30 +502,14 @@ void App::Dispatch(const AppEvent& e)
     Registry().OnEvent(e);
 }
 
-void App::DrainEvents()
+void App::DrainEvents(const int timeoutMs)
 {
     AppEvent e;
-    (void)appWindow_->WaitNextEvent(e, redraw_ ? 0 : 4);
+    (void)appWindow_->WaitNextEvent(e, timeoutMs);
     do
     {
         Dispatch(e);
     } while (appWindow_->PollNextEvent(e));
-}
-
-void App::UpdateRedrawState()
-{
-    for (const auto* r : renderables_)
-    {
-        if (r->NeedsRedraw())
-        {
-            redraw_ = true;
-            return;
-        }
-    }
-    if (player_->HasNewFrame())
-    {
-        redraw_ = true;
-    }
 }
 
 void App::RenderFrame()
@@ -779,11 +754,14 @@ int App::Run()
 
     while (running_)
     {
-        redraw_ = false;
-        UpdateRedrawState();
-        DrainEvents();
-        UpdateRedrawState();
-        if (running_ && redraw_)
+        const bool renderable = appWindow_->IsRenderable();
+        // While visible we render every frame; vsync paces via SwapBuffers (poll
+        // events with 0 timeout), vsync-off caps at ~250 fps so a static screen
+        // doesn't spin. While minimized/occluded we don't paint, so block on
+        // events (100 ms) to idle instead of busy-looping.
+        const int timeoutMs = !renderable ? 100 : (settings_.videoSync ? 0 : 4);
+        DrainEvents(timeoutMs);
+        if (running_ && appWindow_->IsRenderable())
         {
             RenderFrame();
         }

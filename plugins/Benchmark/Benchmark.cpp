@@ -159,9 +159,8 @@ void Benchmark::RequestRefresh()
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
-void Benchmark::OnRender(const int windowW, const int windowH, UIContext& ctx)
+void Benchmark::OnRender(UIContext& ctx)
 {
-    (void)windowH;
     if (!open_)
     {
         return;
@@ -190,7 +189,7 @@ void Benchmark::OnRender(const int windowW, const int windowH, UIContext& ctx)
     constexpr float kPadY = 10.f;
     constexpr float kW = 300.f;
 
-    ctx.SetNextWindowPos({static_cast<float>(windowW) - kW - kPadX, kPadY});
+    ctx.SetNextWindowPos({ctx.GetMainWindowSize().x - kW - kPadX, kPadY});
     ctx.SetNextWindowBgAlpha(0.82f);
 
     const UI::WindowFlags flags = UI::WindowFlags::NoTitleBar | UI::WindowFlags::NoResize | UI::WindowFlags::NoMove |

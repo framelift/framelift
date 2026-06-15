@@ -82,11 +82,11 @@ float Panel::VisibleWidth() const
     return w - animX_; // animX_ is 0 when open, +w when hidden
 }
 
-bool Panel::NeedsRedraw() const noexcept
+bool Panel::IsActive() const noexcept
 {
     if (poppedOut_)
     {
-        return true; // keep the loop live so the popped-out OS window repaints
+        return true; // popped-out OS window still needs its content submitted
     }
     const float w = GetWidth();
     if (open_)
@@ -100,8 +100,12 @@ bool Panel::NeedsRedraw() const noexcept
     return animX_ < w - 1.f;
 }
 
-void Panel::Render(const int windowW, const int windowH, UIContext& ctx) noexcept
+void Panel::Render(UIContext& ctx) noexcept
 {
+    const UI::Vec2 mainSize = ctx.GetMainWindowSize();
+    const int windowW = static_cast<int>(mainSize.x);
+    const int windowH = static_cast<int>(mainSize.y);
+
     if (poppedOut_)
     {
         // Report 0 width so layout consumers (e.g. Overlay's controls bar)
@@ -143,7 +147,8 @@ void Panel::Render(const int windowW, const int windowH, UIContext& ctx) noexcep
         }
     }
 
-    if (!NeedsRedraw())
+    // A fully-closed, settled panel needs no window submitted this frame.
+    if (!IsActive())
     {
         return;
     }

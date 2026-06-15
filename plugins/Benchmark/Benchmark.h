@@ -59,14 +59,14 @@ public:
         open_ = !open_;
     }
 
-    void HandleMediaEvent(const MediaEvent& event) override;
-
-    void OnRender(int windowW, int windowH, UIContext& ctx) override;
-
-    [[nodiscard]] bool RedrawNeeded() const override
+    [[nodiscard]] bool IsOpen() const
     {
         return open_;
     }
+
+    void HandleMediaEvent(const MediaEvent& event) override;
+
+    void OnRender(UIContext& ctx) override;
 
 protected:
     std::vector<framelift::SettingsField> SettingsFields() override;
