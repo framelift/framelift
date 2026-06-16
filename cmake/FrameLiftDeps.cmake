@@ -34,7 +34,7 @@ FetchContent_MakeAvailable(spdlog)
 FetchContent_Declare(
         vulkan_headers
         GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
-        GIT_TAG v1.3.296
+        GIT_TAG v1.4.354
         GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(vulkan_headers)
@@ -45,7 +45,7 @@ FetchContent_MakeAvailable(vulkan_headers)
 FetchContent_Declare(
         volk
         GIT_REPOSITORY https://github.com/zeux/volk.git
-        GIT_TAG 1.3.296
+        GIT_TAG 1.4.350
         GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(volk)
@@ -54,7 +54,7 @@ FetchContent_MakeAvailable(volk)
 FetchContent_Declare(
         vma
         GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-        GIT_TAG v3.1.0
+        GIT_TAG v3.4.0
         GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(vma)
@@ -63,7 +63,7 @@ FetchContent_MakeAvailable(vma)
 FetchContent_Declare(
         vk_bootstrap
         GIT_REPOSITORY https://github.com/charles-lunarg/vk-bootstrap.git
-        GIT_TAG v1.3.295
+        GIT_TAG v1.4.353
         GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(vk_bootstrap)
