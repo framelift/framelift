@@ -49,6 +49,7 @@ public:
     [[nodiscard]] VkRenderPass RenderPass() const { return renderPass_; }
     [[nodiscard]] VkExtent2D SwapchainExtent() const { return swapchainExtent_; }
     [[nodiscard]] VkCommandBuffer CurrentCommandBuffer() const { return currentCmd_; }
+    [[nodiscard]] uint32_t CurrentFrameIndex() const { return currentFrame_; }
 
     // Record one-shot transfer/setup work on a transient command buffer and block
     // until the GPU finishes. Used by the video renderer to upload frames (Phase 2;
