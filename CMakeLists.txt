@@ -34,6 +34,9 @@ find_package(OpenGL REQUIRED)
 # ── Host third-party dependencies (imgui/spdlog/stb/json — NOT in the SDK) ────
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftDeps.cmake")
 
+# ── Shader → SPIR-V build step (glslang, fetched in-tree) ─────────────────────
+include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftShaders.cmake")
+
 # ── Release-build optimizations (FrameLift_apply_release_opts) ─────────────────────
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftOptimize.cmake")
 
@@ -102,6 +105,13 @@ target_link_libraries(FrameLift PRIVATE
 # are header/single-source. No link-time libvulkan: volk loads it at runtime.
 target_link_libraries(FrameLift PRIVATE
         volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap)
+
+# Compile the video shaders to embedded SPIR-V headers and make the host depend on
+# them (the Vulkan renderer #includes the generated <name>.spv.h from this dir).
+framelift_compile_shader("${CMAKE_SOURCE_DIR}/src/platform/gfx/shaders/video.vert" kVideoVertSpv FL_VIDEO_VERT_SPV)
+framelift_compile_shader("${CMAKE_SOURCE_DIR}/src/platform/gfx/shaders/video.frag" kVideoFragSpv FL_VIDEO_FRAG_SPV)
+target_sources(FrameLift PRIVATE "${FL_VIDEO_VERT_SPV}" "${FL_VIDEO_FRAG_SPV}")
+target_include_directories(FrameLift PRIVATE "${FRAMELIFT_SHADER_GEN_DIR}")
 
 # The FFmpeg + libass playback backend (the only backend; App.cpp constructs
 # FFmpegPlayer unconditionally).
