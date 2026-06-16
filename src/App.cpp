@@ -373,13 +373,9 @@ void App::BuildRenderables()
 
 void App::InitRender() const
 {
-    player_->InitRender(
-        [](const char* name, void* ud) -> void*
-        {
-            return static_cast<IAppWindow*>(ud)->GetGLProcAddr(name);
-        },
-        appWindow_.get()
-    );
+    // Hand the player the active graphics backend (opaque IGraphicsBackend*); it
+    // builds its matching video renderer from it (GL or Vulkan).
+    player_->InitRender(appWindow_->GetGraphicsBackend());
 
     player_->SetRenderUpdateCallback(
         [](void* ud)
@@ -421,6 +417,13 @@ void App::Render()
 
     int w = 0, h = 0;
     appWindow_->GetSize(w, h);
+
+    // Acquire the frame's render target. The backend may decline (e.g. the Vulkan
+    // swapchain is being recreated) — skip rendering and presenting this iteration.
+    if (!appWindow_->BeginFrame())
+    {
+        return;
+    }
 
     player_->RenderFrame(w, h);
 

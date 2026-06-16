@@ -15,7 +15,10 @@ public:
     void OnWindowCreated(SDL_Window* window) override;
     void Shutdown() override;
 
+    [[nodiscard]] std::unique_ptr<IVideoRenderer> CreateVideoRenderer() override;
+
     [[nodiscard]] void* GetProcAddr(const char* name) const override;
+    bool BeginFrame() override;
     void SwapBuffers() override;
     void SetVSync(bool enabled) override;
 
@@ -29,4 +32,9 @@ private:
     SDL_Window* window_ = nullptr;
     void* glContext_ = nullptr; // SDL_GLContext (kept as void* to keep SDL out of this header)
     bool shown_ = false;        // window is created hidden, then shown on the first SwapBuffers()
+
+    // Resolved in OnWindowCreated; used by BeginFrame to clear the default framebuffer
+    // to black each frame (covers the no-renderer fallback and the letterbox bars).
+    void (*glClearColor_)(float, float, float, float) = nullptr;
+    void (*glClear_)(unsigned int) = nullptr;
 };

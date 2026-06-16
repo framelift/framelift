@@ -1,5 +1,6 @@
 #include "GlGraphicsBackend.h"
 
+#include "GlVideoRenderer.h"
 #include "util.h"
 
 #include <SDL3/SDL.h>
@@ -7,6 +8,11 @@
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl3.h"
+
+namespace
+{
+constexpr unsigned int GL_COLOR_BUFFER_BIT = 0x00004000;
+} // namespace
 
 uint64_t GlGraphicsBackend::PreWindowCreate()
 {
@@ -29,6 +35,9 @@ void GlGraphicsBackend::OnWindowCreated(SDL_Window* window)
 
     SDL_GL_MakeCurrent(window_, ctx);
     SDL_GL_SetSwapInterval(0);
+
+    glClearColor_ = reinterpret_cast<decltype(glClearColor_)>(SDL_GL_GetProcAddress("glClearColor"));
+    glClear_ = reinterpret_cast<decltype(glClear_)>(SDL_GL_GetProcAddress("glClear"));
 }
 
 void GlGraphicsBackend::Shutdown()
@@ -40,9 +49,27 @@ void GlGraphicsBackend::Shutdown()
     }
 }
 
+std::unique_ptr<IVideoRenderer> GlGraphicsBackend::CreateVideoRenderer()
+{
+    return std::make_unique<GlVideoRenderer>();
+}
+
 void* GlGraphicsBackend::GetProcAddr(const char* name) const
 {
     return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name));
+}
+
+bool GlGraphicsBackend::BeginFrame()
+{
+    // The GL context is already current; clear the default framebuffer to black so
+    // the frame starts clean even if the video renderer has no frame or failed init.
+    // (The video renderer also clears + draws letterboxed; this guarantees black.)
+    if (glClearColor_ && glClear_)
+    {
+        glClearColor_(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear_(GL_COLOR_BUFFER_BIT);
+    }
+    return true;
 }
 
 void GlGraphicsBackend::SwapBuffers()

@@ -139,11 +139,16 @@ Rect SdlAppWindow::GetDisplayUsableBounds() const noexcept
     return {r.x, r.y, r.w, r.h};
 }
 
-// ── OpenGL ────────────────────────────────────────────────────────────────────
+// ── Graphics backend / presentation ─────────────────────────────────────────────
 
-void* SdlAppWindow::GetGLProcAddr(const char* name) const noexcept
+void* SdlAppWindow::GetGraphicsBackend() const noexcept
 {
-    return backend_->GetProcAddr(name);
+    return backend_.get();
+}
+
+bool SdlAppWindow::BeginFrame() noexcept
+{
+    return backend_->BeginFrame();
 }
 
 void SdlAppWindow::SwapBuffers() noexcept
