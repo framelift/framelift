@@ -32,6 +32,9 @@ public:
     // Opaque handle to the active graphics backend (host-internal IGraphicsBackend*),
     // handed to IMediaPlayer::InitRender so the player can build its video renderer.
     [[nodiscard]] virtual void* GetGraphicsBackend() const noexcept = 0;
+    // Human-readable name of the *active* graphics API ("OpenGL" / "Vulkan"). Reflects
+    // the real backend, including any fallback from the requested one. For diagnostics.
+    [[nodiscard]] virtual const char* GetGraphicsBackendName() const noexcept = 0;
     // Begin the frame on the graphics backend (acquire the target surface / image).
     // Returns false if the frame should be skipped this iteration (e.g. the Vulkan
     // swapchain is being recreated); the caller then renders nothing and presents nothing.

@@ -26,9 +26,14 @@ class VulkanGraphicsBackend final : public IGraphicsBackend
 public:
     static constexpr uint32_t kMaxFramesInFlight = 2;
 
+    // Pre-flight check (before any window is created): is there a usable Vulkan device?
+    // Lets the factory fall back to OpenGL instead of failing at startup.
+    [[nodiscard]] static bool IsSupported();
+
     uint64_t PreWindowCreate() override;
     void OnWindowCreated(SDL_Window* window) override;
     void Shutdown() override;
+    [[nodiscard]] const char* Name() const override { return "Vulkan"; }
 
     [[nodiscard]] std::unique_ptr<IVideoRenderer> CreateVideoRenderer() override;
 

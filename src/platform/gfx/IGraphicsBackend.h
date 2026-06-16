@@ -34,6 +34,9 @@ public:
     // Destroy the API context/device. Called before the SDL_Window is destroyed.
     virtual void Shutdown() = 0;
 
+    // Human-readable name of the active API ("OpenGL" / "Vulkan"), for diagnostics.
+    [[nodiscard]] virtual const char* Name() const = 0;
+
     // Create the video renderer paired with this backend (GlVideoRenderer for the GL
     // backend, VulkanVideoRenderer for Vulkan). The player owns the returned renderer
     // and calls IVideoRenderer::Init(this) on it.

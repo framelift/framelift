@@ -1,7 +1,6 @@
 #include "GlGraphicsBackend.h"
 
 #include "GlVideoRenderer.h"
-#include "VulkanGraphicsBackend.h"
 #include "util.h"
 
 #include <SDL3/SDL.h>
@@ -131,15 +130,4 @@ void GlGraphicsBackend::ImGuiRenderDrawData()
 void GlGraphicsBackend::ImGuiProcessEvent(const void* sdlEvent)
 {
     ImGui_ImplSDL3_ProcessEvent(static_cast<const SDL_Event*>(sdlEvent));
-}
-
-// ── Factory ───────────────────────────────────────────────────────────────────
-
-std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(GraphicsApi api)
-{
-    if (api == GraphicsApi::Vulkan)
-    {
-        return std::make_unique<VulkanGraphicsBackend>();
-    }
-    return std::make_unique<GlGraphicsBackend>();
 }

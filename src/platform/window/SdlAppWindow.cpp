@@ -145,6 +145,11 @@ void* SdlAppWindow::GetGraphicsBackend() const noexcept
     return backend_.get();
 }
 
+const char* SdlAppWindow::GetGraphicsBackendName() const noexcept
+{
+    return backend_ ? backend_->Name() : "none";
+}
+
 bool SdlAppWindow::BeginFrame() noexcept
 {
     return backend_->BeginFrame();

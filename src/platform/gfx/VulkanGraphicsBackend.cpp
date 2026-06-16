@@ -45,6 +45,28 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBits
 }
 } // namespace
 
+bool VulkanGraphicsBackend::IsSupported()
+{
+    if (volkInitialize() != VK_SUCCESS)
+    {
+        return false; // no Vulkan loader / driver
+    }
+    VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
+    app.apiVersion = VK_API_VERSION_1_1;
+    VkInstanceCreateInfo ci{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    ci.pApplicationInfo = &app;
+    VkInstance inst = VK_NULL_HANDLE;
+    if (vkCreateInstance(&ci, nullptr, &inst) != VK_SUCCESS)
+    {
+        return false;
+    }
+    volkLoadInstanceOnly(inst);
+    uint32_t count = 0;
+    vkEnumeratePhysicalDevices(inst, &count, nullptr);
+    vkDestroyInstance(inst, nullptr);
+    return count > 0;
+}
+
 uint64_t VulkanGraphicsBackend::PreWindowCreate()
 {
     // No GL attributes; just request a Vulkan-capable window.

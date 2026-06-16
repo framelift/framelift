@@ -35,6 +35,7 @@ public:
     void SetTitle(const char* title) noexcept override;
 
     [[nodiscard]] void* GetGraphicsBackend() const noexcept override;
+    [[nodiscard]] const char* GetGraphicsBackendName() const noexcept override;
     bool BeginFrame() noexcept override;
     void SwapBuffers() noexcept override;
     void SetVSync(bool enabled) noexcept override;

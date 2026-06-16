@@ -14,6 +14,7 @@ public:
     uint64_t PreWindowCreate() override;
     void OnWindowCreated(SDL_Window* window) override;
     void Shutdown() override;
+    [[nodiscard]] const char* Name() const override { return "OpenGL"; }
 
     [[nodiscard]] std::unique_ptr<IVideoRenderer> CreateVideoRenderer() override;
 
