@@ -10,9 +10,10 @@
 
 struct SDL_Window;
 
-// VMA's allocator handle, forward-declared so this header doesn't pull in the (large)
+// VMA handles, forward-declared so this header doesn't pull in the (large)
 // vk_mem_alloc.h — only the .cpp needs the implementation.
 typedef struct VmaAllocator_T* VmaAllocator;
+typedef struct VmaAllocation_T* VmaAllocation;
 
 // Vulkan 1.x presentation backend: owns the instance/device/swapchain and drives the
 // imgui_impl_vulkan + imgui_impl_sdl3 backends. The single VkInstance/VkDevice/queues
