@@ -85,8 +85,8 @@ TEST(SettingsMappingTest, SubtitleBackOpacityFoldsIntoAlpha)
     s.backOpacity = 0.0f; // fully transparent ⇒ alpha byte 0xFF
     EXPECT_EQ(SubtitleStyleFromSettings(s).backColor & 0xFFu, 0xFFu);
 
-    s.backOpacity = 0.5f; // ~half ⇒ alpha byte ~0x80
-    EXPECT_EQ(SubtitleStyleFromSettings(s).backColor & 0xFFu, 128u);
+    s.backOpacity = 0.5f; // ~half ⇒ alpha byte 255 - round(0.5*255) = 255 - 128 = 127
+    EXPECT_EQ(SubtitleStyleFromSettings(s).backColor & 0xFFu, 127u);
 }
 
 TEST(SettingsMappingTest, SubtitleStyleTracksFieldsAndDefaults)
