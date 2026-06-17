@@ -58,18 +58,34 @@ jobs:
     env:
       VCPKG_ROOT: ${{ github.workspace }}/.cache/vcpkg
       # vcpkg's binary cache — restored via actions/cache so the libraries aren't
-      # rebuilt from source on every run.
+      # rebuilt from source on every run. Keep the binary source explicit so
+      # manifest mode restores/stores archives from this directory.
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.cache/vcpkg-archives
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.cache/vcpkg-archives,readwrite"
+      VCPKG_DOWNLOADS: ${{ github.workspace }}/.cache/vcpkg-downloads
       # mingw-dynamic for the target libs; host tools (build-time) use native Linux.
       VCPKG_DEFAULT_TRIPLET: x64-mingw-dynamic
       VCPKG_DEFAULT_HOST_TRIPLET: x64-linux
     steps:
       - uses: actions/checkout@v4
       - name: Restore vcpkg binary cache
-        uses: actions/cache@v4
+        id: restore-vcpkg-binary-cache
+        uses: actions/cache/restore@v4
         with:
           path: .cache/vcpkg-archives
-          key: win-vcpkg-${{ env.VCPKG_BASELINE }}
+          key: win-vcpkg-bin-${{ runner.os }}-ubuntu-24.04-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            win-vcpkg-bin-${{ runner.os }}-ubuntu-24.04-${{ env.VCPKG_BASELINE }}-
+            win-vcpkg-bin-${{ runner.os }}-ubuntu-24.04-
+      - name: Restore vcpkg downloads cache
+        id: restore-vcpkg-downloads-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/vcpkg-downloads
+          key: win-vcpkg-downloads-${{ runner.os }}-ubuntu-24.04-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            win-vcpkg-downloads-${{ runner.os }}-ubuntu-24.04-${{ env.VCPKG_BASELINE }}-
+            win-vcpkg-downloads-${{ runner.os }}-ubuntu-24.04-
       - name: Install toolchain
         # mingw-w64 toolchain (target) + native g++ (vcpkg builds host-triplet
         # x64-linux build tools when cross-compiling) + vcpkg's source-build toolchain
@@ -106,15 +122,23 @@ jobs:
       - name: Bootstrap vcpkg
         # vcpkg, pinned to the manifest's builtin-baseline for reproducible deps.
         run: |
-          mkdir -p .cache/vcpkg-archives
+          mkdir -p .cache/vcpkg-archives .cache/vcpkg-downloads
           if [ ! -d "$VCPKG_ROOT/.git" ]; then
             git clone https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
           fi
           git -C "$VCPKG_ROOT" fetch --depth 1 origin "$VCPKG_BASELINE"
           git -C "$VCPKG_ROOT" checkout "$VCPKG_BASELINE"
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
-      - name: Build
+      - name: Configure
         run: |
+          echo "vcpkg binary cache hit: ${{ steps.restore-vcpkg-binary-cache.outputs.cache-hit }}"
+          echo "vcpkg downloads cache hit: ${{ steps.restore-vcpkg-downloads-cache.outputs.cache-hit }}"
+          echo "vcpkg binary cache key: ${{ steps.restore-vcpkg-binary-cache.outputs.cache-primary-key }}"
+          echo "vcpkg binary matched key: ${{ steps.restore-vcpkg-binary-cache.outputs.cache-matched-key }}"
+          echo "vcpkg downloads cache key: ${{ steps.restore-vcpkg-downloads-cache.outputs.cache-primary-key }}"
+          echo "vcpkg downloads matched key: ${{ steps.restore-vcpkg-downloads-cache.outputs.cache-matched-key }}"
+          echo "Cache sizes before configure:"
+          du -sh .cache/vcpkg-archives .cache/vcpkg-downloads || true
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             VERSION="$GITHUB_REF_NAME"
             VERSION_DISPLAY="$VERSION"
@@ -137,6 +161,10 @@ jobs:
             -DFRAMELIFT_ENABLE_UPDATER=ON \
             -DFRAMELIFT_VERSION="$VERSION" \
             -DFRAMELIFT_VERSION_DISPLAY="$VERSION_DISPLAY"
+          echo "Cache sizes after configure:"
+          du -sh .cache/vcpkg-archives .cache/vcpkg-downloads || true
+      - name: Build
+        run: |
           cmake --build "$BUILD_DIR" --parallel
           # vcpkg's app-local DLL deployment is MSVC-only, so stage the mingw-dynamic
           # runtime DLLs (SDL3.dll, avcodec-*.dll, ass-*.dll + transitive deps) next to the exe.
@@ -152,6 +180,18 @@ jobs:
           (cd "$BUILD_DIR" && 7z a FrameLift-win64.zip FrameLift.exe *.dll Plugins)
           # The SDK is packaged by the dedicated `build-sdk` job. The in-tree HelloPlugin
           # (FRAMELIFT_BUILD_SDK_EXAMPLE) still builds here as a Windows-side SDK bitrot guard.
+      - name: Save vcpkg binary cache
+        if: ${{ steps.restore-vcpkg-binary-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/vcpkg-archives
+          key: ${{ steps.restore-vcpkg-binary-cache.outputs.cache-primary-key }}
+      - name: Save vcpkg downloads cache
+        if: ${{ steps.restore-vcpkg-downloads-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/vcpkg-downloads
+          key: ${{ steps.restore-vcpkg-downloads-cache.outputs.cache-primary-key }}
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
