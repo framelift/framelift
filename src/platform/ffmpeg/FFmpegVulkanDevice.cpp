@@ -1,5 +1,7 @@
 #include "FFmpegVulkanDevice.h"
 
+#include "../gfx/VulkanQueueLock.h"
+
 #include <framelift/Log.h>
 
 #include <cstdint>
@@ -17,6 +19,28 @@ extern "C"
 #include <libavutil/hwcontext_vulkan.h>
 }
 
+namespace
+{
+// FFmpeg submits transfer/compute work from its decode thread on queues it shares with
+// the renderer. These callbacks let it take the renderer's VulkanQueueLock (stashed in
+// user_opaque) so those submits can't race the render thread's submits/presents.
+void LockQueueCb(AVHWDeviceContext* ctx, uint32_t queueFamily, uint32_t index)
+{
+    if (auto* lock = static_cast<VulkanQueueLock*>(ctx->user_opaque))
+    {
+        lock->Lock(queueFamily, index);
+    }
+}
+
+void UnlockQueueCb(AVHWDeviceContext* ctx, uint32_t queueFamily, uint32_t index)
+{
+    if (auto* lock = static_cast<VulkanQueueLock*>(ctx->user_opaque))
+    {
+        lock->Unlock(queueFamily, index);
+    }
+}
+} // namespace
+
 AVBufferRef* CreateVulkanHwDevice(const VulkanDeviceInfo& info)
 {
     if (!info.device || !info.instance || !info.physicalDevice || !info.getInstanceProcAddr)
@@ -32,6 +56,17 @@ AVBufferRef* CreateVulkanHwDevice(const VulkanDeviceInfo& info)
 
     auto* devCtx = reinterpret_cast<AVHWDeviceContext*>(ref->data);
     auto* vk = static_cast<AVVulkanDeviceContext*>(devCtx->hwctx);
+
+    // Serialize FFmpeg's queue submits against the renderer's: both touch the same,
+    // non-thread-safe VkQueue. Without this, decode-thread submits race the render
+    // thread's and hang the driver (issue #26). user_opaque carries the shared lock to
+    // the callbacks; it is the user's field and untouched by av_hwdevice_ctx_init.
+    devCtx->user_opaque = info.queueLock;
+    if (info.queueLock)
+    {
+        vk->lock_queue = LockQueueCb;
+        vk->unlock_queue = UnlockQueueCb;
+    }
 
     vk->get_proc_addr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(info.getInstanceProcAddr);
     vk->inst = reinterpret_cast<VkInstance>(info.instance);

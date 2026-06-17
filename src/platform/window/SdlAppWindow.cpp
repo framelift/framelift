@@ -330,6 +330,11 @@ void SdlAppWindow::UIEndFrame() noexcept
     backend_->ImGuiRenderDrawData();
 }
 
+void SdlAppWindow::ImGuiRenderPlatformWindows() noexcept
+{
+    backend_->ImGuiRenderPlatformWindows();
+}
+
 void SdlAppWindow::ImGuiProcessEvent(const AppEvent& event) noexcept
 {
     static_assert(sizeof(SDL_Event) <= sizeof(event.nativeStorage), "nativeStorage is too small for SDL_Event");

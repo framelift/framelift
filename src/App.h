@@ -17,6 +17,8 @@
 #include <memory>
 #include <vector>
 
+class SdlAppWindow;
+
 // Top-level application object. Owns all subsystems, drives the main loop,
 // and co-ordinates rendering. Exactly one instance exists for the program lifetime.
 // Has no compile-time knowledge of specific plugins — all plugins are loaded
@@ -62,7 +64,7 @@ private:
     int cliArgc_ = 0;
     const char* const* cliArgv_ = nullptr;
 
-    std::unique_ptr<IAppWindow> appWindow_;
+    std::unique_ptr<SdlAppWindow> appWindow_;
     std::unique_ptr<IMediaPlayer> player_;
     std::unique_ptr<IDirWatcher> dirWatcher_;
 

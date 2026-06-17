@@ -32,6 +32,11 @@ struct VulkanDeviceInfo
     uint32_t videoDecodeQueueFlags = 0; // VkQueueFlagBits of the decode family
     uint32_t videoDecodeCaps = 0;    // VkVideoCodecOperationFlagBitsKHR bits of the decode family
     bool supportsVideoDecode = false;
+
+    // VulkanQueueLock* (lifetime: backend). The bridge wires it into the hwdevice's
+    // lock_queue/unlock_queue callbacks so FFmpeg's decode-thread queue submits are
+    // serialized against the render thread's. void* to keep this header Vulkan/FFmpeg-free.
+    void* queueLock = nullptr;
 };
 
 // Snapshot of one decoded AVVkFrame's primary image + its timeline-semaphore sync

@@ -74,11 +74,13 @@ private:
         VkDescriptorSet set = VK_NULL_HANDLE;
     };
     const FrameTex* EnsureFrameTexture(uint64_t image);
-    // Submit a standalone transition (decode→sample layout, queue-ownership acquire) for
-    // the frame image, chained to its timeline semaphore. Must run OUTSIDE the render
-    // pass, hence its own command buffer + submit (Draw runs inside the pass).
-    void SubmitFrameTransition(uint64_t image, int oldLayout, uint32_t srcQueueFamily, uint64_t semaphore,
-                               uint64_t waitValue);
+    // Record the frame image's transition (decode→sample layout, queue-ownership acquire)
+    // into its own command buffer and register it with the backend to run, in the single
+    // per-frame submit, just before the main render CB. Must run OUTSIDE the render pass,
+    // hence its own command buffer (Draw runs inside the pass). NOT submitted separately —
+    // a standalone submit here would stall the queue ahead of ImGui's multi-viewport
+    // submits and freeze the app (#26).
+    void RecordFrameTransition(uint64_t image, int oldLayout, uint32_t srcQueueFamily);
     void DrawVulkanFrame();
 
     VulkanGraphicsBackend* backend_ = nullptr;

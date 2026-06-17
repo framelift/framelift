@@ -82,6 +82,7 @@ add_executable(framelift_tests
         GraphicsApiTests.cpp
         FFmpegSubtitleBlendTests.cpp
         FFmpegTrackLabelTests.cpp
+        VulkanQueueLockTests.cpp
         "${FRAMELIFT_ROOT}/src/Settings.cpp"
         "${FRAMELIFT_ROOT}/src/PluginContext.cpp"
         "${FRAMELIFT_ROOT}/src/FontScan.cpp"

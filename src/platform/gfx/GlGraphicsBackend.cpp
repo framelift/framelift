@@ -139,9 +139,12 @@ void GlGraphicsBackend::ImGuiNewFrame()
 void GlGraphicsBackend::ImGuiRenderDrawData()
 {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
 
+void GlGraphicsBackend::ImGuiRenderPlatformWindows()
+{
     // Render any popped-out panels into their own OS windows, then restore the
-    // main window's GL context so the caller's SwapBuffers() targets it.
+    // main window's GL context for the next frame.
     const ImGuiIO& io = ImGui::GetIO();
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {

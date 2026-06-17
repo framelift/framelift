@@ -689,8 +689,7 @@ const VulkanVideoRenderer::FrameTex* VulkanVideoRenderer::EnsureFrameTexture(uin
     return &res.first->second;
 }
 
-void VulkanVideoRenderer::SubmitFrameTransition(uint64_t image, int oldLayout, uint32_t srcQueueFamily,
-                                                uint64_t semaphore, uint64_t waitValue)
+void VulkanVideoRenderer::RecordFrameTransition(uint64_t image, int oldLayout, uint32_t srcQueueFamily)
 {
     const uint32_t slot = backend_->CurrentFrameIndex();
     VkCommandBuffer cmd = transitionCmds_[slot];
@@ -720,26 +719,11 @@ void VulkanVideoRenderer::SubmitFrameTransition(uint64_t image, int oldLayout, u
                          nullptr, 1, &b);
     vkEndCommandBuffer(cmd);
 
-    // Wait until the decode has signalled `waitValue`, then signal `waitValue + 1` so the
-    // main render submit (which waits on that) only samples a fully transitioned image.
-    const uint64_t signalValue = waitValue + 1;
-    const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    VkTimelineSemaphoreSubmitInfo tl{VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO};
-    tl.waitSemaphoreValueCount = 1;
-    tl.pWaitSemaphoreValues = &waitValue;
-    tl.signalSemaphoreValueCount = 1;
-    tl.pSignalSemaphoreValues = &signalValue;
-    const auto sem = reinterpret_cast<VkSemaphore>(static_cast<uintptr_t>(semaphore));
-    VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submit.pNext = &tl;
-    submit.waitSemaphoreCount = 1;
-    submit.pWaitSemaphores = &sem;
-    submit.pWaitDstStageMask = &waitStage;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &cmd;
-    submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &sem;
-    vkQueueSubmit(backend_->GraphicsQueue(), 1, &submit, VK_NULL_HANDLE);
+    // Run this transition in the single per-frame submit, just before the main render CB.
+    // The decode-complete wait + post-sample signal are registered on that submit by the
+    // caller (DrawVulkanFrame) via AddFrameWait/AddFrameSignal; in-batch CB ordering + the
+    // barrier above guarantee the transition completes before the render pass samples.
+    backend_->AddFramePreCmd(cmd);
 }
 
 void VulkanVideoRenderer::DrawVulkanFrame()
@@ -760,16 +744,16 @@ void VulkanVideoRenderer::DrawVulkanFrame()
         return;
     }
 
-    // 1. Transition the decode image into a sampleable layout (own submit, outside the
-    //    render pass), chained on the frame's timeline: wait v → signal v+1.
-    SubmitFrameTransition(info.image, info.layout, info.queueFamily, info.semaphore, info.semValue);
+    // 1. Record the decode→sample layout transition (+ queue-ownership acquire) into a
+    //    pre-cmd that runs first in the single per-frame submit, outside the render pass.
+    RecordFrameTransition(info.image, info.layout, info.queueFamily);
 
-    // 2. Join the main render submit to the chain: wait v+1 (transition done) at the
-    //    fragment stage where we sample, and signal v+2 when our read completes — that
-    //    value is what FFmpeg/the next consumer must wait on before reusing the image.
+    // 2. Register the frame's timeline on that single submit: wait until decode signalled
+    //    `v` (gating the transition at TOP_OF_PIPE), and signal `v+1` when our sample
+    //    completes — the value FFmpeg/the next consumer waits on before reusing the image.
     const auto frameSem = reinterpret_cast<VkSemaphore>(static_cast<uintptr_t>(info.semaphore));
-    backend_->AddFrameWait(frameSem, info.semValue + 1, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-    backend_->AddFrameSignal(frameSem, info.semValue + 2);
+    backend_->AddFrameWait(frameSem, info.semValue, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+    backend_->AddFrameSignal(frameSem, info.semValue + 1);
 
     // 3. Draw the YCbCr image (conversion → RGB in the sampler), letterboxed.
     VkCommandBuffer cmd = backend_->CurrentCommandBuffer();
@@ -795,7 +779,7 @@ void VulkanVideoRenderer::DrawVulkanFrame()
 
     // 4. Publish the post-sample state so FFmpeg/next consumer observes the right layout,
     //    timeline value and owning queue family.
-    SetVulkanFrameState(vkFrame_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, info.semValue + 2,
+    SetVulkanFrameState(vkFrame_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, info.semValue + 1,
                         backend_->GraphicsQueueFamily());
 }
 
