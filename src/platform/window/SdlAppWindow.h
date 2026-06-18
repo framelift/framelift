@@ -57,6 +57,7 @@ public:
     void ImGuiShutdown() noexcept override;
     void UIBeginFrame() noexcept override;
     void UIEndFrame() noexcept override;
+    void ImGuiRenderPlatformWindows() noexcept;
     void ImGuiProcessEvent(const AppEvent& event) noexcept override;
 
 private:

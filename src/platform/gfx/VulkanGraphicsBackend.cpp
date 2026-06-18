@@ -220,6 +220,20 @@ void VulkanGraphicsBackend::OnWindowCreated(SDL_Window* window)
             phys.enable_extension_if_present(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME);
         }
         vkb::DeviceBuilder db(phys);
+        // Replicate vk-bootstrap's default one-queue-per-family setup (which is what makes
+        // the video-decode queue exist), but request a SECOND queue on every graphics-capable
+        // family that allows it. ImGui's multi-viewport rendering can use that second
+        // queue so secondary-window submits/presents do not share queue index 0 with
+        // video work.
+        const auto families = phys.get_queue_families();
+        std::vector<vkb::CustomQueueDescription> queueSetup;
+        queueSetup.reserve(families.size());
+        for (uint32_t i = 0; i < families.size(); ++i)
+        {
+            const bool dualGraphics = (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && families[i].queueCount >= 2;
+            queueSetup.emplace_back(i, std::vector<float>(dualGraphics ? 2 : 1, 1.0f));
+        }
+        db.custom_queue_setup(queueSetup);
         auto dr = db.build();
         if (!dr)
         {
@@ -251,6 +265,31 @@ void VulkanGraphicsBackend::OnWindowCreated(SDL_Window* window)
     graphicsQueue_ = vkbDevice.get_queue(vkb::QueueType::graphics).value();
     graphicsQueueFamily_ = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
     presentQueue_ = vkbDevice.get_queue(vkb::QueueType::present).value();
+    presentQueueFamily_ = vkbDevice.get_queue_index(vkb::QueueType::present).value();
+
+    // Grab the second graphics-family queue for ImGui multi-viewport (#26). If the family
+    // exposes only one queue, ImGui shares the render queue and the queue lock serializes
+    // secondary-window submits/presents with video work.
+    imguiQueue_ = graphicsQueue_;
+    imguiQueueIndex_ = 0;
+    {
+        uint32_t qfCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &qfCount, nullptr);
+        std::vector<VkQueueFamilyProperties> qfp(qfCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &qfCount, qfp.data());
+        if (graphicsQueueFamily_ < qfCount && qfp[graphicsQueueFamily_].queueCount >= 2)
+        {
+            vkGetDeviceQueue(device_, graphicsQueueFamily_, 1, &imguiQueue_);
+            imguiQueueIndex_ = 1;
+            Log::Info("Vulkan: dedicated ImGui multi-viewport queue (graphics family {}, index {})",
+                      graphicsQueueFamily_, imguiQueueIndex_);
+        }
+        else
+        {
+            Log::Info("Vulkan: graphics family exposes a single queue; ImGui shares the render "
+                      "queue (multi-viewport may contend with video)");
+        }
+    }
 
     // Record the queue flags + (if video) detect the decode queue family and its codec
     // caps, so GetVulkanDeviceInfo can hand FFmpeg a complete qf[] list.
@@ -351,7 +390,7 @@ bool VulkanGraphicsBackend::CreateSwapchain()
     int pw = 0, ph = 0;
     SDL_GetWindowSizeInPixels(window_, &pw, &ph);
 
-    vkb::SwapchainBuilder builder(physicalDevice_, device_, surface_, graphicsQueueFamily_, graphicsQueueFamily_);
+    vkb::SwapchainBuilder builder(physicalDevice_, device_, surface_, graphicsQueueFamily_, presentQueueFamily_);
     builder.set_desired_format(VkSurfaceFormatKHR{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR})
         .set_desired_present_mode(vsync_ ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_MAILBOX_KHR)
         .set_desired_extent(static_cast<uint32_t>(pw), static_cast<uint32_t>(ph))
@@ -614,6 +653,7 @@ bool VulkanGraphicsBackend::BeginFrame()
     frameWaitStages_.clear();
     frameSignalSems_.clear();
     frameSignalValues_.clear();
+    framePreCmds_.clear();
 
     currentCmd_ = commandBuffers_[currentFrame_];
     vkResetCommandBuffer(currentCmd_, 0);
@@ -674,16 +714,21 @@ void VulkanGraphicsBackend::SwapBuffers()
     timeline.signalSemaphoreValueCount = static_cast<uint32_t>(signalValues.size());
     timeline.pSignalSemaphoreValues = signalValues.data();
 
+    // Any zero-copy frame transition CBs run first (in the same submit), then the main
+    // render CB. One submit per frame keeps the queue from stalling ahead of ImGui's
+    // multi-viewport submits (#26).
+    std::vector<VkCommandBuffer> cmds = framePreCmds_;
+    cmds.push_back(currentCmd_);
+
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submit.pNext = hasTimeline ? &timeline : nullptr;
     submit.waitSemaphoreCount = static_cast<uint32_t>(waitSems.size());
     submit.pWaitSemaphores = waitSems.data();
     submit.pWaitDstStageMask = waitStages.data();
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &currentCmd_;
+    submit.commandBufferCount = static_cast<uint32_t>(cmds.size());
+    submit.pCommandBuffers = cmds.data();
     submit.signalSemaphoreCount = static_cast<uint32_t>(signalSems.size());
     submit.pSignalSemaphores = signalSems.data();
-    vkQueueSubmit(graphicsQueue_, 1, &submit, inFlightFences_[currentFrame_]);
 
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
@@ -691,7 +736,20 @@ void VulkanGraphicsBackend::SwapBuffers()
     present.swapchainCount = 1;
     present.pSwapchains = &swapchain_;
     present.pImageIndices = &imageIndex_;
-    VkResult pres = vkQueuePresentKHR(presentQueue_, &present);
+
+    // Submit + present under the queue locks: FFmpeg's decode thread and ImGui's
+    // platform-window backend can submit/present on queues from this device, and a
+    // VkQueue is not thread-safe.
+    {
+        VulkanQueueGuard guard(queueLock_, graphicsQueueFamily_, 0);
+        vkQueueSubmit(graphicsQueue_, 1, &submit, inFlightFences_[currentFrame_]);
+    }
+
+    VkResult pres;
+    {
+        VulkanQueueGuard guard(queueLock_, presentQueueFamily_, 0);
+        pres = vkQueuePresentKHR(presentQueue_, &present);
+    }
     if (pres == VK_ERROR_OUT_OF_DATE_KHR || pres == VK_SUBOPTIMAL_KHR)
     {
         RecreateSwapchain();
@@ -741,7 +799,12 @@ bool VulkanGraphicsBackend::ImmediateSubmit(void (*record)(VkCommandBuffer, void
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submit.commandBufferCount = 1;
     submit.pCommandBuffers = &cmd;
-    vkQueueSubmit(graphicsQueue_, 1, &submit, fence);
+    {
+        // Only the submit needs the queue lock; the fence wait is device-level and must
+        // not hold the lock (it would block FFmpeg's decode thread).
+        VulkanQueueGuard guard(queueLock_, graphicsQueueFamily_, 0);
+        vkQueueSubmit(graphicsQueue_, 1, &submit, fence);
+    }
     vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
 
     vkDestroyFence(device_, fence, nullptr);
@@ -818,6 +881,7 @@ bool VulkanGraphicsBackend::GetVulkanDeviceInfo(VulkanDeviceInfo& out) const noe
     out.videoDecodeQueueFlags = videoDecodeQueueFlags_;
     out.videoDecodeCaps = videoDecodeCaps_;
     out.supportsVideoDecode = supportsVulkanVideo_;
+    out.queueLock = &queueLock_;
     return true;
 }
 
@@ -834,6 +898,11 @@ void VulkanGraphicsBackend::AddFrameSignal(VkSemaphore sem, uint64_t signalValue
     frameSignalValues_.push_back(signalValue);
 }
 
+void VulkanGraphicsBackend::AddFramePreCmd(VkCommandBuffer cmd)
+{
+    framePreCmds_.push_back(cmd);
+}
+
 // ── ImGui backend lifecycle ─────────────────────────────────────────────────────
 
 void VulkanGraphicsBackend::ImGuiInitBackends()
@@ -846,7 +915,7 @@ void VulkanGraphicsBackend::ImGuiInitBackends()
     info.PhysicalDevice = physicalDevice_;
     info.Device = device_;
     info.QueueFamily = graphicsQueueFamily_;
-    info.Queue = graphicsQueue_;
+    info.Queue = imguiQueue_; // dedicated multi-viewport queue (see #26)
     info.DescriptorPool = imguiDescriptorPool_;
     info.MinImageCount = minImageCount_;
     info.ImageCount = static_cast<uint32_t>(swapchainImages_.size());
@@ -881,13 +950,22 @@ void VulkanGraphicsBackend::ImGuiNewFrame()
 void VulkanGraphicsBackend::ImGuiRenderDrawData()
 {
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), currentCmd_);
+}
 
+void VulkanGraphicsBackend::ImGuiRenderPlatformWindows()
+{
     // Pop-out panels render into their own OS windows + swapchains, which
     // imgui_impl_vulkan manages internally.
     const ImGuiIO& io = ImGui::GetIO();
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
         ImGui::UpdatePlatformWindows();
+        // Render secondary windows only after the main swapchain frame has been
+        // submitted/presented. The ImGui Vulkan backend performs its own acquire,
+        // fence wait, submit and present here, so guard the queue it was configured
+        // to use. With a second graphics queue this does not block FFmpeg/render
+        // queue index 0; on single-queue GPUs it serializes correctly.
+        VulkanQueueGuard guard(queueLock_, graphicsQueueFamily_, imguiQueueIndex_);
         ImGui::RenderPlatformWindowsDefault();
     }
 }

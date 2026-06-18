@@ -28,6 +28,7 @@ public:
     void ImGuiShutdownBackends() override;
     void ImGuiNewFrame() override;
     void ImGuiRenderDrawData() override;
+    void ImGuiRenderPlatformWindows() override;
     void ImGuiProcessEvent(const void* sdlEvent) override;
 
 private:

@@ -9,6 +9,7 @@
 
 #include "IGraphicsBackend.h"
 #include "VulkanDeviceInfo.h"
+#include "VulkanQueueLock.h"
 
 struct SDL_Window;
 
@@ -51,6 +52,7 @@ public:
     void ImGuiShutdownBackends() override;
     void ImGuiNewFrame() override;
     void ImGuiRenderDrawData() override;
+    void ImGuiRenderPlatformWindows() override;
     void ImGuiProcessEvent(const void* sdlEvent) override;
 
     // ── Accessors for the paired VulkanVideoRenderer ───────────────────────────
@@ -65,6 +67,11 @@ public:
     [[nodiscard]] uint32_t GraphicsQueueFamily() const { return graphicsQueueFamily_; }
     [[nodiscard]] bool SupportsVulkanVideoDecode() const { return supportsVulkanVideo_; }
 
+    // Lock serializing queue access shared with FFmpeg's decode thread and ImGui's
+    // platform-window renderer (see VulkanQueueLock.h). The renderer takes a
+    // VulkanQueueGuard around its own submits; FFmpeg locks it via lock_queue.
+    [[nodiscard]] VulkanQueueLock& QueueLock() { return queueLock_; }
+
     // Register a decoded AVVkFrame's timeline semaphore with the current frame's queue
     // submission (added in SwapBuffers). The renderer calls these from Draw() after
     // recording the sample of a zero-copy Vulkan frame: wait until the decode signalled
@@ -72,6 +79,13 @@ public:
     // Cleared each BeginFrame.
     void AddFrameWait(VkSemaphore sem, uint64_t waitValue, VkPipelineStageFlags stage);
     void AddFrameSignal(VkSemaphore sem, uint64_t signalValue);
+
+    // Register a command buffer to run, in the same submit, immediately BEFORE the main
+    // render command buffer. The video renderer uses this to fold a zero-copy frame's
+    // layout/queue-ownership transition into the single per-frame submit (instead of a
+    // separate vkQueueSubmit that would stall the queue ahead of ImGui's multi-viewport
+    // submits — see #26). Cleared each BeginFrame.
+    void AddFramePreCmd(VkCommandBuffer cmd);
 
     // Record one-shot transfer/setup work on a transient command buffer and block
     // until the GPU finishes. Used by the video renderer to upload frames (Phase 2;
@@ -102,8 +116,19 @@ private:
     VkDevice device_ = VK_NULL_HANDLE;
     VkQueue graphicsQueue_ = VK_NULL_HANDLE;
     VkQueue presentQueue_ = VK_NULL_HANDLE;
+    uint32_t presentQueueFamily_ = 0;
+    // Dedicated graphics-family queue (index 1) for ImGui multi-viewport secondary windows,
+    // so popped-out panels never share a VkQueue with the video render + FFmpeg decode work
+    // (#26). Falls back to graphicsQueue_ when the family exposes only one queue.
+    VkQueue imguiQueue_ = VK_NULL_HANDLE;
+    uint32_t imguiQueueIndex_ = 0;
     uint32_t graphicsQueueFamily_ = 0;
     VmaAllocator allocator_ = nullptr;
+
+    // Serializes graphics-queue submits/presents between the render thread and FFmpeg's
+    // decode thread. Must outlive any FFmpeg hwdevice context that references it. mutable
+    // so the const GetVulkanDeviceInfo() can hand FFmpeg a non-const pointer to it.
+    mutable VulkanQueueLock queueLock_;
 
     // ── Vulkan-video decode device state (Phase 3, #18) ────────────────────────
     // Populated only when the physical device exposes a video-decode queue + the
@@ -131,6 +156,9 @@ private:
     std::vector<VkPipelineStageFlags> frameWaitStages_;
     std::vector<VkSemaphore> frameSignalSems_;
     std::vector<uint64_t> frameSignalValues_;
+    // Command buffers to run before currentCmd_ in the same submit (zero-copy frame
+    // transition; see AddFramePreCmd). Consumed by SwapBuffers, reset by BeginFrame.
+    std::vector<VkCommandBuffer> framePreCmds_;
 
     VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
     VkFormat swapchainFormat_ = VK_FORMAT_UNDEFINED;

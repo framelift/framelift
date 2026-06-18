@@ -78,9 +78,13 @@ public:
     // New-frame for the platform + renderer backends (the caller then calls
     // ImGui::NewFrame()).
     virtual void ImGuiNewFrame() = 0;
-    // Render the current draw data (the caller has already called ImGui::Render())
-    // and present any multi-viewport platform windows.
+    // Render the current main-viewport draw data (the caller has already called
+    // ImGui::Render()) into the active frame.
     virtual void ImGuiRenderDrawData() = 0;
+    // Render/present secondary ImGui platform windows after the main frame has been
+    // submitted/presented. This keeps Vulkan multi-viewport backend submits out of
+    // the middle of the main swapchain frame.
+    virtual void ImGuiRenderPlatformWindows() = 0;
     // Forward a native event to the ImGui platform backend. e is a const SDL_Event*.
     virtual void ImGuiProcessEvent(const void* sdlEvent) = 0;
 };

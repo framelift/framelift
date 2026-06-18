@@ -509,6 +509,7 @@ void App::Render()
     appWindow_->UIEndFrame();
 
     appWindow_->SwapBuffers();
+    appWindow_->ImGuiRenderPlatformWindows();
 }
 
 // ── Event loop helpers ────────────────────────────────────────────────────────
