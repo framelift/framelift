@@ -107,6 +107,7 @@ void FFmpegSubtitles::BeginTrack(const unsigned char* header, int headerSize)
     {
         ass_process_codec_private(track_, reinterpret_cast<char*>(const_cast<unsigned char*>(header)), headerSize);
     }
+    forceNextUpdate_ = true;
 }
 
 void FFmpegSubtitles::ProcessPacket(AVCodecContext* dec, AVPacket* pkt, int tbNum, int tbDen)
@@ -142,10 +143,22 @@ void FFmpegSubtitles::ProcessPacket(AVCodecContext* dec, AVPacket* pkt, int tbNu
     avsubtitle_free(&sub);
 }
 
-bool FFmpegSubtitles::PreloadFromFormatLocked(AVFormatContext* fmt)
+bool FFmpegSubtitles::PreloadFromFormatLocked(AVFormatContext* fmt, int streamIndex)
 {
     const AVCodec* codec = nullptr;
-    const int sIdx = av_find_best_stream(fmt, AVMEDIA_TYPE_SUBTITLE, -1, -1, &codec, 0);
+    int sIdx = streamIndex;
+    if (sIdx >= 0)
+    {
+        if (sIdx >= static_cast<int>(fmt->nb_streams) || fmt->streams[sIdx]->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE)
+        {
+            return false;
+        }
+        codec = avcodec_find_decoder(fmt->streams[sIdx]->codecpar->codec_id);
+    }
+    else
+    {
+        sIdx = av_find_best_stream(fmt, AVMEDIA_TYPE_SUBTITLE, -1, -1, &codec, 0);
+    }
     if (sIdx < 0 || !codec)
     {
         return false;
@@ -222,13 +235,43 @@ bool FFmpegSubtitles::LoadExternalFile(const char* path)
     bool ok = false;
     if (avformat_find_stream_info(fmt, nullptr) >= 0)
     {
-        ok = PreloadFromFormatLocked(fmt);
+        ok = PreloadFromFormatLocked(fmt, -1);
     }
     avformat_close_input(&fmt);
     if (!ok)
     {
         Log::Warn("FFmpegSubtitles: no usable subtitle stream in {}", path);
     }
+    forceNextUpdate_ = true;
+    return ok;
+}
+
+bool FFmpegSubtitles::LoadEmbeddedStream(const char* path, int streamIndex)
+{
+    std::lock_guard lock(mutex_);
+    if (!lib_ || !path || streamIndex < 0)
+    {
+        return false;
+    }
+
+    AVFormatContext* fmt = nullptr;
+    if (avformat_open_input(&fmt, path, nullptr, nullptr) < 0)
+    {
+        Log::Warn("FFmpegSubtitles: failed to open embedded subtitle source {}", path);
+        return false;
+    }
+
+    bool ok = false;
+    if (avformat_find_stream_info(fmt, nullptr) >= 0)
+    {
+        ok = PreloadFromFormatLocked(fmt, streamIndex);
+    }
+    avformat_close_input(&fmt);
+    if (!ok)
+    {
+        Log::Warn("FFmpegSubtitles: failed to preload embedded subtitle stream {}", streamIndex);
+    }
+    forceNextUpdate_ = true;
     return ok;
 }
 
@@ -238,7 +281,14 @@ void FFmpegSubtitles::FlushEvents()
     if (track_)
     {
         ass_flush_events(track_);
+        forceNextUpdate_ = true;
     }
+}
+
+void FFmpegSubtitles::ForceNextUpdate()
+{
+    std::lock_guard lock(mutex_);
+    forceNextUpdate_ = true;
 }
 
 void FFmpegSubtitles::ClearTrack()
@@ -248,6 +298,7 @@ void FFmpegSubtitles::ClearTrack()
     {
         ass_free_track(track_);
         track_ = nullptr;
+        forceNextUpdate_ = true;
     }
 }
 
