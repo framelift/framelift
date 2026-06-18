@@ -55,41 +55,27 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     container: ubuntu:24.04
+    permissions:
+      contents: read
+      packages: write
     env:
+      USERNAME: ${{ github.repository_owner }}
       VCPKG_ROOT: ${{ github.workspace }}/.cache/vcpkg
-      # vcpkg's binary cache — restored via actions/cache so the libraries aren't
-      # rebuilt from source on every run. Keep the binary source explicit so
-      # manifest mode restores/stores archives from this directory.
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.cache/vcpkg-archives
-      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.cache/vcpkg-archives,readwrite"
-      VCPKG_DOWNLOADS: ${{ github.workspace }}/.cache/vcpkg-downloads
+      VCPKG_EXE: ${{ github.workspace }}/.cache/vcpkg/vcpkg
+      FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+      # vcpkg's binary cache is a GitHub Packages NuGet feed so heavy libraries
+      # such as FFmpeg do not rebuild from source on every run.
+      VCPKG_BINARY_SOURCES: "clear;nuget,https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json,readwrite"
       # mingw-dynamic for the target libs; host tools (build-time) use native Linux.
       VCPKG_DEFAULT_TRIPLET: x64-mingw-dynamic
       VCPKG_DEFAULT_HOST_TRIPLET: x64-linux
     steps:
       - uses: actions/checkout@v4
-      - name: Restore vcpkg binary cache
-        id: restore-vcpkg-binary-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: .cache/vcpkg-archives
-          key: win-vcpkg-bin-${{ runner.os }}-ubuntu-24.04-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            win-vcpkg-bin-${{ runner.os }}-ubuntu-24.04-${{ env.VCPKG_BASELINE }}-
-            win-vcpkg-bin-${{ runner.os }}-ubuntu-24.04-
-      - name: Restore vcpkg downloads cache
-        id: restore-vcpkg-downloads-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: .cache/vcpkg-downloads
-          key: win-vcpkg-downloads-${{ runner.os }}-ubuntu-24.04-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            win-vcpkg-downloads-${{ runner.os }}-ubuntu-24.04-${{ env.VCPKG_BASELINE }}-
-            win-vcpkg-downloads-${{ runner.os }}-ubuntu-24.04-
       - name: Install toolchain
         # mingw-w64 toolchain (target) + native g++ (vcpkg builds host-triplet
         # x64-linux build tools when cross-compiling) + vcpkg's source-build toolchain
-        # (nasm/meson/ninja/etc. for FFmpeg's dav1d and codec deps).
+        # (nasm/meson/ninja/etc. for FFmpeg's dav1d and codec deps). vcpkg's
+        # NuGet binary cache uses nuget.exe, which needs Mono on Linux runners.
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
@@ -114,7 +100,8 @@ jobs:
             autoconf \
             automake \
             libtool-bin \
-            glslang-tools
+            glslang-tools \
+            mono-complete
           curl -fL "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.sh" \
             -o /tmp/cmake-install.sh
           chmod +x /tmp/cmake-install.sh
@@ -122,23 +109,28 @@ jobs:
       - name: Bootstrap vcpkg
         # vcpkg, pinned to the manifest's builtin-baseline for reproducible deps.
         run: |
-          mkdir -p .cache/vcpkg-archives .cache/vcpkg-downloads
           if [ ! -d "$VCPKG_ROOT/.git" ]; then
             git clone https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
           fi
           git -C "$VCPKG_ROOT" fetch --depth 1 origin "$VCPKG_BASELINE"
           git -C "$VCPKG_ROOT" checkout "$VCPKG_BASELINE"
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Configure vcpkg binary cache
+        env:
+          VCPKG_NUGET_TOKEN: ${{ secrets.VCPKG_PAT_TOKEN }}
+        run: |
+          nuget="$("$VCPKG_EXE" fetch nuget | tail -n 1)"
+          mono "$nuget" sources add \
+            -Source "$FEED_URL" \
+            -StorePasswordInClearText \
+            -Name "$USERNAME" \
+            -UserName "$USERNAME" \
+            -Password "$VCPKG_NUGET_TOKEN"
+          mono "$nuget" setapikey "$VCPKG_NUGET_TOKEN" \
+            -Source "$FEED_URL"
       - name: Configure
         run: |
-          echo "vcpkg binary cache hit: ${{ steps.restore-vcpkg-binary-cache.outputs.cache-hit }}"
-          echo "vcpkg downloads cache hit: ${{ steps.restore-vcpkg-downloads-cache.outputs.cache-hit }}"
-          echo "vcpkg binary cache key: ${{ steps.restore-vcpkg-binary-cache.outputs.cache-primary-key }}"
-          echo "vcpkg binary matched key: ${{ steps.restore-vcpkg-binary-cache.outputs.cache-matched-key }}"
-          echo "vcpkg downloads cache key: ${{ steps.restore-vcpkg-downloads-cache.outputs.cache-primary-key }}"
-          echo "vcpkg downloads matched key: ${{ steps.restore-vcpkg-downloads-cache.outputs.cache-matched-key }}"
-          echo "Cache sizes before configure:"
-          du -sh .cache/vcpkg-archives .cache/vcpkg-downloads || true
+          echo "vcpkg binary sources: $VCPKG_BINARY_SOURCES"
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             VERSION="$GITHUB_REF_NAME"
             VERSION_DISPLAY="$VERSION"
@@ -161,8 +153,6 @@ jobs:
             -DFRAMELIFT_ENABLE_UPDATER=ON \
             -DFRAMELIFT_VERSION="$VERSION" \
             -DFRAMELIFT_VERSION_DISPLAY="$VERSION_DISPLAY"
-          echo "Cache sizes after configure:"
-          du -sh .cache/vcpkg-archives .cache/vcpkg-downloads || true
       - name: Build
         run: |
           cmake --build "$BUILD_DIR" --parallel
@@ -180,18 +170,6 @@ jobs:
           (cd "$BUILD_DIR" && 7z a FrameLift-win64.zip FrameLift.exe *.dll Plugins)
           # The SDK is packaged by the dedicated `build-sdk` job. The in-tree HelloPlugin
           # (FRAMELIFT_BUILD_SDK_EXAMPLE) still builds here as a Windows-side SDK bitrot guard.
-      - name: Save vcpkg binary cache
-        if: ${{ steps.restore-vcpkg-binary-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: .cache/vcpkg-archives
-          key: ${{ steps.restore-vcpkg-binary-cache.outputs.cache-primary-key }}
-      - name: Save vcpkg downloads cache
-        if: ${{ steps.restore-vcpkg-downloads-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: .cache/vcpkg-downloads
-          key: ${{ steps.restore-vcpkg-downloads-cache.outputs.cache-primary-key }}
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
