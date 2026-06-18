@@ -62,8 +62,16 @@ public:
     // Returns false if the file could not be opened/decoded.
     bool LoadExternalFile(const char* path);
 
+    // Open the media container separately and pre-load every event from the selected
+    // embedded subtitle stream. This keeps the playback demuxer positioned where it is.
+    bool LoadEmbeddedStream(const char* path, int streamIndex);
+
     // Drop all buffered events (used on seek for embedded/live tracks).
     void FlushEvents();
+
+    // Make the next RenderOverlay rewrite the caller's pixel buffer even if libass
+    // reports the same image list as the previous render.
+    void ForceNextUpdate();
 
     // Discard the current track entirely (subtitles disabled / switching away).
     void ClearTrack();
@@ -85,7 +93,7 @@ public:
 private:
     // Decode every subtitle packet of an opened format context (selected stream) into
     // the current track. Used by LoadExternalFile. Caller holds mutex_.
-    bool PreloadFromFormatLocked(AVFormatContext* fmt);
+    bool PreloadFromFormatLocked(AVFormatContext* fmt, int streamIndex);
 
     // Re-install the current style override on the renderer. Caller holds mutex_.
     void ApplyStyleLocked();

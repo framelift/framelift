@@ -29,6 +29,21 @@ TEST(FFmpegClockTests, MasterClockGuardsZeroBytesPerSec)
 
 // ── DecideFrame ────────────────────────────────────────────────────────────────
 
+TEST(FFmpegClockTests, SubtitleRenderClockUsesMasterWithoutSeekOverride)
+{
+    EXPECT_DOUBLE_EQ(SelectSubtitleRenderClock(/*master*/ 12.5, /*override*/ false, /*seekTarget*/ 42.0), 12.5);
+}
+
+TEST(FFmpegClockTests, SubtitleRenderClockUsesSeekTargetWithOverride)
+{
+    EXPECT_DOUBLE_EQ(SelectSubtitleRenderClock(/*master*/ 0.0, /*override*/ true, /*seekTarget*/ 42.0), 42.0);
+}
+
+TEST(FFmpegClockTests, SubtitleRenderClockReturnsToMasterAfterOverrideClears)
+{
+    EXPECT_DOUBLE_EQ(SelectSubtitleRenderClock(/*master*/ 42.5, /*override*/ false, /*seekTarget*/ 12.0), 42.5);
+}
+
 TEST(FFmpegClockTests, FutureFrameWaits)
 {
     EXPECT_EQ(DecideFrame(/*framePts*/ 5.0, /*master*/ 4.5, /*thresh*/ 0.1), FrameAction::Wait);

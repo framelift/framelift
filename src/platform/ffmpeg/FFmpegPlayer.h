@@ -133,6 +133,8 @@ private:
     // pausable wall clock derived from the first video frame.
     [[nodiscard]] double GetMasterClock();
     [[nodiscard]] double VideoWallClock();
+    [[nodiscard]] double GetSubtitleRenderClock();
+    void ClearSubtitleSeekClockOverride();
 
     // Notify the decode thread / workers parked on cv_, and (Windows) interrupt the
     // video worker's high-resolution frame-pacing wait via videoWakeEvent_.
@@ -209,8 +211,8 @@ private:
     bool OpenAudioBinding(int64_t id, AVFormatContext* mainFmt, AudioBinding& aud);
     // Apply subtitle selection `id` (-1 == off): open/rebuild the embedded subtitle
     // decoder (out via sDec/sStream/subIdx) or pre-load an external file into libass.
-    void OpenSubtitleBinding(int64_t id, AVFormatContext* mainFmt, int& subIdx, AVCodecContext*& sDec,
-                             AVStream*& sStream);
+    void OpenSubtitleBinding(int64_t id, const std::string& mediaPath, AVFormatContext* mainFmt, int& subIdx,
+                             AVCodecContext*& sDec, AVStream*& sStream);
     // Resolve a track id to its entry (copy) under tracksMutex_; returns false if absent.
     bool FindTrack(int64_t id, TrackEntry& out) const;
 
@@ -366,6 +368,8 @@ private:
     std::atomic<double> subtitleDelay_{0.0}; // seconds; positive delays subtitles
     std::vector<unsigned char> overlayScratch_; // render-thread-owned overlay pixels
     bool overlayActive_ = false;                // render-thread-owned: draw overlay this frame
+    bool subtitleSeekClockOverrideActive_ = false; // guarded by mutex_
+    double subtitleSeekClockOverride_ = 0.0;        // guarded by mutex_
 
     // User subtitle preferences. Styling is forwarded to libass on change; the
     // behavior fields (preferredLang/preferForced) drive BuildTrackList. Guarded by

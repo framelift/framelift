@@ -28,6 +28,14 @@ inline double ComputeMasterClock(double lastQueuedPts, int64_t queuedBytes, int 
     return lastQueuedPts - static_cast<double>(queuedBytes) / static_cast<double>(bytesPerSec);
 }
 
+// Subtitle rendering normally follows the master clock, but right after a seek the
+// audio/video clocks can briefly be stale or reset until the first post-seek sample
+// is presented. During that window, render subtitles at the landed seek target.
+inline double SelectSubtitleRenderClock(double masterClock, bool seekOverrideActive, double seekTarget)
+{
+    return seekOverrideActive ? seekTarget : masterClock;
+}
+
 // What the video worker should do with a decoded frame, given where the master
 // clock currently sits.
 enum class FrameAction : std::uint8_t

@@ -204,6 +204,7 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
         std::lock_guard lock(mutex_);
         hwDecName_ = "no"; // reset until the video decoder is (re)armed below
         videoClockSet_ = false;
+        subtitleSeekClockOverrideActive_ = false;
         hasPendingSeek_ = false; // discard any seek queued before this load
         hasPendingAudioSwitch_ = false;
         hasPendingSubSwitch_ = false;
@@ -292,14 +293,14 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
     int subIdx = -1;
     AVCodecContext* sDec = nullptr;
     AVStream* sStream = nullptr;
-    OpenSubtitleBinding(selectedSubId_, fmt, subIdx, sDec, sStream);
+    OpenSubtitleBinding(selectedSubId_, path, fmt, subIdx, sDec, sStream);
 
     if (!hasVideo_ && !aud.dec)
     {
         Log::Error("FFmpegPlayer: failed to open any decoder for {}", path);
         avcodec_free_context(&vDec);
         OpenAudioBinding(-1, fmt, aud); // tears down any partial audio binding
-        OpenSubtitleBinding(-1, fmt, subIdx, sDec, sStream);
+        OpenSubtitleBinding(-1, path, fmt, subIdx, sDec, sStream);
         avformat_close_input(&fmt);
         QueueEvent(MakeEndFile(EndFileReason::Error));
         return;
@@ -382,7 +383,7 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
             }
             if (doSub)
             {
-                OpenSubtitleBinding(subId, fmt, subIdx, sDec, sStream);
+                OpenSubtitleBinding(subId, path, fmt, subIdx, sDec, sStream);
             }
         }
 
@@ -426,6 +427,8 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
                 {
                     std::lock_guard lock(mutex_);
                     videoClockSet_ = false;
+                    subtitleSeekClockOverride_ = seekTo;
+                    subtitleSeekClockOverrideActive_ = true;
                 }
                 // Exact (hr-seek): drop decoded frames before the target. Keyframe seek
                 // (-inf) presents straight from the keyframe the demuxer landed on.
@@ -434,6 +437,8 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
                 eofReached_ = false;
                 EmitFlag(PlayerProperty::EofReached, false);
                 QueueEvent(MakeLifecycle(MediaEventType::PlaybackRestart));
+                subtitles_->ForceNextUpdate();
+                RequestRender();
             }
             // Clear the pending seek and the UI "seeking" state regardless of outcome,
             // so a failed seek doesn't leave the player stuck mid-seek.
@@ -655,6 +660,10 @@ void FFmpegPlayer::AudioWorker(AVCodecContext* dec, AVStream* stream, double sta
         }
         const double audioOffsetSec = static_cast<double>(audioSyncOffsetMs_.load()) / 1000.0;
         audioOut_->Feed(f, ptsSec + audioOffsetSec);
+        if (audioOut_->HasDevice())
+        {
+            ClearSubtitleSeekClockOverride();
+        }
 
         // For audio-only files there is no video worker to drive TimePos.
         if (!hasVideo_)
@@ -843,6 +852,7 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
                 videoClockPts_ = framePts;
                 videoClockWall_ = std::chrono::steady_clock::now();
                 pauseWall_ = videoClockWall_;
+                subtitleSeekClockOverrideActive_ = false;
             }
         }
 
@@ -1393,8 +1403,8 @@ bool FFmpegPlayer::OpenAudioBinding(int64_t id, AVFormatContext* mainFmt, AudioB
     return true;
 }
 
-void FFmpegPlayer::OpenSubtitleBinding(int64_t id, AVFormatContext* mainFmt, int& subIdx, AVCodecContext*& sDec,
-                                       AVStream*& sStream)
+void FFmpegPlayer::OpenSubtitleBinding(int64_t id, const std::string& mediaPath, AVFormatContext* mainFmt, int& subIdx,
+                                       AVCodecContext*& sDec, AVStream*& sStream)
 {
     if (sDec)
     {
@@ -1424,7 +1434,15 @@ void FFmpegPlayer::OpenSubtitleBinding(int64_t id, AVFormatContext* mainFmt, int
         return;
     }
 
-    // Embedded: open the subtitle decoder and seed libass with its ASS header.
+    // Embedded subtitles need the same absolute-event model as sidecars so a seek
+    // can render the active cue immediately, even when that cue began before the
+    // seek target. Use a separate input so the playback demuxer stays untouched.
+    if (subtitles_->LoadEmbeddedStream(mediaPath.c_str(), e.streamIndex))
+    {
+        return;
+    }
+
+    // Fallback: live-decode embedded packets if the separate preload cannot open.
     AVStream* st = mainFmt->streams[e.streamIndex];
     const AVCodec* codec = avcodec_find_decoder(st->codecpar->codec_id);
     AVCodecContext* dec = codec ? avcodec_alloc_context3(codec) : nullptr;
@@ -1454,6 +1472,19 @@ double FFmpegPlayer::GetMasterClock()
         return audioOut_->MasterClock();
     }
     return VideoWallClock();
+}
+
+double FFmpegPlayer::GetSubtitleRenderClock()
+{
+    const double master = GetMasterClock();
+    std::lock_guard lock(mutex_);
+    return SelectSubtitleRenderClock(master, subtitleSeekClockOverrideActive_, subtitleSeekClockOverride_);
+}
+
+void FFmpegPlayer::ClearSubtitleSeekClockOverride()
+{
+    std::lock_guard lock(mutex_);
+    subtitleSeekClockOverrideActive_ = false;
 }
 
 double FFmpegPlayer::VideoWallClock()
@@ -2252,7 +2283,8 @@ void FFmpegPlayer::RenderFrame(int w, int h) noexcept
         if (subtitlesEnabled_ && subtitles_ && subtitles_->Ok() && videoW > 0 && videoH > 0)
         {
             const LetterboxRect vp = ComputeLetterbox(w, h, videoW, videoH);
-            const auto timeMs = static_cast<long long>(std::llround((GetMasterClock() - subtitleDelay_.load()) * 1000.0));
+            const auto timeMs =
+                static_cast<long long>(std::llround((GetSubtitleRenderClock() - subtitleDelay_.load()) * 1000.0));
             const FFmpegSubtitles::RenderResult res =
                 subtitles_->RenderOverlay(vp.w, vp.h, videoW, videoH, timeMs, overlayScratch_);
             if (res == FFmpegSubtitles::RenderResult::Updated)
