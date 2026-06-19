@@ -63,11 +63,22 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/FontData.h"
 # the SDK package and is loaded by FrameLiftSdkConfig.cmake for standalone builds.
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftSdk.cmake")
 
+# Built-in host module scaffolding. These options are reported at configure time
+# but do not gate source/dependency ownership until later module pilot work.
+include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftBuiltinModules.cmake")
+framelift_declare_builtin_module(NAME core DESCRIPTION "Host application shell, settings, and plugin services." DEFAULT ON)
+framelift_declare_builtin_module(NAME ui DESCRIPTION "Dear ImGui host UI services and theme helpers." DEFAULT ON)
+framelift_declare_builtin_module(NAME window DESCRIPTION "SDL window and presentation surface ownership." DEFAULT ON)
+framelift_declare_builtin_module(NAME watch DESCRIPTION "Platform directory watching services." DEFAULT ON)
+framelift_declare_builtin_module(NAME ffmpeg DESCRIPTION "FFmpeg playback, audio, subtitle, and decode support." DEFAULT ON)
+framelift_declare_builtin_module(NAME graphics_core DESCRIPTION "Graphics API selection and renderer interfaces." DEFAULT ON)
+framelift_declare_builtin_module(NAME graphics_opengl DESCRIPTION "OpenGL graphics backend and video renderer." DEFAULT ON)
+framelift_declare_builtin_module(NAME graphics_vulkan DESCRIPTION "Vulkan graphics backend and zero-copy support." DEFAULT ON)
+framelift_report_builtin_modules()
+
 # ── Main executable ───────────────────────────────────────────────────────────
-file(GLOB_RECURSE FRAMELIFT_SOURCES CONFIGURE_DEPENDS
-        "${CMAKE_SOURCE_DIR}/src/*.cpp"
-        "${CMAKE_SOURCE_DIR}/src/*.h"
-)
+include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftHostSources.cmake")
+set(FRAMELIFT_SOURCES ${FRAMELIFT_HOST_SOURCES})
 
 if (WIN32)
     enable_language(RC)
