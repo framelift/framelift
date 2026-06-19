@@ -1,4 +1,4 @@
-#include "platform/gfx/VulkanQueueLock.h"
+#include "VulkanQueueLock.h"
 
 #include <gtest/gtest.h>
 

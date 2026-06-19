@@ -1,9 +1,10 @@
 #include "GlVideoRenderer.h"
 
-#include "../ffmpeg/FFmpegLetterbox.h"
 #include "IGraphicsBackend.h"
 
 #include <framelift/Log.h>
+
+#include "platform/ffmpeg/FFmpegLetterbox.h"
 
 #include <cmath>
 #include <cstddef>

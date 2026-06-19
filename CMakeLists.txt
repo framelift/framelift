@@ -14,6 +14,11 @@ endif ()
 
 include(FetchContent)
 
+# Built-in host modules are JSON-authored and drive compile-time ownership.
+include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftBuiltinModules.cmake")
+framelift_load_builtin_modules("${CMAKE_SOURCE_DIR}/modules")
+framelift_report_builtin_modules()
+
 # ── Platform libraries (SDL3 + FFmpeg + libass) ───────────────────────────────
 # Defines the SDL3::SDL3, `ffmpeg`, and `libass` targets: Linux uses system dev
 # packages (libsdl3-dev / libav*-dev / libass-dev); Windows resolves them all from
@@ -27,8 +32,16 @@ find_package(OpenGL REQUIRED)
 # ── Host third-party dependencies (imgui/spdlog/stb/json — NOT in the SDK) ────
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftDeps.cmake")
 
+set(FRAMELIFT_GRAPHICS_INCLUDE_DIRS
+        "${CMAKE_SOURCE_DIR}/modules/gfx/graphics-core"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/opengl"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/vulkan"
+)
+
 # ── Shader → SPIR-V build step (glslang, fetched in-tree) ─────────────────────
-include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftShaders.cmake")
+if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
+    include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftShaders.cmake")
+endif ()
 
 # ── Release-build optimizations (FrameLift_apply_release_opts) ─────────────────────
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftOptimize.cmake")
@@ -63,19 +76,6 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/FontData.h"
 # the SDK package and is loaded by FrameLiftSdkConfig.cmake for standalone builds.
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftSdk.cmake")
 
-# Built-in host module scaffolding. These options are reported at configure time
-# but do not gate source/dependency ownership until later module pilot work.
-include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftBuiltinModules.cmake")
-framelift_declare_builtin_module(NAME core DESCRIPTION "Host application shell, settings, and plugin services." DEFAULT ON)
-framelift_declare_builtin_module(NAME ui DESCRIPTION "Dear ImGui host UI services and theme helpers." DEFAULT ON)
-framelift_declare_builtin_module(NAME window DESCRIPTION "SDL window and presentation surface ownership." DEFAULT ON)
-framelift_declare_builtin_module(NAME watch DESCRIPTION "Platform directory watching services." DEFAULT ON)
-framelift_declare_builtin_module(NAME ffmpeg DESCRIPTION "FFmpeg playback, audio, subtitle, and decode support." DEFAULT ON)
-framelift_declare_builtin_module(NAME graphics_core DESCRIPTION "Graphics API selection and renderer interfaces." DEFAULT ON)
-framelift_declare_builtin_module(NAME graphics_opengl DESCRIPTION "OpenGL graphics backend and video renderer." DEFAULT ON)
-framelift_declare_builtin_module(NAME graphics_vulkan DESCRIPTION "Vulkan graphics backend and zero-copy support." DEFAULT ON)
-framelift_report_builtin_modules()
-
 # ── Main executable ───────────────────────────────────────────────────────────
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftHostSources.cmake")
 set(FRAMELIFT_SOURCES ${FRAMELIFT_HOST_SOURCES})
@@ -88,6 +88,7 @@ if (WIN32)
 endif ()
 
 add_executable(FrameLift ${FRAMELIFT_SOURCES} ${FRAMELIFT_SDK_SOURCES})
+framelift_apply_builtin_module_definitions(FrameLift)
 
 set_target_properties(FrameLift PROPERTIES
         CXX_STANDARD 23
@@ -100,6 +101,7 @@ set_target_properties(FrameLift PROPERTIES
 # libraries (imgui/spdlog/json) and stb headers directly, since they no longer
 # cross the plugin boundary.
 target_include_directories(FrameLift PRIVATE "${CMAKE_SOURCE_DIR}/src" "${stb_SOURCE_DIR}")
+target_include_directories(FrameLift PRIVATE ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS})
 target_link_libraries(FrameLift PRIVATE
         FrameLiftSdk SDL3::SDL3 OpenGL::GL
         imgui spdlog::spdlog nlohmann_json::nlohmann_json)
@@ -107,15 +109,19 @@ target_link_libraries(FrameLift PRIVATE
 # Vulkan graphics backend (OpenGL→Vulkan migration, #17). volk is the meta-loader
 # (compiled here exactly once — imgui only takes volk_headers); VMA + vk-bootstrap
 # are header/single-source. No link-time libvulkan: volk loads it at runtime.
-target_link_libraries(FrameLift PRIVATE
-        volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap)
+if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
+    target_link_libraries(FrameLift PRIVATE
+            volk Vulkan::Headers GPUOpen::VulkanMemoryAllocator vk-bootstrap::vk-bootstrap)
+endif ()
 
 # Compile the video shaders to embedded SPIR-V headers and make the host depend on
 # them (the Vulkan renderer #includes the generated <name>.spv.h from this dir).
-framelift_compile_shader("${CMAKE_SOURCE_DIR}/src/platform/gfx/shaders/video.vert" kVideoVertSpv FL_VIDEO_VERT_SPV)
-framelift_compile_shader("${CMAKE_SOURCE_DIR}/src/platform/gfx/shaders/video.frag" kVideoFragSpv FL_VIDEO_FRAG_SPV)
-target_sources(FrameLift PRIVATE "${FL_VIDEO_VERT_SPV}" "${FL_VIDEO_FRAG_SPV}")
-target_include_directories(FrameLift PRIVATE "${FRAMELIFT_SHADER_GEN_DIR}")
+if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
+    framelift_compile_shader("${CMAKE_SOURCE_DIR}/modules/gfx/vulkan/shaders/video.vert" kVideoVertSpv FL_VIDEO_VERT_SPV)
+    framelift_compile_shader("${CMAKE_SOURCE_DIR}/modules/gfx/vulkan/shaders/video.frag" kVideoFragSpv FL_VIDEO_FRAG_SPV)
+    target_sources(FrameLift PRIVATE "${FL_VIDEO_VERT_SPV}" "${FL_VIDEO_FRAG_SPV}")
+    target_include_directories(FrameLift PRIVATE "${FRAMELIFT_SHADER_GEN_DIR}")
+endif ()
 
 # The FFmpeg + libass playback backend (the only backend; App.cpp constructs
 # FFmpegPlayer unconditionally).
@@ -165,6 +171,8 @@ endif ()
 foreach (_plugin IN LISTS FRAMELIFT_PLUGIN_TARGETS)
     get_target_property(_plugin_disabled ${_plugin} FRAMELIFT_PLUGIN_DISABLED)
     if (NOT _plugin_disabled)
+        framelift_apply_builtin_module_definitions(${_plugin})
+        target_include_directories(${_plugin} PRIVATE ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS})
         FrameLift_apply_release_opts(${_plugin})
     endif ()
 endforeach ()

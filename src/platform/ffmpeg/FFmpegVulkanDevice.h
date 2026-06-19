@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../gfx/VulkanDeviceInfo.h"
+#include "VulkanDeviceInfo.h"
 
 struct AVBufferRef;
 

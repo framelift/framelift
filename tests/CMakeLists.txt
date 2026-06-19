@@ -39,6 +39,11 @@ include(GoogleTest)
 find_package(Threads REQUIRED)
 
 set(FRAMELIFT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
+set(FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS
+        "${FRAMELIFT_ROOT}/modules/gfx/graphics-core"
+        "${FRAMELIFT_ROOT}/modules/gfx/opengl"
+        "${FRAMELIFT_ROOT}/modules/gfx/vulkan"
+)
 
 # ── Coverage (gcov/gcovr) ─────────────────────────────────────────────────────
 option(FRAMELIFT_COVERAGE "Instrument the tests for gcov/gcovr coverage" OFF)
@@ -95,12 +100,28 @@ set_target_properties(framelift_tests PROPERTIES
 target_include_directories(framelift_tests PRIVATE
         "${FRAMELIFT_ROOT}/sdk/include"
         "${FRAMELIFT_ROOT}/src"
+        ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
         "${FRAMELIFT_ROOT}/plugins/updater/core"
         "${FRAMELIFT_ROOT}/plugins/playlist/core"
 )
 target_link_libraries(framelift_tests PRIVATE GTest::gtest_main GTest::gmock Threads::Threads)
 framelift_apply_coverage(framelift_tests)
 gtest_discover_tests(framelift_tests)
+
+add_executable(framelift_tests_vulkan_off
+        VulkanModuleDisabledTests.cpp
+)
+set_target_properties(framelift_tests_vulkan_off PROPERTIES
+        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+target_compile_definitions(framelift_tests_vulkan_off PRIVATE FRAMELIFT_MODULE_GRAPHICS_VULKAN=0)
+target_include_directories(framelift_tests_vulkan_off PRIVATE
+        "${FRAMELIFT_ROOT}/sdk/include"
+        "${FRAMELIFT_ROOT}/src"
+        ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
+)
+target_link_libraries(framelift_tests_vulkan_off PRIVATE GTest::gtest_main Threads::Threads)
+framelift_apply_coverage(framelift_tests_vulkan_off)
+gtest_discover_tests(framelift_tests_vulkan_off)
 
 # ── Helper: one test exe per plugin ───────────────────────────────────────────
 # add_framelift_plugin_test(NAME [METADATA_HEADER <header>] <test.cpp> <plugin.cpp> [extra .cpp]...)
@@ -119,6 +140,7 @@ function(add_framelift_plugin_test name)
     target_include_directories(${name} PRIVATE
             "${FRAMELIFT_ROOT}/sdk/include"
             "${FRAMELIFT_ROOT}/src"
+            ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
             "${FRAMELIFT_ROOT}/tests"
             "${FRAMELIFT_ROOT}/tests/stubs"  # stub IconData.h / Version.h for plugins that need generated headers
             "${FRAMELIFT_ROOT}/plugins/playlist/core"

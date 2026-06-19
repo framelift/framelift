@@ -1,6 +1,6 @@
 #include "FFmpegVulkanDevice.h"
 
-#include "../gfx/VulkanQueueLock.h"
+#include "VulkanQueueLock.h"
 
 #include <framelift/Log.h>
 

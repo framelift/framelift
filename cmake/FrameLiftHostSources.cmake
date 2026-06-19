@@ -1,8 +1,8 @@
 # Explicit host source ownership for FrameLift.exe.
 #
-# The built-in module options declared in FrameLiftBuiltinModules.cmake are
-# scaffold-only for #34. Keep all source groups in the host target for now so
-# the default build stays behaviorally identical.
+# Built-in modules are JSON-authored and reported by FrameLiftBuiltinModules.cmake.
+# Source groups are appended by module state so lean builds do not compile code
+# for disabled backends.
 
 set(_FRAMELIFT_HOST_CORE_SOURCES
         "${CMAKE_SOURCE_DIR}/src/App.cpp"
@@ -75,32 +75,35 @@ set(_FRAMELIFT_HOST_FFMPEG_SOURCES
         "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegSubtitles.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegSubtitles.h"
         "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegTrackLabel.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegVulkanDevice.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegVulkanDevice.h"
         "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/VideoDecodeMode.h"
 )
 
+set(_FRAMELIFT_HOST_FFMPEG_VULKAN_SOURCES
+        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegVulkanDevice.cpp"
+        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegVulkanDevice.h"
+)
+
 set(_FRAMELIFT_HOST_GRAPHICS_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/GraphicsApi.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/GraphicsBackendFactory.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/IGraphicsBackend.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/IVideoRenderer.h"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/graphics-core/GraphicsApi.h"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/graphics-core/GraphicsBackendFactory.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/graphics-core/IGraphicsBackend.h"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/graphics-core/IVideoRenderer.h"
 )
 
 set(_FRAMELIFT_HOST_GRAPHICS_OPENGL_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/GlGraphicsBackend.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/GlGraphicsBackend.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/GlVideoRenderer.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/GlVideoRenderer.h"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/opengl/GlGraphicsBackend.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/opengl/GlGraphicsBackend.h"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/opengl/GlVideoRenderer.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/opengl/GlVideoRenderer.h"
 )
 
 set(_FRAMELIFT_HOST_GRAPHICS_VULKAN_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/VulkanDeviceInfo.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/VulkanGraphicsBackend.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/VulkanGraphicsBackend.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/VulkanQueueLock.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/VulkanVideoRenderer.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/gfx/VulkanVideoRenderer.h"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/vulkan/VulkanDeviceInfo.h"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/vulkan/VulkanGraphicsBackend.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/vulkan/VulkanGraphicsBackend.h"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/vulkan/VulkanQueueLock.h"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/vulkan/VulkanVideoRenderer.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/vulkan/VulkanVideoRenderer.h"
 )
 
 set(FRAMELIFT_HOST_SOURCES
@@ -111,7 +114,13 @@ set(FRAMELIFT_HOST_SOURCES
         ${_FRAMELIFT_HOST_FFMPEG_SOURCES}
         ${_FRAMELIFT_HOST_GRAPHICS_SOURCES}
         ${_FRAMELIFT_HOST_GRAPHICS_OPENGL_SOURCES}
-        ${_FRAMELIFT_HOST_GRAPHICS_VULKAN_SOURCES}
 )
 
-source_group(TREE "${CMAKE_SOURCE_DIR}/src" PREFIX "src" FILES ${FRAMELIFT_HOST_SOURCES})
+if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
+    list(APPEND FRAMELIFT_HOST_SOURCES
+            ${_FRAMELIFT_HOST_FFMPEG_VULKAN_SOURCES}
+            ${_FRAMELIFT_HOST_GRAPHICS_VULKAN_SOURCES}
+    )
+endif ()
+
+source_group(TREE "${CMAKE_SOURCE_DIR}" FILES ${FRAMELIFT_HOST_SOURCES})

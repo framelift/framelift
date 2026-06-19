@@ -2,6 +2,10 @@
 
 #include <cstdint>
 
+#ifndef FRAMELIFT_MODULE_GRAPHICS_VULKAN
+#define FRAMELIFT_MODULE_GRAPHICS_VULKAN 1
+#endif
+
 class IGraphicsBackend;
 
 // Host-internal abstraction over the API-specific video blitter. The FFmpeg player
@@ -28,6 +32,7 @@ public:
     // Upload a tightly packed RGBA8 frame (w*h*4 bytes, top row first).
     virtual void Upload(const uint8_t* rgba, int w, int h) = 0;
 
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     // Zero-copy path (Phase 3, #18): hand off a decoded FFmpeg Vulkan frame whose
     // YCbCr image already lives on the renderer's device. `avFrame` is an AVFrame*
     // (carrying an AVVkFrame) passed as void* to keep libav types out of this header;
@@ -40,6 +45,7 @@ public:
         (void)displayW;
         (void)displayH;
     }
+#endif
 
     // Upload the subtitle overlay: a tightly packed RGBA8 image sized to the on-screen
     // video rectangle so it maps 1:1 over the letterboxed video. Straight alpha.

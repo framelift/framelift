@@ -3,6 +3,23 @@
 #include <string>
 #include <vector>
 
+#ifndef FRAMELIFT_MODULE_GRAPHICS_VULKAN
+#define FRAMELIFT_MODULE_GRAPHICS_VULKAN 1
+#endif
+
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
+#define FRAMELIFT_DEFAULT_GRAPHICS_BACKEND "vulkan"
+#define FRAMELIFT_SETTINGS_GRAPHICS_BACKEND_DESC \
+    "Video rendering backend: vulkan or gl (falls back to gl if Vulkan is unavailable). Takes effect on restart."
+#define FRAMELIFT_HWDEC_MODE_DESC \
+    "Video acceleration mode: off, auto, vulkan-zero-copy, vulkan, cuda-zero-copy, cuda, d3d11va, dxva2, or vaapi."
+#else
+#define FRAMELIFT_DEFAULT_GRAPHICS_BACKEND "gl"
+#define FRAMELIFT_SETTINGS_GRAPHICS_BACKEND_DESC "Video rendering backend: gl. Takes effect on restart."
+#define FRAMELIFT_HWDEC_MODE_DESC \
+    "Video acceleration mode: off, auto, cuda-zero-copy, cuda, d3d11va, dxva2, or vaapi."
+#endif
+
 // ── Settings field table ───────────────────────────────────────────────────────
 // X(section, name, type, default, desc)
 // Adding a new setting: add ONE row here — nothing else to change.
@@ -14,7 +31,7 @@
     X(general,  maxDisplayRatio,    float,       0.8f,  "Max fraction of the screen used when auto-sizing the window to the video (0.0-1.0).") \
     /* ── Playback ────────────────────────────────────────────────────────── */ \
     X(playback, hwdec,              bool,        true,  "Enable hardware video decoding.") \
-    X(playback, hwdecMode,          std::string, "auto",  "Video acceleration mode: off, auto, vulkan-zero-copy, vulkan, cuda-zero-copy, cuda, d3d11va, dxva2, or vaapi.") \
+    X(playback, hwdecMode,          std::string, "auto",  FRAMELIFT_HWDEC_MODE_DESC) \
     X(playback, hrSeek,             bool,        true,  "Use precise (high-resolution) seeking.") \
     X(playback, videoSync,          bool,        true,  "Synchronize video timing to the display refresh.") \
     X(playback, subAutoLoad,        bool,        true,  "Auto-load subtitle files matching the opened media.") \
@@ -39,7 +56,7 @@
     X(cache,    readAheadEnabled,   bool,        true,  "Enable the memory-bounded demuxer read-ahead cache.") \
     X(cache,    readAheadSizeMB,    int,           64,  "Read-ahead demuxer cache size in MB (total across audio/video/subtitle).") \
     /* ── Graphics ─────────────────────────────────────────────────────────── */ \
-    X(graphics, backend,            std::string, "vulkan",  "Video rendering backend: vulkan or gl (falls back to gl if Vulkan is unavailable). Takes effect on restart.") \
+    X(graphics, backend,            std::string, FRAMELIFT_DEFAULT_GRAPHICS_BACKEND, FRAMELIFT_SETTINGS_GRAPHICS_BACKEND_DESC) \
     /* ── UI ───────────────────────────────────────────────────────────────── */ \
     X(ui,       panelWidth,         float,     320.f,   "Width in pixels of the side panels (playlist, etc.).") \
     X(ui,       slideSpeed,         float,      18.f,   "Panel slide-in/out animation speed.") \

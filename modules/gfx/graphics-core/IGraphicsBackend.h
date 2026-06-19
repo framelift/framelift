@@ -5,7 +5,9 @@
 
 #include "GraphicsApi.h"
 #include "IVideoRenderer.h"
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
 #include "VulkanDeviceInfo.h"
+#endif
 
 struct SDL_Window;
 
@@ -56,6 +58,7 @@ public:
     // backend owns the resource and frees it on shutdown. Returns 0 on failure.
     [[nodiscard]] virtual uintptr_t CreateUiTexture(const unsigned char* rgba, int w, int h) = 0;
 
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     // Fill `out` with the live Vulkan instance/device/queues so the FFmpeg Vulkan
     // hwaccel can WRAP this device for zero-copy decode (Phase 3, #18). Returns false
     // for non-Vulkan backends (the default) — the caller then uses the CPU-RGBA8 path.
@@ -66,6 +69,7 @@ public:
         (void)out;
         return false;
     }
+#endif
 
     // ── Presentation ──────────────────────────────────────────────────────────
     [[nodiscard]] virtual void* GetProcAddr(const char* name) const = 0;

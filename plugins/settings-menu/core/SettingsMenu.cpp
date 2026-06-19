@@ -9,12 +9,16 @@
 #include <utility>
 
 #include "Version.h"
-#include <platform/gfx/IGraphicsBackend.h>
+#include <IGraphicsBackend.h>
 #include <ThemeUtil.h>
 #include <framelift/core.h>
 #include <framelift/platform/IAppWindow.h>
 #include <framelift/platform/IMediaPlayer.h>
 #include <framelift/ui.h>
+
+#ifndef FRAMELIFT_MODULE_GRAPHICS_VULKAN
+#define FRAMELIFT_MODULE_GRAPHICS_VULKAN 1
+#endif
 
 // ReSharper disable once CppUnusedIncludeDirective
 #include <cstring>
@@ -42,8 +46,10 @@ struct DecodeModeItem
 constexpr DecodeModeItem kDecodeModes[] = {
     {"Off", "off", false},
     {"Auto", "auto", false},
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     {"Vulkan (zero-copy)", "vulkan-zero-copy", false},
     {"Vulkan", "vulkan", false},
+#endif
     {"CUDA (zero-copy)", "cuda-zero-copy", true},
     {"CUDA", "cuda", true},
     {"D3D11VA", "d3d11va", false},
@@ -53,8 +59,10 @@ constexpr DecodeModeItem kDecodeModes[] = {
 constexpr DecodeModeItem kDecodeModes[] = {
     {"Off", "off", false},
     {"Auto", "auto", false},
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     {"Vulkan (zero-copy)", "vulkan-zero-copy", false},
     {"Vulkan", "vulkan", false},
+#endif
     {"CUDA (zero-copy)", "cuda-zero-copy", true},
     {"CUDA", "cuda", true},
     {"VAAPI", "vaapi", false},
@@ -493,6 +501,7 @@ void SettingsMenu::RenderPageGraphics(UIContext& ctx)
 {
     Widgets::SectionHeader(ctx, "Renderer");
 
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     // backend stores "vulkan" or "gl"; map to/from the combo index.
     const bool isVulkan = settings_.backend == "vulkan" || settings_.backend == "vk" || settings_.backend == "Vulkan";
     const char* const items[] = {"Vulkan", "OpenGL"};
@@ -507,6 +516,22 @@ void SettingsMenu::RenderPageGraphics(UIContext& ctx)
         settings_.backend = idx == 0 ? "vulkan" : "gl";
         dirty_ = true;
     }
+#else
+    const char* const items[] = {"OpenGL"};
+    int idx = 0;
+    if (settings_.backend != "gl")
+    {
+        settings_.backend = "gl";
+        dirty_ = true;
+    }
+    if (Widgets::Combo(
+            ctx, "Backend", "Graphics API used for video + UI rendering. Takes effect after a restart.", items, 1, idx
+        ))
+    {
+        settings_.backend = "gl";
+        dirty_ = true;
+    }
+#endif
 }
 
 void SettingsMenu::RenderPagePlayback(UIContext& ctx)

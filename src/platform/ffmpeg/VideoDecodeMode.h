@@ -8,6 +8,10 @@
 #include <string>
 #include <string_view>
 
+#ifndef FRAMELIFT_MODULE_GRAPHICS_VULKAN
+#define FRAMELIFT_MODULE_GRAPHICS_VULKAN 1
+#endif
+
 enum class VideoDecodeMode : int
 {
     Off,
@@ -35,6 +39,7 @@ inline VideoDecodeMode VideoDecodeModeFromString(std::string_view value)
     {
         return VideoDecodeMode::Off;
     }
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     if (mode == "vulkan-zero-copy" || mode == "vulkan_zero_copy" || mode == "vulkanzerocopy")
     {
         return VideoDecodeMode::VulkanZeroCopy;
@@ -43,6 +48,7 @@ inline VideoDecodeMode VideoDecodeModeFromString(std::string_view value)
     {
         return VideoDecodeMode::Vulkan;
     }
+#endif
     if (mode == "cuda-zero-copy" || mode == "cuda_zero_copy" || mode == "cudazerocopy")
     {
         return VideoDecodeMode::CudaZeroCopy;
@@ -73,9 +79,17 @@ inline const char* VideoDecodeModeName(VideoDecodeMode mode)
     case VideoDecodeMode::Off:
         return "off";
     case VideoDecodeMode::VulkanZeroCopy:
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
         return "vulkan-zero-copy";
+#else
+        break;
+#endif
     case VideoDecodeMode::Vulkan:
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
         return "vulkan";
+#else
+        break;
+#endif
     case VideoDecodeMode::CudaZeroCopy:
         return "cuda-zero-copy";
     case VideoDecodeMode::Cuda:
@@ -102,7 +116,11 @@ inline HwBackend HwBackendFromVideoDecodeMode(VideoDecodeMode mode)
     switch (mode)
     {
     case VideoDecodeMode::Vulkan:
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
         return HwBackend::Vulkan;
+#else
+        break;
+#endif
     case VideoDecodeMode::Cuda:
         return HwBackend::Cuda;
     case VideoDecodeMode::D3D11VA:
@@ -123,10 +141,20 @@ inline HwBackend HwBackendFromVideoDecodeMode(VideoDecodeMode mode)
 inline std::array<VideoDecodeMode, 6> AutoVideoDecodePreference()
 {
 #if defined(_WIN32)
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     return {VideoDecodeMode::VulkanZeroCopy, VideoDecodeMode::CudaZeroCopy, VideoDecodeMode::Cuda,
             VideoDecodeMode::D3D11VA,        VideoDecodeMode::DXVA2,        VideoDecodeMode::Off};
 #else
+    return {VideoDecodeMode::CudaZeroCopy, VideoDecodeMode::Cuda,  VideoDecodeMode::D3D11VA,
+            VideoDecodeMode::DXVA2,        VideoDecodeMode::Off,   VideoDecodeMode::Off};
+#endif
+#else
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     return {VideoDecodeMode::VulkanZeroCopy, VideoDecodeMode::CudaZeroCopy, VideoDecodeMode::Cuda,
             VideoDecodeMode::VAAPI,          VideoDecodeMode::Off,          VideoDecodeMode::Off};
+#else
+    return {VideoDecodeMode::CudaZeroCopy, VideoDecodeMode::Cuda, VideoDecodeMode::VAAPI,
+            VideoDecodeMode::Off,          VideoDecodeMode::Off,  VideoDecodeMode::Off};
+#endif
 #endif
 }

@@ -2,6 +2,10 @@
 
 #include <string_view>
 
+#ifndef FRAMELIFT_MODULE_GRAPHICS_VULKAN
+#define FRAMELIFT_MODULE_GRAPHICS_VULKAN 1
+#endif
+
 // The graphics presentation backend the host renders through. Selected at startup
 // from the [graphics] backend setting. OpenGL is the only backend implemented today;
 // Vulkan is planned (see the OpenGL→Vulkan migration, issues #15–#18).
@@ -41,10 +45,14 @@ inline GraphicsApi GraphicsApiFromString(std::string_view name)
         return true;
     };
 
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     if (iequals(name, "vulkan") || iequals(name, "vk"))
     {
         return GraphicsApi::Vulkan;
     }
+#else
+    (void)name;
+#endif
     return GraphicsApi::OpenGL;
 }
 
@@ -54,7 +62,11 @@ inline const char* GraphicsApiName(GraphicsApi api)
     switch (api)
     {
     case GraphicsApi::Vulkan:
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
         return "vulkan";
+#else
+        break;
+#endif
     case GraphicsApi::OpenGL:
         break;
     }

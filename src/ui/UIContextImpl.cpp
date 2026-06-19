@@ -1,7 +1,7 @@
 // ReSharper disable CppMemberFunctionMayBeStatic
 #include "UIContextImpl.h"
 #include "imgui.h"
-#include "platform/gfx/IGraphicsBackend.h"
+#include "IGraphicsBackend.h"
 #include <framelift/Hotkeys.h>
 
 #define STB_IMAGE_IMPLEMENTATION

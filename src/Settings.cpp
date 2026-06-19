@@ -1,6 +1,7 @@
 ﻿#include "Settings.h"
 
 #include "platform/ffmpeg/VideoDecodeMode.h"
+#include "GraphicsApi.h"
 
 #include <cstddef>
 #include <filesystem>
@@ -95,6 +96,10 @@ Field MakeField(const char* key, const char* desc, std::string Settings::* m)
             {
                 const VideoDecodeMode mode = s.hwdec ? VideoDecodeModeFromString(s.*m) : VideoDecodeMode::Off;
                 return std::string(VideoDecodeModeName(mode));
+            }
+            if (std::string_view(key) == "graphics.backend")
+            {
+                return std::string(GraphicsApiName(GraphicsApiFromString(s.*m)));
             }
             return s.*m;
         }
@@ -248,6 +253,7 @@ void Settings::Load(const std::string& path)
         hwdecMode = VideoDecodeModeName(VideoDecodeMode::Auto);
         hwdec = true;
     }
+    backend = GraphicsApiName(GraphicsApiFromString(backend));
 }
 
 // ── Settings::Save ────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 #include <framelift/platform/IMediaPlayer.h>
 
 #include "../../ReadAheadCache.h"
-#include "../gfx/IVideoRenderer.h"
+#include "IVideoRenderer.h"
 #include "FFmpegSubtitles.h"
 #include "VideoDecodeMode.h"
 
@@ -231,12 +231,14 @@ private:
     std::unique_ptr<IVideoRenderer> renderer_;
     bool rendererReady_ = false;
 
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     // Zero-copy Vulkan decode (#18). vkHwDevice_ is an AV_HWDEVICE_TYPE_VULKAN context
     // WRAPPING the renderer's Vulkan device, built once in InitRender and reused per
     // file; null on non-Vulkan backends / when video-decode is unsupported (then the
     // CPU-RGBA8 path runs). vulkanZeroCopyAvailable_ gates per-file selection in PlayFile.
     AVBufferRef* vkHwDevice_ = nullptr;
     bool vulkanZeroCopyAvailable_ = false;
+#endif
 
     std::thread decodeThread_;
     std::mutex mutex_; // guards the command/event state below + drives cv_
@@ -283,6 +285,7 @@ private:
     int pendingH_ = 0;
     bool pendingValid_ = false;
     std::atomic<bool> newFramePending_{false};
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     // Zero-copy path: instead of the RGBA buffers, the decode thread hands a ref'd
     // AVFrame (carrying an AVVkFrame) to the render thread. pendingVkFrame_ is guarded by
     // frameMutex_; displayVkFrame_ is render-thread-owned. pendingIsVulkan_ distinguishes
@@ -291,6 +294,7 @@ private:
     AVFrame* displayVkFrame_ = nullptr;
     bool pendingIsVulkan_ = false;
     bool displayIsVulkan_ = false; // render-thread-owned: last frame handed to the renderer
+#endif
 
     // Observable / queryable state.
     std::atomic<int64_t> displayWidth_{0};

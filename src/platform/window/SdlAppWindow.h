@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-#include "../gfx/IGraphicsBackend.h"
+#include "IGraphicsBackend.h"
 
 // Concrete IAppWindow backed by SDL3 + Dear ImGui. Owns the SDL window and event
 // loop and delegates the rendering surface (GL/Vulkan context, present, vsync, and

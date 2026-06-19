@@ -1,7 +1,7 @@
 #include "VulkanVideoRenderer.h"
 
-#include "../ffmpeg/FFmpegLetterbox.h"
-#include "../ffmpeg/FFmpegVulkanDevice.h" // neutral bridge (no libav/volk types) — reads AVVkFrame
+#include "platform/ffmpeg/FFmpegLetterbox.h"
+#include "platform/ffmpeg/FFmpegVulkanDevice.h" // neutral bridge (no libav/volk types) — reads AVVkFrame
 
 #include <vk_mem_alloc.h>
 

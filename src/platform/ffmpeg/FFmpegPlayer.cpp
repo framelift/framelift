@@ -8,9 +8,11 @@
 #include "FFmpegLetterbox.h"
 #include "FFmpegPacketQueue.h"
 #include "FFmpegTrackLabel.h"
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
 #include "FFmpegVulkanDevice.h"
+#endif
 
-#include "../gfx/IGraphicsBackend.h"
+#include "IGraphicsBackend.h"
 
 #include <framelift/Log.h>
 
@@ -122,6 +124,7 @@ FFmpegPlayer::~FFmpegPlayer()
     // displayed AVVkFrame are gone before we drop the frame refs and the wrapped device.
     // (The graphics backend/device is owned by the window, destroyed after the player.)
     renderer_.reset();
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     if (displayVkFrame_)
     {
         av_frame_free(&displayVkFrame_);
@@ -134,6 +137,7 @@ FFmpegPlayer::~FFmpegPlayer()
     {
         av_buffer_unref(&vkHwDevice_);
     }
+#endif
 #if defined(_WIN32)
     if (videoWakeEvent_)
     {
@@ -809,7 +813,12 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
         // Zero-copy Vulkan frames stay on the GPU — no download, handed off as an AVVkFrame
         // ref below. Other hardware frames live in GPU memory and are downloaded to a
         // software frame (carrying pts) before swscale. Software decode leaves f unchanged.
-        const bool vkFrame = hw && hw->IsVulkanZeroCopy() && decoded->format == hw->HwPixelFormat();
+        const bool vkFrame =
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
+            hw && hw->IsVulkanZeroCopy() && decoded->format == hw->HwPixelFormat();
+#else
+            false;
+#endif
         AVFrame* f = decoded;
         if (!vkFrame && hw && hw->Active() && decoded->format == hw->HwPixelFormat())
         {
@@ -924,6 +933,7 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
             }
         }
 
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
         if (vkFrame)
         {
             // Zero-copy: hand a ref'd AVVkFrame to the render thread (no swscale, no copy).
@@ -947,6 +957,7 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
             }
         }
         else
+#endif
         {
             sws = sws_getCachedContext(sws, f->width, f->height, static_cast<AVPixelFormat>(f->format), dstW, dstH,
                                        AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
@@ -967,7 +978,9 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
             pendingW_ = dstW;
             pendingH_ = dstH;
             pendingValid_ = true;
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
             pendingIsVulkan_ = false;
+#endif
         }
         newFramePending_ = true;
         RequestRender();
@@ -1740,8 +1753,15 @@ bool FFmpegPlayer::TryEnableHardwareDecode(const AVCodec* codec, AVCodecContext*
         switch (mode)
         {
         case VideoDecodeMode::VulkanZeroCopy:
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
             return vulkanZeroCopyAvailable_ && vkHwDevice_ && hw.TryEnableVulkan(codec, dec, vkHwDevice_);
+#else
+            break;
+#endif
         case VideoDecodeMode::Vulkan:
+#if !FRAMELIFT_MODULE_GRAPHICS_VULKAN
+            break;
+#endif
         case VideoDecodeMode::Cuda:
         case VideoDecodeMode::D3D11VA:
         case VideoDecodeMode::DXVA2:
@@ -2193,6 +2213,7 @@ void FFmpegPlayer::InitRender(void* graphicsBackend) noexcept
     // FFmpeg so we can decode straight onto the render device (#18). Non-fatal on
     // failure: vulkanZeroCopyAvailable_ stays false and PlayFile uses the readback /
     // CPU-RGBA8 paths.
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     VulkanDeviceInfo vkInfo;
     if (backend->GetVulkanDeviceInfo(vkInfo) && vkInfo.supportsVideoDecode)
     {
@@ -2200,6 +2221,7 @@ void FFmpegPlayer::InitRender(void* graphicsBackend) noexcept
         vulkanZeroCopyAvailable_ = vkHwDevice_ != nullptr;
         Log::Info("FFmpegPlayer: Vulkan zero-copy decode {}", vulkanZeroCopyAvailable_ ? "available" : "unavailable");
     }
+#endif
 }
 
 void FFmpegPlayer::SetRenderUpdateCallback(void (*cb)(void*), void* ud) noexcept
@@ -2216,13 +2238,16 @@ bool FFmpegPlayer::HasNewFrame() noexcept
 void FFmpegPlayer::RenderFrame(int w, int h) noexcept
 {
     bool haveNew = false;
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     bool haveNewVk = false;
+#endif
     int dispW = 0;
     int dispH = 0;
     {
         std::lock_guard fl(frameMutex_);
         if (pendingValid_)
         {
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
             if (pendingIsVulkan_)
             {
                 // Adopt the pending AVVkFrame; release the previously displayed one. The
@@ -2238,6 +2263,7 @@ void FFmpegPlayer::RenderFrame(int w, int h) noexcept
                 haveNewVk = true;
             }
             else
+#endif
             {
                 std::swap(displayPixels_, pendingPixels_);
                 haveNew = true;
@@ -2251,6 +2277,7 @@ void FFmpegPlayer::RenderFrame(int w, int h) noexcept
 
     if (rendererReady_)
     {
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
         if (haveNewVk)
         {
             displayIsVulkan_ = true;
@@ -2271,6 +2298,9 @@ void FFmpegPlayer::RenderFrame(int w, int h) noexcept
             renderer_->UploadVulkanFrame(displayVkFrame_, dispW, dispH);
         }
         else if (haveNew)
+#else
+        if (haveNew)
+#endif
         {
             renderer_->Upload(displayPixels_.data(), dispW, dispH);
         }
