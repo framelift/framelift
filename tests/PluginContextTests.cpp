@@ -297,15 +297,25 @@ std::vector<CollectedPlugin> Enumerate(PluginContext& ctx)
 TEST(PluginContextTest, EnumeratePluginsReportsLoadedAndDisabledEntries)
 {
     Ctx c;
-    const FrameLiftPluginInfo alpha{1, 1, 0, "Alpha", {2, 3, 4}, "Acme", "First plugin"};
-    c.ctx.AddPlugin("Alpha", true, &alpha); // loaded
-    c.ctx.AddPlugin("Beta", false, nullptr); // present but disabled
+    const FrameLiftPluginInfo alpha{FRAMELIFT_PLUGIN_ABI_MAJOR,
+                                    FRAMELIFT_PLUGIN_ABI_MINOR,
+                                    FRAMELIFT_PLUGIN_ABI_PATCH,
+                                    "framelift.alpha",
+                                    "FrameLift.Alpha",
+                                    "Alpha",
+                                    {2, 3, 4},
+                                    "Acme",
+                                    "First plugin",
+                                    nullptr,
+                                    0};
+    c.ctx.AddPlugin("framelift.alpha", true, &alpha); // loaded
+    c.ctx.AddPlugin("framelift.beta", false, nullptr); // present but disabled
     c.ctx.AddPlugin("Gamma", true, nullptr); // enabled at startup yet not loaded → failed
 
     const auto got = Enumerate(c.ctx);
     ASSERT_EQ(got.size(), 3u);
 
-    EXPECT_EQ(got[0].name, "Alpha");
+    EXPECT_EQ(got[0].name, "framelift.alpha");
     EXPECT_EQ(got[0].infoName, "Alpha");
     EXPECT_EQ(got[0].version[0], 2);
     EXPECT_EQ(got[0].publisher, "Acme");
@@ -313,8 +323,8 @@ TEST(PluginContextTest, EnumeratePluginsReportsLoadedAndDisabledEntries)
     EXPECT_TRUE(got[0].loaded);
     EXPECT_FALSE(got[0].loadFailed);
 
-    EXPECT_EQ(got[1].name, "Beta");
-    EXPECT_EQ(got[1].infoName, "Beta"); // synthesized name-only descriptor
+    EXPECT_EQ(got[1].name, "framelift.beta");
+    EXPECT_EQ(got[1].infoName, "framelift.beta"); // synthesized name-only descriptor
     EXPECT_EQ(got[1].version[0], 0);
     EXPECT_TRUE(got[1].publisher.empty());
     EXPECT_FALSE(got[1].enabled);
@@ -336,18 +346,18 @@ TEST(PluginContextTest, EnumeratePluginsEmptyByDefault)
 TEST(PluginContextTest, SetPluginEnabledUpdatesListAndCatalogue)
 {
     Settings settings;
-    settings.enabledPlugins = {"Playlist"};
+    settings.enabledPlugins = {"framelift.playlist"};
     const std::string ini = (std::filesystem::temp_directory_path() / "framelift_test_setenabled.ini").string();
     PluginContext ctx{"pref/", &settings, ini};
 
-    ctx.AddPlugin("Playlist", true, nullptr);
-    ctx.AddPlugin("History", false, nullptr);
+    ctx.AddPlugin("framelift.playlist", true, nullptr);
+    ctx.AddPlugin("framelift.history", false, nullptr);
 
-    ctx.SetPluginEnabled("History", true); // enable a disabled one
-    EXPECT_NE(std::ranges::find(settings.enabledPlugins, "History"), settings.enabledPlugins.end());
+    ctx.SetPluginEnabled("framelift.history", true); // enable a disabled one
+    EXPECT_NE(std::ranges::find(settings.enabledPlugins, "framelift.history"), settings.enabledPlugins.end());
 
-    ctx.SetPluginEnabled("Playlist", false); // disable an enabled one
-    EXPECT_EQ(std::ranges::find(settings.enabledPlugins, "Playlist"), settings.enabledPlugins.end());
+    ctx.SetPluginEnabled("framelift.playlist", false); // disable an enabled one
+    EXPECT_EQ(std::ranges::find(settings.enabledPlugins, "framelift.playlist"), settings.enabledPlugins.end());
 
     ctx.SetPluginEnabled("Unknown", true); // no-op for unknown names
     EXPECT_EQ(std::ranges::find(settings.enabledPlugins, "Unknown"), settings.enabledPlugins.end());
@@ -355,8 +365,8 @@ TEST(PluginContextTest, SetPluginEnabledUpdatesListAndCatalogue)
     // Catalogue reflects the toggles immediately (drives the live checkbox state).
     const auto got = Enumerate(ctx);
     ASSERT_EQ(got.size(), 2u);
-    EXPECT_FALSE(got[0].enabled); // Playlist
-    EXPECT_TRUE(got[1].enabled); // History
+    EXPECT_FALSE(got[0].enabled); // framelift.playlist
+    EXPECT_TRUE(got[1].enabled); // framelift.history
 
     std::filesystem::remove(ini);
 }

@@ -1,31 +1,33 @@
 #pragma once
 #include <framelift/Hotkeys.h>
-#include <framelift/IPlugin.h>
+#include <framelift/IModule.h>
 #include <vector>
 
-// Dynamic plugin registry. Add() installs the plugin immediately (services must
-// be registered in ctx first). Remove() unregisters without calling any teardown.
-// Provides event-dispatch helpers used by App's main loop.
+// Dynamic module registry. Add() installs the module immediately (services must
+// be registered in ctx first). Optional runtime surfaces are dispatched only to
+// modules that implement their small interfaces.
 class PluginRegistry
 {
 public:
-    void Add(IPlugin* p, IPluginContext& ctx)
+    void Add(IModule* module, IPluginContext& ctx)
     {
-        plugins_.push_back(p);
-        p->Install(ctx);
+        modules_.push_back(module);
+        module->Install(ctx);
     }
 
-    void Remove(IPlugin* p)
+    void Remove(IModule* module)
     {
-        std::erase(plugins_, p);
+        module->Uninstall();
+        std::erase(modules_, module);
     }
 
-    // Dispatch to each plugin until one consumes the event. Returns true if consumed.
+    // Dispatch to each interested module until one consumes the event.
     bool OnEvent(const AppEvent& e)
     {
-        for (auto* p : plugins_)
+        for (auto* module : modules_)
         {
-            if (p->OnEvent(e))
+            auto* handler = static_cast<IEventHandler*>(module->QueryInterface(IEventHandler::InterfaceId));
+            if (handler && handler->OnEvent(e))
             {
                 return true;
             }
@@ -33,33 +35,41 @@ public:
         return false;
     }
 
-    // Broadcast a media event to all plugins.
+    // Broadcast a media event to interested modules.
     void OnMediaEvent(const MediaEvent& e)
     {
-        for (auto* p : plugins_)
+        for (auto* module : modules_)
         {
-            p->OnMediaEvent(e);
+            if (auto* handler = static_cast<IMediaEventHandler*>(module->QueryInterface(IMediaEventHandler::InterfaceId)))
+            {
+                handler->OnMediaEvent(e);
+            }
         }
     }
 
-    // Call BindHotkeys on every registered plugin.
     void BindHotkeys(Hotkeys& keys)
     {
-        for (auto* p : plugins_)
+        for (auto* module : modules_)
         {
-            p->BindHotkeys(keys);
+            if (auto* provider = static_cast<IHotkeyProvider*>(module->QueryInterface(IHotkeyProvider::InterfaceId)))
+            {
+                provider->BindHotkeys(keys);
+            }
         }
     }
 
-    // Call OnShutdown on every registered plugin (invoked after the main loop exits).
+    // Invoked after the main loop exits.
     void OnShutdown()
     {
-        for (auto* p : plugins_)
+        for (auto* module : modules_)
         {
-            p->OnShutdown();
+            if (auto* handler = static_cast<IShutdownHandler*>(module->QueryInterface(IShutdownHandler::InterfaceId)))
+            {
+                handler->OnShutdown();
+            }
         }
     }
 
 private:
-    std::vector<IPlugin*> plugins_;
+    std::vector<IModule*> modules_;
 };

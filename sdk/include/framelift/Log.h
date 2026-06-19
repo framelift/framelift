@@ -7,7 +7,7 @@
 // message is formatted in-plugin via std::format, then handed to the host across
 // a POD C-ABI sink (void(*)(int, const char*)). The host routes it to its real
 // logger (spdlog). Each translation unit holds its own sink pointer; the host
-// installs it per-plugin via the framelift_set_log_sink export (see PluginExports.h).
+// installs it per-plugin via the framelift_set_log_sink export (see ModuleEntry.h).
 
 namespace Log
 {

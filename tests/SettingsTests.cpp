@@ -282,15 +282,15 @@ TEST(SettingsTest, EmptyValueKeepsDefault)
 
 TEST(SettingsTest, ParsesEnabledPluginsList)
 {
-    const TempFile f("[plugins]\nenabled=Playlist;History;Updater\n");
+    const TempFile f("[plugins]\nenabled=framelift.playlist;framelift.history;framelift.updater\n");
 
     Settings s;
     s.Load(f.str());
 
     ASSERT_EQ(s.enabledPlugins.size(), 3u);
-    EXPECT_EQ(s.enabledPlugins[0], "Playlist");
-    EXPECT_EQ(s.enabledPlugins[1], "History");
-    EXPECT_EQ(s.enabledPlugins[2], "Updater");
+    EXPECT_EQ(s.enabledPlugins[0], "framelift.playlist");
+    EXPECT_EQ(s.enabledPlugins[1], "framelift.history");
+    EXPECT_EQ(s.enabledPlugins[2], "framelift.updater");
 }
 
 TEST(SettingsTest, MissingFileLeavesDefaults)
@@ -339,7 +339,7 @@ TEST(SettingsTest, SaveLoadRoundTrip)
     s.videoExtensions = "mkv;webm";
     s.dynaudnormFrameLen = 321;
     s.togglePause = "P";
-    s.enabledPlugins = {"Playlist", "Overlay"};
+    s.enabledPlugins = {"framelift.playlist", "framelift.overlay"};
     s.Save(f.str());
 
     Settings loaded;
@@ -353,8 +353,8 @@ TEST(SettingsTest, SaveLoadRoundTrip)
     EXPECT_EQ(loaded.dynaudnormFrameLen, 321);
     EXPECT_EQ(loaded.togglePause, "P");
     ASSERT_EQ(loaded.enabledPlugins.size(), 2u);
-    EXPECT_EQ(loaded.enabledPlugins[0], "Playlist");
-    EXPECT_EQ(loaded.enabledPlugins[1], "Overlay");
+    EXPECT_EQ(loaded.enabledPlugins[0], "framelift.playlist");
+    EXPECT_EQ(loaded.enabledPlugins[1], "framelift.overlay");
 }
 
 TEST(SettingsTest, SavePreservesUnknownSectionsAndKeys)
@@ -408,7 +408,7 @@ TEST(SettingsTest, CommentsWrittenForKnownSettings)
     // A documentation comment is emitted immediately above its key.
     EXPECT_NE(text.find("# Enable hardware video decoding.\nhwdec="), std::string::npos);
     // The [plugins] enabled list is documented too.
-    EXPECT_NE(text.find("# Plugin DLLs to load, in order (semicolon-separated).\nenabled="), std::string::npos);
+    EXPECT_NE(text.find("# Plugin package ids to load, in order (semicolon-separated).\nenabled="), std::string::npos);
 }
 
 TEST(SettingsTest, CommentsAreIdempotent)

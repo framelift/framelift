@@ -284,7 +284,7 @@ void Settings::Save(const std::string& path) const
 
     // [plugins] section
     sectionOrder.push_back("plugins");
-    descForKey["plugins.enabled"] = "Plugin DLLs to load, in order (semicolon-separated).";
+    descForKey["plugins.enabled"] = "Plugin package ids to load, in order (semicolon-separated).";
     {
         std::string line = "enabled=";
         for (std::size_t i = 0; i < enabledPlugins.size(); ++i)

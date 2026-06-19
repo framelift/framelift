@@ -11,6 +11,7 @@
 #include <framelift/ContextHelpers.h>
 #include <framelift/Log.h>
 #include <framelift/Events.h>
+#include <framelift/IModule.h>
 #include <framelift/services/IHistory.h>
 #include <framelift/ui/ContextMenuHelpers.h>
 #include <memory>
@@ -184,37 +185,37 @@ App::~App()
 
 void App::LoadPlugins()
 {
-    // Load all enabled plugins from plugins/ subdirectory.
+    // Load all enabled modules from the Modules/ subdirectory.
     // Each plugin registers its own context menu section during Install().
     char baseBuf[512] = {};
     (void)appWindow_->GetBasePath(baseBuf, sizeof(baseBuf));
-    const std::string pluginsDir = std::string(baseBuf) + "Plugins/";
-    pluginLoader_.LoadAll(pluginsDir, settings_.enabledPlugins);
+    const std::string modulesDir = std::string(baseBuf) + "Modules/";
+    pluginLoader_.LoadAll(modulesDir, settings_.enabledPlugins);
 
     for (auto& p : pluginLoader_.Plugins())
     {
         // Record identity before Install so a plugin may list peers during it.
         pluginCtx_->AddPlugin(p.name, /*enabled=*/true, p.info);
-        Registry().Add(p.plugin, *pluginCtx_);
+        Registry().Add(p.module, *pluginCtx_);
     }
 
-    // Append any plugin DLLs that are present but currently disabled, so the
+    // Append any plugin packages that are present but currently disabled, so the
     // settings UI can list and re-enable them. Loaded plugins are skipped.
-    for (auto& stem : PluginLoader::DiscoverAvailable(pluginsDir))
+    for (auto& package : PluginLoader::DiscoverAvailable(modulesDir))
     {
         const bool loaded = std::ranges::any_of(
             pluginLoader_.Plugins(),
             [&](const auto& p)
             {
-                return p.name == stem;
+                return p.name == package.packageId;
             }
         );
         if (loaded)
         {
             continue;
         }
-        const bool enabled = std::ranges::find(settings_.enabledPlugins, stem) != settings_.enabledPlugins.end();
-        pluginCtx_->AddPlugin(std::move(stem), enabled, nullptr);
+        const bool enabled = std::ranges::find(settings_.enabledPlugins, package.packageId) != settings_.enabledPlugins.end();
+        pluginCtx_->AddPlugin(std::move(package.packageId), enabled, nullptr);
     }
 
     Registry().BindHotkeys(keys_);
@@ -586,9 +587,12 @@ void App::Dispatch(const AppEvent& e)
     {
         if (auto* f = focus_.Focused())
         {
-            if (f->OnEvent(e))
+            if (auto* handler = static_cast<IEventHandler*>(f->QueryInterface(IEventHandler::InterfaceId)))
             {
-                return;
+                if (handler->OnEvent(e))
+                {
+                    return;
+                }
             }
         }
         // ReSharper disable once CppExpressionWithoutSideEffects

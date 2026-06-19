@@ -138,7 +138,7 @@ private:
     // One catalogue entry per available plugin (loaded or merely present).
     struct PluginRec
     {
-        std::string name;           // load key / file stem — owns stable storage
+        std::string name;           // package id / load key — owns stable storage
         bool enabled;               // in settings_->enabledPlugins (mutated by SetPluginEnabled)
         bool loadFailed;            // enabled at startup yet not loaded (fixed at build time)
         const FrameLiftPluginInfo* info; // loaded descriptor, or nullptr if not loaded

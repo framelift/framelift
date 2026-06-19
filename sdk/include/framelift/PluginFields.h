@@ -6,7 +6,7 @@
 
 // ── Declarative plugin field/keybind descriptors ──────────────────────────────
 // Plugin-side only (compiled into the plugin, nothing crosses the ABI).
-// PluginBase consumes these tables in its default hook implementations, so a
+// ModuleBase consumes these tables in its default hook implementations, so a
 // plugin can describe its persisted settings and keybinds as data instead of
 // hand-writing Load/SaveSettings and the load→register→bind keybind dance.
 
@@ -111,7 +111,7 @@ inline void SaveFields(IPluginSettings& ps, const std::span<const SettingsField>
     }
 }
 
-// One keybind declaration. Drives all four legs handled by PluginBase: load
+// One keybind declaration. Drives all four legs handled by ModuleBase: load
 // from the shared [keybinds] section (namespaced "<Plugin>.<action>"), default
 // seeding, RegisterKeybindEntry (Settings → Keybinds row), and the Hotkeys Bind.
 struct Keybind

@@ -6,7 +6,7 @@
 
 class UIContext;
 
-// Plugin dependency-injection context. Passed into IPlugin::Install().
+// Plugin dependency-injection context. Passed into IModule::Install().
 // All virtual methods use a stable C-compatible ABI — no STL types cross the boundary.
 // Use the non-virtual template helpers (GetService, RegisterService, Publish, Subscribe)
 // for ergonomic access; they compile into the plugin and call the raw virtuals below.
@@ -97,9 +97,9 @@ public:
     virtual int GetPrefPath(char* buf, int cap) const noexcept = 0;
 
     // ── Plugin catalogue ────────────────────────────────────────────────────────
-    // Enumerate every plugin discovered in the Plugins/ directory — both the
+    // Enumerate every plugin discovered in the Modules/ directory - both the
     // loaded ones and any present-but-disabled DLLs.
-    //   name    — the load key (file stem / [plugins] enabled entry); use it for
+    //   name    — the load key (package id / [plugins] enabled entry); use it for
     //             SetPluginEnabled. Stable identity even when info is synthesized.
     //   info    — full descriptor when loaded == true; when loaded == false only
     //             info.name is meaningful (equals name), the rest is zero/null.

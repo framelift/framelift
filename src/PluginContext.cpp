@@ -56,7 +56,8 @@ void PluginContext::EnumeratePlugins(
         else
         {
             // Synthesize a name-only descriptor for a present-but-disabled DLL.
-            const FrameLiftPluginInfo synth{0, 0, 0, rec.name.c_str(), {0, 0, 0}, nullptr, nullptr};
+            const FrameLiftPluginInfo synth{
+                0, 0, 0, rec.name.c_str(), rec.name.c_str(), rec.name.c_str(), {0, 0, 0}, nullptr, nullptr, nullptr, 0};
             visit(rec.name.c_str(), synth, rec.enabled, false, rec.loadFailed, visitUd);
         }
     }

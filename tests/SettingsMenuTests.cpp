@@ -104,7 +104,7 @@ TEST(SettingsMenuTest, BlocksKeybindsWhileOpen)
 
     // Open: focus acquired, key swallowed.
     sm.Open();
-    EXPECT_EQ(fm.Focused(), static_cast<IPlugin*>(&sm));
+    EXPECT_EQ(fm.Focused(), static_cast<IModule*>(&sm));
     EXPECT_TRUE(sm.HandleKeyDownEvent(key));
 
     // Closed again: focus released, key passes through once more.

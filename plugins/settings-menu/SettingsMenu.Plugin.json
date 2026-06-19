@@ -1,0 +1,12 @@
+{
+  "fileVersion": 1,
+  "id": "framelift.settings_menu",
+  "name": "SettingsMenu",
+  "publisher": "FrameLift",
+  "description": "Settings and keybind editor",
+  "version": "project",
+  "abi": "3.0",
+  "modules": [
+    "core/Core.Module.json"
+  ]
+}

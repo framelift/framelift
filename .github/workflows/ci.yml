@@ -150,7 +150,6 @@ jobs:
             -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc-posix \
             -DCMAKE_BUILD_TYPE=Release \
             -DFRAMELIFT_BUILD_TESTS=OFF \
-            -DFRAMELIFT_ENABLE_UPDATER=ON \
             -DFRAMELIFT_VERSION="$VERSION" \
             -DFRAMELIFT_VERSION_DISPLAY="$VERSION_DISPLAY"
       - name: Build
@@ -178,7 +177,8 @@ jobs:
 
   # ── Native Linux build ──────────────────────────────────────────────────────
   # Builds the host + cross-platform plugins natively against system SDL3/FFmpeg.
-  # The Updater is Windows-only, so it's disabled here. Produces FrameLift-linux-x64.tar.gz.
+  # Windows-only plugins are disabled by module platform metadata.
+  # Produces FrameLift-linux-x64.tar.gz.
   #
   # ubuntu:25.04 because libsdl3-dev first ships there (24.04 LTS has only SDL2).
   build-linux:
@@ -202,12 +202,11 @@ jobs:
           cmake -S . -B "$BUILD_DIR" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DFRAMELIFT_BUILD_TESTS=OFF \
-            -DFRAMELIFT_ENABLE_UPDATER=OFF \
             -DFRAMELIFT_VERSION="$VERSION" \
             -DFRAMELIFT_VERSION_DISPLAY="$VERSION_DISPLAY"
           cmake --build "$BUILD_DIR" --parallel
           test -f "$BUILD_DIR/FrameLift"
-          test -f "$BUILD_DIR/Plugins/Playlist.so"
+          test -f "$BUILD_DIR/Plugins/framelift.playlist/Playlist.so"
           (cd "$BUILD_DIR" && tar -czf FrameLift-linux-x64.tar.gz FrameLift Plugins)
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -244,7 +243,7 @@ jobs:
           cmake --install "$BUILD_DIR" --prefix "$GITHUB_WORKSPACE/sdk-stage" --component sdk
           cmake -S "$GITHUB_WORKSPACE/sdk-stage" -B "$GITHUB_WORKSPACE/sdk-cleanroom" -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build "$GITHUB_WORKSPACE/sdk-cleanroom"
-          test -f "$GITHUB_WORKSPACE/sdk-cleanroom/Plugins/HelloPlugin.so"
+          test -f "$GITHUB_WORKSPACE/sdk-cleanroom/Plugins/example.hello_plugin/HelloPlugin.so"
           # cmake -E tar with --format=zip avoids needing the zip package installed.
           (cd "$GITHUB_WORKSPACE/sdk-stage" && cmake -E tar cf "$GITHUB_WORKSPACE/$BUILD_DIR/FrameLift-sdk-${VERSION}.zip" --format=zip .)
       - name: Upload artifact

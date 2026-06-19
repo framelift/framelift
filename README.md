@@ -4,7 +4,7 @@ An **extensible** video player built on Dear ImGui, SDL3, FFmpeg, and libass —
 is a runtime-loaded plugin. The host application has no compile-time knowledge of any capability:
 playback controls, playlists, history, settings, network streaming, and updates are all plugin DLLs
 loaded at startup over a stable, versioned binary ABI. Add or remove features by dropping a DLL in or
-out of the `Plugins/` folder.
+out of the `Modules/` folder.
 
 ## Features
 
@@ -61,7 +61,7 @@ current list of options.
 
 ## Extending FrameLift (Plugin SDK)
 
-Every FrameLift capability ships as a runtime-loaded plugin DLL, loaded from the `Plugins/` folder
+Every FrameLift capability ships as a runtime-loaded module DLL under the `Modules/` folder
 next to the executable. You can build your own against the **dependency-free plugin SDK**
 (`framelift-sdk-<ver>.zip`, published as a Release asset on every version tag).
 
@@ -69,13 +69,17 @@ next to the executable. You can build your own against the **dependency-free plu
   interfaces, POD-only method signatures, and `extern "C"` entry points. A plugin built with any
   compatible Windows compiler loads regardless of how the host was built. The ABI is versioned (the
   loader accepts a plugin iff its major matches the host's and its minor is ≤ the host's).
+- **JSON-authored metadata.** Plugin packages declare package/module/feature metadata in
+  `[Plugin].Plugin.json` and `[Module].Module.json` files, including `fileVersion`, package `version`,
+  and `abi`. CMake validates those files and embeds the resulting POD metadata into the
+  plugin DLL; runtime does not read JSON sidecars.
 - **Small surface.** Plugins include only the umbrella headers `<framelift/core.h>`, `<framelift/ui.h>`,
   `<framelift/services.h>`, and `<framelift/platform.h>` — never host internals.
 - **Cross-plugin communication.** Plugins never link against each other; they interact through the
   plugin context via pub/sub events, synchronous service interfaces (e.g. `IHistory`, and platform
   services `IMediaPlayer`/`IAppWindow`/`IDirWatcher`/`IFileDialog`), and a shared settings registry.
 
-See [sdk/](sdk/) and the worked example in [sdk/examples/HelloPlugin/](sdk/examples/HelloPlugin) for
+See [sdk/](sdk/) and the worked example in [sdk/examples/hello-plugin/](sdk/examples/hello-plugin) for
 the API and a minimal plugin to copy from.
 
 ## Repository Layout
@@ -84,7 +88,7 @@ the API and a minimal plugin to copy from.
 FrameLift/
 ├── sdk/                    # Public plugin SDK — everything a plugin author needs
 │   ├── include/framelift/  # Public headers (include path: sdk/include)
-│   │   ├── core.h          # Umbrella: plugin lifecycle, context, ABI, events, hotkeys
+│   │   ├── core.h          # Umbrella: module lifecycle, context, ABI, events, hotkeys
 │   │   ├── ui.h            # Umbrella: IRenderable, Panel, UIContext, widgets
 │   │   ├── services.h      # Umbrella: cross-plugin service interfaces
 │   │   ├── platform.h      # Umbrella: IMediaPlayer, IAppWindow, IDirWatcher, IFileDialog
@@ -101,23 +105,24 @@ FrameLift/
 │   └── ui/                 # Host-only UI (Dialog)
 │
 ├── plugins/                # Plugins (each compiled to a separate DLL)
-│   ├── Overlay/            # Playback controls, idle screen, notifications
-│   ├── Playlist/           # Folder playlist and file navigation
-│   ├── History/            # Recently played + resume positions
-│   ├── SettingsMenu/       # Settings and keybind editor
-│   ├── DebugOverlay/       # Live playback stats
-│   ├── Benchmark/          # Performance / system-stats benchmark overlay
-│   ├── RemoteStream/       # Remote network streams (http/https/rtsp + encrypted)
-│   └── Updater/            # Auto-update (Windows-only)
+│   ├── overlay/            # Playback controls, idle screen, notifications
+│   ├── playlist/           # Folder playlist and file navigation
+│   ├── history/            # Recently played + resume positions
+│   ├── settings-menu/      # Settings and keybind editor
+│   ├── debug-overlay/      # Live playback stats
+│   ├── benchmark/          # Performance / system-stats benchmark overlay
+│   ├── remote-stream/      # Remote network streams (http/https/rtsp + encrypted)
+│   └── updater/            # Auto-update (Windows-only)
 │
 ├── cmake/                  # Dependency fetch, shader compile, and SDK packaging modules
 ├── vcpkg.json              # Windows native libs (SDL3, FFmpeg, libass) — vcpkg manifest
 └── CMakeLists.txt
 ```
 
-The host (`src/`) has no compile-time knowledge of specific plugins; all plugins are loaded at runtime
-from the `Plugins/` directory next to the executable, filtered by the enabled-plugins list in settings
-and ABI-checked before any interface is touched.
+The host (`src/`) has no compile-time knowledge of specific plugins; all plugin packages are loaded at
+runtime from module DLLs such as `Modules/FrameLift.Playlist.Core.dll`, filtered by package ids in settings
+(`framelift.playlist`, `framelift.history`, ...), dependency-resolved, and ABI-checked before any
+module object is constructed.
 
 ## Building from Source
 
@@ -150,9 +155,10 @@ cmake --build cmake-build-debug --config Debug
 ```
 
 Output: `cmake-build-debug/FrameLift` (`.exe` on Windows). On Windows the required shared libraries
-are copied next to the executable; on Linux SDL3/FFmpeg/libass are resolved from the system. Plugins
-are placed in `cmake-build-debug/Plugins/` (`.dll` on Windows, `.so` on Linux). The auto-updater is
-Windows-only and is disabled automatically elsewhere. The Vulkan and OpenGL loaders are resolved at
+are copied next to the executable; on Linux SDL3/FFmpeg/libass are resolved from the system. Modules
+are placed under `cmake-build-debug/Modules/` (`.dll` on Windows, `.so` on Linux).
+The auto-updater module declares Windows-only platform support and is disabled automatically elsewhere.
+The Vulkan and OpenGL loaders are resolved at
 runtime (no link-time `libvulkan` dependency), so only a GPU driver is needed to run.
 
 ### Dependencies

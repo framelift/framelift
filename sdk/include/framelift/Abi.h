@@ -42,7 +42,7 @@
 //    plugin.abiMinor <= host.abiMinor, checked before any vtable is touched.
 //      MAJOR — any breaking change: removing/reordering virtual methods,
 //              changing a signature, OR appending to a host-CALLED plugin
-//              interface (IPlugin, IRenderable) or framelift_* export — the host
+//              interface (IModule, IRenderable) or framelift_* export — the host
 //              would call a new slot on an older, shorter plugin vtable.
 //      MINOR — backward-compatible additions to host-PROVIDED surface:
 //              appending a method to IPluginContext, a new service interface, a

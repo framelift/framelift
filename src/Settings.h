@@ -89,10 +89,12 @@ struct Settings
     SETTINGS_FIELDS(X)
 #undef X
 
-    // List of plugin base names to load from the plugins/ directory.
-    // Serialized under [plugins] enabled=Name1;Name2;... in the ini file.
-    std::vector<std::string> enabledPlugins = {"Playlist",     "History",   "Overlay",      "DebugOverlay",
-                                               "SettingsMenu", "Benchmark", "RemoteStream", "Updater"};
+    // List of plugin package ids to load from the Modules/ directory.
+    // Serialized under [plugins] enabled=framelift.foo;framelift.bar;... in the ini file.
+    std::vector<std::string> enabledPlugins = {"framelift.playlist",      "framelift.history", "framelift.overlay",
+                                               "framelift.debug_overlay", "framelift.settings_menu",
+                                               "framelift.benchmark",     "framelift.remote_stream",
+                                               "framelift.updater"};
 
     // Read settings from an ini-style "section.name=value" file at path.
     // Missing keys are left at their defaults; unknown keys are silently ignored.

@@ -3,13 +3,6 @@ cmake_minimum_required(VERSION 4.2.0)
 set(FRAMELIFT_VERSION "0.0.0" CACHE STRING "Numeric version passed to CMake project() — must be X.Y.Z")
 project(FrameLift VERSION ${FRAMELIFT_VERSION} LANGUAGES C CXX)
 
-# The auto-update plugin links winhttp, so it's Windows-only. Forced OFF (and
-# hidden) on every other platform — e.g. the native-Linux test/CI builds.
-include(CMakeDependentOption)
-cmake_dependent_option(FRAMELIFT_ENABLE_UPDATER
-        "Enable the auto-update plugin (requires winhttp)" ON
-        "WIN32" OFF)
-
 # Build the native unit-test suite (tests/) as part of this project so it shows up
 # in IDEs. Disabled for the Windows app/CI build, which can't run native test exes.
 option(FRAMELIFT_BUILD_TESTS "Build the unit tests (tests/)" ON)
@@ -126,53 +119,43 @@ if (WIN32)
     target_link_libraries(FrameLift PRIVATE winmm)
 endif ()
 
-if (FRAMELIFT_ENABLE_UPDATER)
-    target_compile_definitions(FrameLift PRIVATE FRAMELIFT_ENABLE_UPDATER)
-    target_link_libraries(FrameLift PRIVATE winhttp)
-endif ()
-
 if (MINGW)
     target_link_options(FrameLift PRIVATE -static-libgcc -static-libstdc++ -static)
 endif ()
 
 FrameLift_apply_release_opts(FrameLift)
 
-# Create Plugins/ subdirectory before the first DLL is built.
+# Create Modules/ subdirectory before the first module DLL is built.
 add_custom_command(TARGET FrameLift PRE_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:FrameLift>/Plugins"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:FrameLift>/Modules"
 )
 
-# ── Plugin DLL targets ────────────────────────────────────────────────────────
-add_subdirectory(plugins/Overlay)
-add_subdirectory(plugins/Playlist)
-add_subdirectory(plugins/History)
-add_subdirectory(plugins/SettingsMenu)
-add_subdirectory(plugins/DebugOverlay)
-add_subdirectory(plugins/Benchmark)
-add_subdirectory(plugins/RemoteStream)
-if (FRAMELIFT_ENABLE_UPDATER)
-    add_subdirectory(plugins/Updater)
-endif ()
+# Discover plugin package source folders automatically. Each plugin CMakeLists
+# registers its target through add_framelift_plugin().
+set_property(GLOBAL PROPERTY FRAMELIFT_PLUGIN_TARGETS)
+file(GLOB FRAMELIFT_PLUGIN_DIRS CONFIGURE_DEPENDS LIST_DIRECTORIES TRUE
+        RELATIVE "${CMAKE_SOURCE_DIR}/plugins"
+        "${CMAKE_SOURCE_DIR}/plugins/*")
+list(SORT FRAMELIFT_PLUGIN_DIRS)
+foreach (_plugin_dir_name IN LISTS FRAMELIFT_PLUGIN_DIRS)
+    if (NOT EXISTS "${CMAKE_SOURCE_DIR}/plugins/${_plugin_dir_name}/CMakeLists.txt")
+        continue()
+    endif ()
+    add_subdirectory("plugins/${_plugin_dir_name}")
+endforeach ()
 
-# ── Make plugin DLLs build whenever FrameLift builds ───────────────────────────────
-set(FRAMELIFT_PLUGIN_TARGETS
-        Overlay
-        Playlist
-        History
-        SettingsMenu
-        DebugOverlay
-        Benchmark
-        RemoteStream
-)
-if (FRAMELIFT_ENABLE_UPDATER)
-    list(APPEND FRAMELIFT_PLUGIN_TARGETS Updater)
+get_property(FRAMELIFT_PLUGIN_TARGETS GLOBAL PROPERTY FRAMELIFT_PLUGIN_TARGETS)
+if (FRAMELIFT_PLUGIN_TARGETS)
+    add_dependencies(FrameLift ${FRAMELIFT_PLUGIN_TARGETS})
 endif ()
-add_dependencies(FrameLift ${FRAMELIFT_PLUGIN_TARGETS})
 
 # Apply the same Release optimizations to each shipped plugin DLL (LTO is
 # per-binary, so the host's doesn't reach into the plugins).
 foreach (_plugin IN LISTS FRAMELIFT_PLUGIN_TARGETS)
-    FrameLift_apply_release_opts(${_plugin})
+    get_target_property(_plugin_disabled ${_plugin} FRAMELIFT_PLUGIN_DISABLED)
+    if (NOT _plugin_disabled)
+        FrameLift_apply_release_opts(${_plugin})
+    endif ()
 endforeach ()
 
 # ── Runtime DLLs ──────────────────────────────────────────────────────────────
@@ -187,8 +170,8 @@ endforeach ()
 # normal build. It is not added to the host's enabled-plugins list.
 option(FRAMELIFT_BUILD_SDK_EXAMPLE "Build the bundled HelloPlugin example in-tree" ON)
 if (FRAMELIFT_BUILD_SDK_EXAMPLE)
-    add_subdirectory(sdk/examples/HelloPlugin)
-    # Keep the example out of the shipped Plugins/ dir (it's only a bitrot guard).
+    add_subdirectory(sdk/examples/hello-plugin)
+    # Keep the example out of the shipped Modules/ dir (it's only a bitrot guard).
     # Override both RUNTIME (.dll) and LIBRARY (.so) so it's redirected on every platform.
     set_target_properties(HelloPlugin PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/sdk-example"
@@ -241,6 +224,7 @@ install(DIRECTORY "${CMAKE_SOURCE_DIR}/sdk/examples/"
         DESTINATION examples COMPONENT sdk)
 install(FILES
         "${CMAKE_SOURCE_DIR}/cmake/FrameLiftSdk.cmake"
+        "${CMAKE_SOURCE_DIR}/cmake/FrameLiftPluginMetadata.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/sdk-pkg/FrameLiftSdkConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/sdk-pkg/FrameLiftSdkConfigVersion.cmake"
         DESTINATION cmake COMPONENT sdk)

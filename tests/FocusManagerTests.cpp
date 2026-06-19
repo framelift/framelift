@@ -1,14 +1,14 @@
 #include "FocusManagerImpl.h"
 
 #include <gtest/gtest.h>
-#include <framelift/IPlugin.h>
+#include <framelift/IModule.h>
 
-// FocusManagerImpl is a header-only stack of IPlugin*; the tests only need
-// distinct addresses, so trivial IPlugin instances suffice.
+// FocusManagerImpl is a header-only stack of IModule*; the tests only need
+// distinct addresses, so trivial IModule instances suffice.
 
 namespace
 {
-class DummyPlugin final : public IPlugin
+class DummyModule final : public IModule
 {
 };
 } // namespace
@@ -22,7 +22,7 @@ TEST(FocusManagerTest, EmptyHasNoFocus)
 TEST(FocusManagerTest, AcquireSetsFocus)
 {
     FocusManagerImpl fm;
-    DummyPlugin a;
+    DummyModule a;
     fm.Acquire(&a);
     EXPECT_EQ(fm.Focused(), &a);
 }
@@ -30,18 +30,18 @@ TEST(FocusManagerTest, AcquireSetsFocus)
 TEST(FocusManagerTest, DoubleAcquireKeepsSingleEntry)
 {
     FocusManagerImpl fm;
-    DummyPlugin a;
+    DummyModule a;
     fm.Acquire(&a);
     fm.Acquire(&a);
     EXPECT_EQ(fm.Focused(), &a);
     fm.Release(&a);
-    EXPECT_EQ(fm.Focused(), nullptr); // a single Release clears it — no duplicate left behind
+    EXPECT_EQ(fm.Focused(), nullptr); // a single Release clears it - no duplicate left behind
 }
 
 TEST(FocusManagerTest, ReacquireMovesToTop)
 {
     FocusManagerImpl fm;
-    DummyPlugin a, b;
+    DummyModule a, b;
     fm.Acquire(&a);
     fm.Acquire(&b);
     EXPECT_EQ(fm.Focused(), &b);
@@ -52,7 +52,7 @@ TEST(FocusManagerTest, ReacquireMovesToTop)
 TEST(FocusManagerTest, ReleaseTopRevealsPrevious)
 {
     FocusManagerImpl fm;
-    DummyPlugin a, b;
+    DummyModule a, b;
     fm.Acquire(&a);
     fm.Acquire(&b);
     fm.Release(&b);
@@ -62,7 +62,7 @@ TEST(FocusManagerTest, ReleaseTopRevealsPrevious)
 TEST(FocusManagerTest, ReleaseNonAcquiredIsNoOp)
 {
     FocusManagerImpl fm;
-    DummyPlugin a, b;
+    DummyModule a, b;
     fm.Acquire(&a);
     fm.Release(&b);
     EXPECT_EQ(fm.Focused(), &a);
@@ -71,7 +71,7 @@ TEST(FocusManagerTest, ReleaseNonAcquiredIsNoOp)
 TEST(FocusManagerTest, ReleaseMiddleKeepsTop)
 {
     FocusManagerImpl fm;
-    DummyPlugin a, b, c;
+    DummyModule a, b, c;
     fm.Acquire(&a);
     fm.Acquire(&b);
     fm.Acquire(&c);

@@ -1,7 +1,7 @@
 # FrameLift Plugin SDK
 
 Build plugins for [FrameLift](https://github.com/framelift/framelift) — a lightweight video player — as
-standalone DLLs that the host loads at runtime from its `Plugins/` directory.
+module DLLs that contain runtime-loaded plugin code plus JSON-authored package/module metadata.
 
 The SDK is **dependency-free**: building a plugin needs only a C++23 compiler and
 CMake. No imgui, spdlog, stb, or JSON libraries are required — the host↔plugin
@@ -20,7 +20,7 @@ framelift-sdk-<ver>/
 │   └── FrameLiftSdkConfigVersion.cmake
 ├── include/framelift/           # public headers (umbrella: core.h, ui.h, services.h, platform.h)
 ├── src/                    # SDK helper sources, compiled into your plugin
-├── examples/HelloPlugin/   # minimal worked example
+├── examples/hello-plugin/  # minimal worked example
 ├── README.md
 └── LICENSE
 ```
@@ -31,36 +31,43 @@ framelift-sdk-<ver>/
 # Build the bundled example plugin:
 cmake -B build
 cmake --build build
-# → build/Plugins/HelloPlugin.dll
+# -> build/Modules/FrameLift.HelloPlugin.Core.dll
 ```
 
-Drop the resulting DLL into the `Plugins/` directory next to `FrameLift.exe`, then add
-its name to the `[plugins] enabled=` list in the FrameLift config, and it loads on
-next launch.
+The example module DLL is emitted under `build/Modules/`.
+
+Drop the resulting module DLL into the `Modules/` directory next to `FrameLift.exe`, then add
+its package id to the `[plugins] enabled=` list in the FrameLift config, and it loads on next launch.
 
 ## Writing a plugin
 
-`MyPlugin.cpp`:
+`core/MyPlugin.h`:
 
 ```cpp
+#pragma once
 #include <framelift/core.h>
 
-class MyPlugin : public PluginBase
+class MyPlugin : public ModuleBase
 {
 protected:
-    const char* PluginName() const override { return "MyPlugin"; }
-    void OnInstall(IPluginContext& ctx) override
-    {
-        Log::Info("[MyPlugin] hello from the FrameLift SDK!");
-    }
+    const char* ModuleName() const override { return "MyPlugin"; }
+    void OnInstall(IPluginContext& ctx) override;
 };
 
-// .name and .version are required; .render = false because MyPlugin draws nothing
-FRAMELIFT_PLUGIN_EXPORT(MyPlugin, {
-    .name = "MyPlugin",
-    .version = {1, 0, 0},
+FRAMELIFT_MODULE_ENTRY(MyPlugin, {
     .render = false,
 })
+```
+
+`core/MyPlugin.cpp`:
+
+```cpp
+#include "MyPlugin.h"
+
+void MyPlugin::OnInstall(IPluginContext&)
+{
+    Log::Info("[MyPlugin] hello from the FrameLift SDK!");
+}
 ```
 
 `CMakeLists.txt`:
@@ -69,52 +76,84 @@ FRAMELIFT_PLUGIN_EXPORT(MyPlugin, {
 cmake_minimum_required(VERSION 3.28)
 project(MyPlugin LANGUAGES CXX)
 find_package(FrameLiftSdk REQUIRED PATHS "/path/to/framelift-sdk/cmake" NO_DEFAULT_PATH)
-add_framelift_plugin(MyPlugin MyPlugin.cpp ${FRAMELIFT_SDK_SOURCES})
+add_framelift_plugin(MyPlugin
+    PLUGIN_JSON "${CMAKE_CURRENT_SOURCE_DIR}/MyPlugin.Plugin.json"
+    core/MyPlugin.cpp
+    ${FRAMELIFT_SDK_SOURCES})
+```
+
+`MyPlugin.Plugin.json`:
+
+```json
+{
+  "fileVersion": 1,
+  "id": "example.my_plugin",
+  "name": "MyPlugin",
+  "publisher": "Acme",
+  "description": "Does a thing",
+  "version": "1.0.0",
+  "abi": "3.0",
+  "modules": ["core/Core.Module.json"]
+}
+```
+
+`core/Core.Module.json`:
+
+```json
+{
+  "fileVersion": 1,
+  "id": "example.my_plugin.core",
+  "name": "My Plugin Core",
+  "description": "Main runtime module.",
+  "enabled": true,
+  "provides": { "features": ["example.my_plugin"] },
+  "requires": { "modules": [], "features": [] },
+  "optional": { "modules": [], "features": [] },
+  "platforms": []
+}
 ```
 
 ### Umbrella headers
 
 | Header | Provides |
 |--------|----------|
-| `<framelift/core.h>`     | plugin lifecycle, `PluginBase`, context, ABI, events, hotkeys, `Log` |
+| `<framelift/core.h>`     | module entry macro, module lifecycle, `ModuleBase`, context, ABI, events, hotkeys, `Log` |
 | `<framelift/ui.h>`       | `IRenderable`, `Panel`, `UIContext`, widgets |
 | `<framelift/services.h>` | cross-plugin service interfaces (currently `IHistory`; communication is events-first) |
 | `<framelift/platform.h>` | `IMediaPlayer`, `IAppWindow`, `IDirWatcher` |
 
-### Export macro
+### Module Entry
 
-`FRAMELIFT_PLUGIN_EXPORT(Type, { ... })` takes the plugin type and a braced
-`FrameLiftPluginDesc` initializer (designated initializers, in declaration order):
+`FRAMELIFT_MODULE_ENTRY(Type, { ... })` belongs in the module header after the entry class declaration.
+It takes the module entry type and a small runtime
+`FrameLiftModuleEntryDesc` initializer. Package identity, file format version, package version, ABI,
+modules, features, dependencies, and platforms come from the JSON metadata compiled by CMake:
 
 ```cpp
-FRAMELIFT_PLUGIN_EXPORT(MyPanel, {
-    .name = "MyPanel",                    // required
-    .version = {1, 0, 0},                 // required — the plugin's own semver
+FRAMELIFT_MODULE_ENTRY(MyPanel, {
     .renderOrder = 50,                    // draw order; lower draws first / further back
-    .publisher = "Acme",                  // optional (nullptr when omitted)
-    .description = "Does a thing",        // optional (nullptr when omitted)
 })
 ```
 
-`render` defaults to `true`, so a rendering plugin never mentions it — but a type
+`render` defaults to `true`, so a rendering module never mentions it — but a type
 that does not implement `IRenderable` fails to compile until it states
 `.render = false` (or derives `IRenderable`). `renderOrder` is ignored when
 rendering is disabled.
 
-The macro bakes a `framelift_plugin_info()` export carrying the plugin's name, its own
-semver, and the ABI it was built against — read by the host before any vtable is
-touched.
+The macro bakes a `framelift_plugin_info()` export carrying the generated package/module metadata and
+the ABI declared in JSON. The host reads it, rejects incompatible ABI versions, resolves package
+dependencies, and only then creates the module object.
 
 ### Declarative settings & keybinds
 
 Instead of hand-writing `LoadSettings`/`SaveSettings` and the keybind
 load→register→bind dance, return descriptor tables over your members
-(`<framelift/PluginFields.h>`, included by `<framelift/core.h>`). `PluginBase`'s default
+(`<framelift/PluginFields.h>`, included by `<framelift/core.h>`). `ModuleBase`'s default
 hooks consume them — persistence, the Settings → Keybinds page row, and the
 hotkey binding all come from one declaration:
 
 ```cpp
-class MyPanel : public PluginBase
+class MyPanel : public ModuleBase
 {
 protected:
     std::vector<framelift::SettingsField> SettingsFields() override
@@ -135,12 +174,12 @@ private:
 ```
 
 Overriding one of the hooks (e.g. `LoadSettings`) replaces the table-driven
-default for that leg only; call the `PluginBase::` version to keep it and add
+default for that leg only; call the `ModuleBase::` version to keep it and add
 extras.
 
 ### Media events
 
-Override `PluginBase::HandleMediaEvent(const MediaEvent&)` to react to the player.
+Override `ModuleBase::HandleMediaEvent(const MediaEvent&)` to react to the player.
 The host decodes the FFmpeg backend's stream into a curated, ABI-stable `MediaEventType`
 (`framelift/platform/IMediaPlayer.h`):
 
@@ -170,12 +209,12 @@ void HandleMediaEvent(const MediaEvent& e) override
 The host↔plugin boundary is `noexcept` — an exception crossing it would be
 undefined behavior. The SDK scaffolding catches plugin exceptions on the plugin
 side of the boundary (`framelift::Guard` in `<framelift/Guard.h>`): a throw from a
-`PluginBase` hook (`OnInstall`, `HandleEvent`, `HandleMediaEvent`, …), a
+`ModuleBase` hook (`OnInstall`, `HandleEvent`, `HandleMediaEvent`, …), a
 `SafeRenderable`/`Panel` render, a helper-registered lambda (`framelift::Subscribe`,
 `framelift::Bind`, `framelift::AddItem`, settings pages), or the plugin constructor is
 logged via `Log::Error` and swallowed with a safe fallback — the plugin
 misbehaves loudly instead of crashing the host. Only code that implements
-`IPlugin`/`IRenderable` raw, bypassing the scaffolding, keeps
+`IModule`/`IRenderable` raw, bypassing the scaffolding, keeps
 terminate-on-throw semantics.
 
 ### Native backend access (escape hatches)
@@ -191,8 +230,9 @@ no longer exposed to plugins; the host owns all video/UI rendering.)
 ## ABI compatibility
 
 The ABI is versioned `major.minor.patch` (`FRAMELIFT_PLUGIN_ABI_*` in
-`<framelift/PluginABI.h>`), reported by each plugin via `framelift_plugin_info()`. Before
-touching a vtable the host loads a plugin only when
+`<framelift/PluginABI.h>`). Each plugin package declares its load-time ABI contract with
+`"abi": "MAJOR.MINOR"` in `[Plugin].Plugin.json`; CMake validates that value against the SDK headers
+and embeds it into `framelift_plugin_info()`. Before touching a vtable the host loads a plugin only when
 `plugin.major == host.major && plugin.minor <= host.minor`:
 
 - **major** bumps on breaking changes (and any addition to a host-*called* plugin

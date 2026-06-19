@@ -1,9 +1,12 @@
 #include "PluginLoader.h"
+#include "PluginResolver.h"
 #include <chrono>
 #include <filesystem>
 #include <framelift/Log.h>
 #include <framelift/PluginABI.h>
+#include <ranges>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #ifdef _WIN32
@@ -18,15 +21,10 @@
 #include <dlfcn.h>
 #endif
 
-// Defined in src/Log.cpp — the host's spdlog-backed sink, pushed into each plugin.
 Log::SinkFn HostLogSink();
 
 namespace
 {
-// Plugin file extension and the OS dynamic-loader primitives, abstracted so the
-// load loop below stays platform-neutral. Plugins are emitted without the "lib"
-// prefix (PREFIX "" in add_framelift_plugin), so the enabled-name matches the file
-// stem on every platform: <Name>.dll / <Name>.so.
 #ifdef _WIN32
 constexpr const char* kPluginExt = ".dll";
 
@@ -79,122 +77,224 @@ Fn LoadSym(void* mod, const char* name)
 {
     return reinterpret_cast<Fn>(FindSym(mod, name));
 }
+
+struct PackageBinary
+{
+    std::string moduleFile;
+    std::string path;
+};
+
+struct PackageCandidate
+{
+    PackageBinary binary;
+    void* handle = nullptr;
+    const FrameLiftPluginInfo* info = nullptr;
+};
+
+std::vector<PackageBinary> DiscoverPackageBinaries(const std::string& modulesDir)
+{
+    namespace fs = std::filesystem;
+    std::vector<PackageBinary> out;
+
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(modulesDir, ec))
+    {
+        std::error_code fec;
+        if (!entry.is_regular_file(fec) || entry.path().extension() != kPluginExt)
+        {
+            continue;
+        }
+
+        out.push_back({entry.path().filename().string(), entry.path().string()});
+    }
+
+    return out;
+}
+
+const FrameLiftPluginInfo* ReadPluginInfo(void* handle)
+{
+    using PluginInfoFn = const FrameLiftPluginInfo* (*)();
+    const auto pluginInfoFn = LoadSym<PluginInfoFn>(handle, "framelift_plugin_info");
+    return pluginInfoFn ? pluginInfoFn() : nullptr;
+}
+
+bool AbiCompatible(const FrameLiftPluginInfo* info)
+{
+    return info &&
+           FrameLiftAbiCompatible(info->abiMajor, info->abiMinor, FRAMELIFT_PLUGIN_ABI_MAJOR, FRAMELIFT_PLUGIN_ABI_MINOR);
+}
+
+std::string PackageId(const FrameLiftPluginInfo* info)
+{
+    return info && info->packageId ? info->packageId : "<unknown>";
+}
 } // namespace
 
-void PluginLoader::LoadAll(const std::string& pluginsDir, const std::vector<std::string>& enabled)
+void PluginLoader::LoadAll(const std::string& modulesDir, const std::vector<std::string>& enabled)
 {
     using Clock = std::chrono::steady_clock;
     const auto loadStart = Clock::now();
 
-    for (const auto& name : enabled)
+    std::unordered_map<std::string, PackageCandidate> available;
+    for (const auto& binary : DiscoverPackageBinaries(modulesDir))
     {
-        const auto pluginStart = Clock::now();
-        const std::string path = pluginsDir + name + kPluginExt;
-
-        void* const handle = OpenLib(path.c_str());
+        void* const handle = OpenLib(binary.path.c_str());
         if (!handle)
         {
-            Log::Warn("Plugin '{}': load failed ({})", name, LastLoadError());
+            Log::Warn("Module '{}': metadata load failed ({})", binary.moduleFile, LastLoadError());
             continue;
         }
 
-        using CreateFn = IPlugin* (*)();
-        using DestroyFn = void (*)(IPlugin*);
-        using GetRenderFn = IRenderable* (*)(IPlugin*);
-        using RenderOrderFn = int (*)();
-
-        const auto createFn = LoadSym<CreateFn>(handle, "framelift_create");
-        const auto destroyFn = LoadSym<DestroyFn>(handle, "framelift_destroy");
-        const auto getRenderFn = LoadSym<GetRenderFn>(handle, "framelift_get_renderable");
-        const auto renderOrderFn = LoadSym<RenderOrderFn>(handle, "framelift_render_order");
-
-        if (!createFn || !destroyFn || !getRenderFn || !renderOrderFn)
-        {
-            Log::Warn("Plugin '{}': missing required exports — skipped", name);
-            CloseLib(handle);
-            continue;
-        }
-
-        using PluginInfoFn = const FrameLiftPluginInfo* (*)();
-        const auto pluginInfoFn = LoadSym<PluginInfoFn>(handle, "framelift_plugin_info");
-        const FrameLiftPluginInfo* const info = pluginInfoFn ? pluginInfoFn() : nullptr;
+        const FrameLiftPluginInfo* const info = ReadPluginInfo(handle);
         if (!info)
         {
-            Log::Warn("Plugin '{}': missing framelift_plugin_info — rebuild against current SDK", name);
+            Log::Warn("Module '{}': missing framelift_plugin_info - rebuild against current SDK", binary.moduleFile);
             CloseLib(handle);
             continue;
         }
-        if (!FrameLiftAbiCompatible(info->abiMajor, info->abiMinor, FRAMELIFT_PLUGIN_ABI_MAJOR, FRAMELIFT_PLUGIN_ABI_MINOR))
+        if (!AbiCompatible(info))
         {
             Log::Warn(
-                "Plugin '{}' v{}.{}.{}: ABI {}.{}.{} incompatible with host {}.{}.{} — skipped", name, info->version[0],
-                info->version[1], info->version[2], info->abiMajor, info->abiMinor, info->abiPatch,
-                FRAMELIFT_PLUGIN_ABI_MAJOR, FRAMELIFT_PLUGIN_ABI_MINOR, FRAMELIFT_PLUGIN_ABI_PATCH
+                "Plugin package '{}' v{}.{}.{}: ABI {}.{}.{} incompatible with host {}.{}.{} - skipped",
+                PackageId(info), info->version[0], info->version[1], info->version[2], info->abiMajor, info->abiMinor,
+                info->abiPatch, FRAMELIFT_PLUGIN_ABI_MAJOR, FRAMELIFT_PLUGIN_ABI_MINOR, FRAMELIFT_PLUGIN_ABI_PATCH
             );
             CloseLib(handle);
             continue;
         }
 
-        // Route the plugin's Log::* output into the host logger. Optional — a
-        // plugin without the export simply logs nowhere.
+        const auto [it, inserted] = available.emplace(PackageId(info), PackageCandidate{binary, handle, info});
+        if (!inserted)
+        {
+            Log::Warn("Plugin package '{}': duplicate package id - skipped", PackageId(info));
+            CloseLib(handle);
+        }
+    }
+
+    std::vector<PackageCandidate*> enabledCandidates;
+    std::vector<PluginResolveCandidate> resolveCandidates;
+    for (const auto& packageId : enabled)
+    {
+        const auto it = available.find(packageId);
+        if (it == available.end())
+        {
+            Log::Warn("Plugin package '{}': not found", packageId);
+            continue;
+        }
+
+        enabledCandidates.push_back(&it->second);
+        resolveCandidates.push_back({it->second.info});
+    }
+
+    const std::vector<PluginResolveDecision> decisions =
+        ResolvePluginPackages(resolveCandidates, FrameLiftCurrentPlatformId());
+
+    for (std::size_t i = 0; i < enabledCandidates.size(); ++i)
+    {
+        PackageCandidate& candidate = *enabledCandidates[i];
+        const FrameLiftPluginInfo* const info = candidate.info;
+        if (!decisions[i].accepted)
+        {
+            Log::Warn("Plugin package '{}': {} - skipped", PackageId(info), decisions[i].reason);
+            CloseLib(candidate.handle);
+            candidate.handle = nullptr;
+            continue;
+        }
+
+        const auto pluginStart = Clock::now();
+        using CreateFn = IModule* (*)();
+        using DestroyFn = void (*)(IModule*);
+        using GetRenderFn = IRenderable* (*)(IModule*);
+        using RenderOrderFn = int (*)();
+
+        const auto createFn = LoadSym<CreateFn>(candidate.handle, "framelift_create");
+        const auto destroyFn = LoadSym<DestroyFn>(candidate.handle, "framelift_destroy");
+        const auto getRenderFn = LoadSym<GetRenderFn>(candidate.handle, "framelift_get_renderable");
+        const auto renderOrderFn = LoadSym<RenderOrderFn>(candidate.handle, "framelift_render_order");
+
+        if (!createFn || !destroyFn || !getRenderFn || !renderOrderFn)
+        {
+            Log::Warn("Plugin package '{}': missing required exports - skipped", PackageId(info));
+            CloseLib(candidate.handle);
+            candidate.handle = nullptr;
+            continue;
+        }
+
         using SetLogSinkFn = void (*)(Log::SinkFn);
-        if (const auto setLogSinkFn = LoadSym<SetLogSinkFn>(handle, "framelift_set_log_sink"))
+        if (const auto setLogSinkFn = LoadSym<SetLogSinkFn>(candidate.handle, "framelift_set_log_sink"))
         {
             setLogSinkFn(HostLogSink());
         }
 
-        IPlugin* plugin = createFn();
-        if (!plugin)
+        IModule* module = createFn();
+        if (!module)
         {
-            Log::Warn("Plugin '{}': framelift_create() returned nullptr — skipped", name);
-            CloseLib(handle);
+            Log::Warn("Plugin package '{}': framelift_create() returned nullptr - skipped", PackageId(info));
+            CloseLib(candidate.handle);
+            candidate.handle = nullptr;
             continue;
         }
 
         const int order = renderOrderFn();
-        IRenderable* renderable = getRenderFn(plugin);
+        IRenderable* renderable = getRenderFn(module);
 
-        plugins_.push_back({name, handle, plugin, renderable, order, destroyFn, info});
-        // Optional publisher: " by <publisher>" when present, empty otherwise.
+        plugins_.push_back(
+            {PackageId(info), candidate.binary.moduleFile, candidate.handle, module, renderable, order, destroyFn, info}
+        );
+        candidate.handle = nullptr; // ownership moved to plugins_
+
         const std::string by = info->publisher ? std::string(" by ") + info->publisher : std::string();
         const double pluginMs = std::chrono::duration<double, std::milli>(Clock::now() - pluginStart).count();
         Log::Info(
-            "Plugin '{}' v{}.{}.{}{} loaded (abi {}.{}.{}, render order {}, {:.1f} ms)", name, info->version[0],
-            info->version[1], info->version[2], by, info->abiMajor, info->abiMinor, info->abiPatch, order, pluginMs
+            "Plugin package '{}' v{}.{}.{}{} loaded (abi {}.{}.{}, modules {}, render order {}, {:.1f} ms)",
+            PackageId(info), info->version[0], info->version[1], info->version[2], by, info->abiMajor, info->abiMinor,
+            info->abiPatch, info->moduleCount, order, pluginMs
         );
     }
 
-    const double totalMs = std::chrono::duration<double, std::milli>(Clock::now() - loadStart).count();
-    Log::Info("Loaded {} plugin(s) in {:.1f} ms", plugins_.size(), totalMs);
-}
-
-std::vector<std::string> PluginLoader::DiscoverAvailable(const std::string& pluginsDir)
-{
-    namespace fs = std::filesystem;
-    std::vector<std::string> names;
-
-    std::error_code ec;
-    for (const auto& entry : fs::directory_iterator(pluginsDir, ec))
+    for (auto& [_, candidate] : available)
     {
-        std::error_code fec;
-        if (!entry.is_regular_file(fec))
+        if (candidate.handle)
         {
-            continue;
-        }
-        const fs::path& p = entry.path();
-        if (p.extension() == kPluginExt)
-        {
-            names.push_back(p.stem().string());
+            CloseLib(candidate.handle);
         }
     }
-    return names;
+
+    const double totalMs = std::chrono::duration<double, std::milli>(Clock::now() - loadStart).count();
+    Log::Info("Loaded {} plugin package(s) in {:.1f} ms", plugins_.size(), totalMs);
+}
+
+std::vector<PluginLoader::AvailablePlugin> PluginLoader::DiscoverAvailable(const std::string& modulesDir)
+{
+    std::vector<AvailablePlugin> out;
+    for (const auto& binary : DiscoverPackageBinaries(modulesDir))
+    {
+        void* const handle = OpenLib(binary.path.c_str());
+        if (!handle)
+        {
+            out.push_back({binary.moduleFile, binary.moduleFile});
+            continue;
+        }
+
+        const FrameLiftPluginInfo* const info = ReadPluginInfo(handle);
+        if (info && AbiCompatible(info) && info->packageId)
+        {
+            out.push_back({info->packageId, binary.moduleFile});
+        }
+        else
+        {
+            out.push_back({binary.moduleFile, binary.moduleFile});
+        }
+        CloseLib(handle);
+    }
+    return out;
 }
 
 PluginLoader::~PluginLoader()
 {
     for (const auto& p : plugins_)
     {
-        p.destroyFn(p.plugin);
+        p.destroyFn(p.module);
         CloseLib(p.handle);
     }
 }
