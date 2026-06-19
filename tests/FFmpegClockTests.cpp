@@ -2,7 +2,7 @@
 // FFmpegClock.h is deliberately free of libav/SDL so it builds in the standalone
 // native test suite that has neither dependency.
 
-#include "platform/ffmpeg/FFmpegClock.h"
+#include "FFmpegClock.h"
 
 #include <gtest/gtest.h>
 

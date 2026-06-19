@@ -4,8 +4,8 @@
 // test suite. The libav-touching FFmpegHwDecode class needs real codecs + a GPU and
 // is verified manually via the DebugOverlay/Benchmark plugins.
 
-#include "platform/ffmpeg/FFmpegHwDecode.h"
-#include "platform/ffmpeg/VideoDecodeMode.h"
+#include "FFmpegHwDecode.h"
+#include "VideoDecodeMode.h"
 
 #include <gtest/gtest.h>
 

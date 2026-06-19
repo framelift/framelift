@@ -1,7 +1,7 @@
 // Unit tests for the FFmpeg backend's libass overlay compositing (issue #8, Phase 5).
 // FFmpegSubtitleBlend.h is free of <ass/ass.h> so it builds in the native suite.
 
-#include "platform/ffmpeg/FFmpegSubtitleBlend.h"
+#include "FFmpegSubtitleBlend.h"
 
 #include <gtest/gtest.h>
 

@@ -1,7 +1,7 @@
 // Unit tests for the FFmpeg backend's track-label builder (issue #8, Phase 5).
 // FFmpegTrackLabel.h is free of libav so it builds in the standalone native suite.
 
-#include "platform/ffmpeg/FFmpegTrackLabel.h"
+#include "FFmpegTrackLabel.h"
 
 #include <gtest/gtest.h>
 

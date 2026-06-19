@@ -1,6 +1,6 @@
 ﻿#include "Settings.h"
 
-#include "platform/ffmpeg/VideoDecodeMode.h"
+#include "VideoDecodeMode.h"
 #include "GraphicsApi.h"
 
 #include <cstddef>

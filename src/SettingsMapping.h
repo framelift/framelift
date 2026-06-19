@@ -2,7 +2,7 @@
 
 #include "Settings.h"
 #include "ThemeUtil.h"
-#include "platform/ffmpeg/VideoDecodeMode.h"
+#include "VideoDecodeMode.h"
 #include <framelift/platform/IMediaPlayer.h>
 
 #include <algorithm>

@@ -5,7 +5,7 @@
 #include "GraphicsApi.h"
 #include "IGraphicsBackend.h"
 #include "platform/watch/DirWatcher.h"
-#include "platform/ffmpeg/FFmpegPlayer.h"
+#include "FFmpegPlayer.h"
 #include "platform/window/SdlAppWindow.h"
 #include "ui/Theme.h"
 #include <framelift/ContextHelpers.h>

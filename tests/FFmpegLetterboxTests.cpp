@@ -1,7 +1,7 @@
 // Unit tests for the FFmpeg backend's letterbox/pillarbox math (issue #8, Phase 5).
 // FFmpegLetterbox.h is free of libav/GL so it builds in the standalone native suite.
 
-#include "platform/ffmpeg/FFmpegLetterbox.h"
+#include "FFmpegLetterbox.h"
 
 #include <gtest/gtest.h>
 

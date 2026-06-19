@@ -58,29 +58,29 @@ set(_FRAMELIFT_HOST_WATCH_SOURCES
 )
 
 set(_FRAMELIFT_HOST_FFMPEG_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegAudioFilter.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegAudioFilter.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegAudioOptions.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegAudioOutput.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegAudioOutput.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegClock.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegFilters.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegHwDecode.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegHwDecode.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegLetterbox.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegPacketQueue.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegPlayer.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegPlayer.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegSubtitleBlend.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegSubtitles.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegSubtitles.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegTrackLabel.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/VideoDecodeMode.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioFilter.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioFilter.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioOptions.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioOutput.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioOutput.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegClock.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegFilters.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegHwDecode.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegHwDecode.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegLetterbox.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegPacketQueue.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegPlayer.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegPlayer.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSubtitleBlend.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSubtitles.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSubtitles.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegTrackLabel.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/VideoDecodeMode.h"
 )
 
 set(_FRAMELIFT_HOST_FFMPEG_VULKAN_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegVulkanDevice.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/ffmpeg/FFmpegVulkanDevice.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegVulkanDevice.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegVulkanDevice.h"
 )
 
 set(_FRAMELIFT_HOST_GRAPHICS_SOURCES

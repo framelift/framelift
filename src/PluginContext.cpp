@@ -1,6 +1,6 @@
 #include "PluginContext.h"
 #include "Settings.h"
-#include "platform/ffmpeg/VideoDecodeMode.h"
+#include "VideoDecodeMode.h"
 #include <algorithm>
 #include <cstddef>
 #include <cstring>

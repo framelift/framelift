@@ -4,7 +4,7 @@
 
 #include <framelift/Log.h>
 
-#include "platform/ffmpeg/FFmpegLetterbox.h"
+#include "FFmpegLetterbox.h"
 
 #include <cmath>
 #include <cstddef>

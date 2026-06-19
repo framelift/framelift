@@ -1,5 +1,5 @@
 #include "SettingsMapping.h"
-#include "platform/ffmpeg/FFmpegAudioOptions.h"
+#include "FFmpegAudioOptions.h"
 
 #include <gtest/gtest.h>
 

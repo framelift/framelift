@@ -2,7 +2,7 @@
 
 #include <framelift/platform/IMediaPlayer.h>
 
-#include "../../ReadAheadCache.h"
+#include "ReadAheadCache.h"
 #include "IVideoRenderer.h"
 #include "FFmpegSubtitles.h"
 #include "VideoDecodeMode.h"

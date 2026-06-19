@@ -5,7 +5,7 @@ extern "C"
 #include <libavcodec/packet.h>
 }
 
-#include "../../ReadAheadCache.h"
+#include "ReadAheadCache.h"
 
 #include <condition_variable>
 #include <cstddef>

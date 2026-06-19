@@ -1,4 +1,4 @@
-#include "platform/ffmpeg/FFmpegFilters.h"
+#include "FFmpegFilters.h"
 
 #include <gtest/gtest.h>
 

@@ -44,6 +44,9 @@ set(FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/gfx/opengl"
         "${FRAMELIFT_ROOT}/modules/gfx/vulkan"
 )
+set(FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS
+        "${FRAMELIFT_ROOT}/modules/media/ffmpeg"
+)
 
 # ── Coverage (gcov/gcovr) ─────────────────────────────────────────────────────
 option(FRAMELIFT_COVERAGE "Instrument the tests for gcov/gcovr coverage" OFF)
@@ -101,6 +104,7 @@ target_include_directories(framelift_tests PRIVATE
         "${FRAMELIFT_ROOT}/sdk/include"
         "${FRAMELIFT_ROOT}/src"
         ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
+        ${FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS}
         "${FRAMELIFT_ROOT}/plugins/updater/core"
         "${FRAMELIFT_ROOT}/plugins/playlist/core"
 )
@@ -118,6 +122,7 @@ target_include_directories(framelift_tests_vulkan_off PRIVATE
         "${FRAMELIFT_ROOT}/sdk/include"
         "${FRAMELIFT_ROOT}/src"
         ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
+        ${FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS}
 )
 target_link_libraries(framelift_tests_vulkan_off PRIVATE GTest::gtest_main Threads::Threads)
 framelift_apply_coverage(framelift_tests_vulkan_off)
@@ -141,6 +146,7 @@ function(add_framelift_plugin_test name)
             "${FRAMELIFT_ROOT}/sdk/include"
             "${FRAMELIFT_ROOT}/src"
             ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
+            ${FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS}
             "${FRAMELIFT_ROOT}/tests"
             "${FRAMELIFT_ROOT}/tests/stubs"  # stub IconData.h / Version.h for plugins that need generated headers
             "${FRAMELIFT_ROOT}/plugins/playlist/core"
