@@ -62,9 +62,9 @@ TEST(PluginResolverTest, AcceptsValidDependencyGraph)
 
 TEST(PluginResolverTest, RejectsMissingRequiredModule)
 {
-    static constexpr const char* const requires[] = {"framelift.history.core"};
+    static constexpr const char* const requiredModules[] = {"framelift.history.core"};
     PackageFixture consumer{
-        "framelift.playlist", "framelift.playlist.core", EmptyList(), List(requires), EmptyList(), EmptyList(),
+        "framelift.playlist", "framelift.playlist.core", EmptyList(), List(requiredModules), EmptyList(), EmptyList(),
         EmptyList()};
 
     const auto decisions = ResolvePluginPackages({{&consumer.info}}, "linux");
@@ -76,9 +76,9 @@ TEST(PluginResolverTest, RejectsMissingRequiredModule)
 
 TEST(PluginResolverTest, RejectsMissingRequiredFeature)
 {
-    static constexpr const char* const requires[] = {"history.service"};
+    static constexpr const char* const requiredFeatures[] = {"history.service"};
     PackageFixture consumer{
-        "framelift.playlist", "framelift.playlist.core", EmptyList(), EmptyList(), List(requires), EmptyList(),
+        "framelift.playlist", "framelift.playlist.core", EmptyList(), EmptyList(), List(requiredFeatures), EmptyList(),
         EmptyList()};
 
     const auto decisions = ResolvePluginPackages({{&consumer.info}}, "linux");

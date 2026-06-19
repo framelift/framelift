@@ -1,6 +1,6 @@
-// Windows-only translation unit. Compiled to nothing elsewhere so the recursive
-// src/*.cpp glob can include it on every platform (see LinuxDirWatcher.cpp for
-// the mirror guard).
+// Windows-only translation unit. Compiled to nothing elsewhere so the explicit
+// host source list can include it on every platform (see LinuxDirWatcher.cpp
+// for the mirror guard).
 #ifdef _WIN32
 
 #ifndef WIN32_LEAN_AND_MEAN

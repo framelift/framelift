@@ -4,8 +4,8 @@
 #include <framelift/ui.h>
 
 // SettingsMenu owns the authoritative Settings struct as its internal editing
-// model and compiles src/Settings.cpp into itself. Settings is host-internal
-// (not part of the public SDK), so it is included from src/ directly.
+// model and compiles the host settings module into itself. Settings is host-internal
+// (not part of the public SDK), so it is included from the module include path.
 #include <Settings.h>
 
 #include <array>

@@ -40,6 +40,14 @@ set(FRAMELIFT_GRAPHICS_INCLUDE_DIRS
 set(FRAMELIFT_MEDIA_INCLUDE_DIRS
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg"
 )
+set(FRAMELIFT_HOST_MODULE_INCLUDE_DIRS
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime"
+        "${CMAKE_SOURCE_DIR}/modules/host/settings"
+        "${CMAKE_SOURCE_DIR}/modules/host/services"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui"
+        "${CMAKE_SOURCE_DIR}/modules/platform/window-sdl"
+        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch"
+)
 
 # ── Shader → SPIR-V build step (glslang, fetched in-tree) ─────────────────────
 if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
@@ -104,7 +112,10 @@ set_target_properties(FrameLift PROPERTIES
 # libraries (imgui/spdlog/json) and stb headers directly, since they no longer
 # cross the plugin boundary.
 target_include_directories(FrameLift PRIVATE "${CMAKE_SOURCE_DIR}/src" "${stb_SOURCE_DIR}")
-target_include_directories(FrameLift PRIVATE ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS} ${FRAMELIFT_MEDIA_INCLUDE_DIRS})
+target_include_directories(FrameLift PRIVATE
+        ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS}
+        ${FRAMELIFT_MEDIA_INCLUDE_DIRS}
+        ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS})
 target_link_libraries(FrameLift PRIVATE
         FrameLiftSdk SDL3::SDL3 OpenGL::GL
         imgui spdlog::spdlog nlohmann_json::nlohmann_json)
@@ -175,7 +186,10 @@ foreach (_plugin IN LISTS FRAMELIFT_PLUGIN_TARGETS)
     get_target_property(_plugin_disabled ${_plugin} FRAMELIFT_PLUGIN_DISABLED)
     if (NOT _plugin_disabled)
         framelift_apply_builtin_module_definitions(${_plugin})
-        target_include_directories(${_plugin} PRIVATE ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS} ${FRAMELIFT_MEDIA_INCLUDE_DIRS})
+        target_include_directories(${_plugin} PRIVATE
+                ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS}
+                ${FRAMELIFT_MEDIA_INCLUDE_DIRS}
+                ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS})
         FrameLift_apply_release_opts(${_plugin})
     endif ()
 endforeach ()

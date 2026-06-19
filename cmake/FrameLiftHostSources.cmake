@@ -8,53 +8,62 @@ set(_FRAMELIFT_HOST_CORE_SOURCES
         "${CMAKE_SOURCE_DIR}/src/App.cpp"
         "${CMAKE_SOURCE_DIR}/src/App.h"
         "${CMAKE_SOURCE_DIR}/src/Cli.h"
-        "${CMAKE_SOURCE_DIR}/src/FileDialogServiceImpl.cpp"
-        "${CMAKE_SOURCE_DIR}/src/FileDialogServiceImpl.h"
-        "${CMAKE_SOURCE_DIR}/src/FocusManagerImpl.h"
-        "${CMAKE_SOURCE_DIR}/src/FontScan.cpp"
-        "${CMAKE_SOURCE_DIR}/src/FontScan.h"
-        "${CMAKE_SOURCE_DIR}/src/HotkeysImpl.cpp"
-        "${CMAKE_SOURCE_DIR}/src/HotkeysImpl.h"
-        "${CMAKE_SOURCE_DIR}/src/Log.cpp"
         "${CMAKE_SOURCE_DIR}/src/main.cpp"
-        "${CMAKE_SOURCE_DIR}/src/PluginContext.cpp"
-        "${CMAKE_SOURCE_DIR}/src/PluginContext.h"
-        "${CMAKE_SOURCE_DIR}/src/PluginLoader.cpp"
-        "${CMAKE_SOURCE_DIR}/src/PluginLoader.h"
-        "${CMAKE_SOURCE_DIR}/src/PluginRegistry.h"
-        "${CMAKE_SOURCE_DIR}/src/PluginResolver.cpp"
-        "${CMAKE_SOURCE_DIR}/src/PluginResolver.h"
-        "${CMAKE_SOURCE_DIR}/src/PluginSettingsImpl.h"
-        "${CMAKE_SOURCE_DIR}/src/ReadAheadCache.h"
-        "${CMAKE_SOURCE_DIR}/src/Services.h"
-        "${CMAKE_SOURCE_DIR}/src/Settings.cpp"
-        "${CMAKE_SOURCE_DIR}/src/Settings.h"
-        "${CMAKE_SOURCE_DIR}/src/SettingsMapping.h"
-        "${CMAKE_SOURCE_DIR}/src/ThemeUtil.h"
-        "${CMAKE_SOURCE_DIR}/src/util.h"
+)
+
+set(_FRAMELIFT_HOST_PLUGIN_RUNTIME_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginContext.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginContext.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginLoader.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginLoader.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginRegistry.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginResolver.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginResolver.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginSettingsImpl.h"
+)
+
+set(_FRAMELIFT_HOST_SETTINGS_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/settings/Settings.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/settings/Settings.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/settings/SettingsMapping.h"
+)
+
+set(_FRAMELIFT_HOST_SERVICES_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/services/FileDialogServiceImpl.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/services/FileDialogServiceImpl.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/services/FocusManagerImpl.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/services/FontScan.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/services/FontScan.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/services/HotkeysImpl.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/services/HotkeysImpl.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/services/Log.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/services/ReadAheadCache.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/services/Services.h"
 )
 
 set(_FRAMELIFT_HOST_UI_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/ui/ContextMenuImpl.cpp"
-        "${CMAKE_SOURCE_DIR}/src/ui/ContextMenuImpl.h"
-        "${CMAKE_SOURCE_DIR}/src/ui/Theme.cpp"
-        "${CMAKE_SOURCE_DIR}/src/ui/Theme.h"
-        "${CMAKE_SOURCE_DIR}/src/ui/UIContextImpl.cpp"
-        "${CMAKE_SOURCE_DIR}/src/ui/UIContextImpl.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/ContextMenuImpl.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/ContextMenuImpl.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/Theme.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/Theme.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeUtil.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/UIContextImpl.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/UIContextImpl.h"
 )
 
 set(_FRAMELIFT_HOST_WINDOW_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/platform/window/SdlAppWindow.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/window/SdlAppWindow.h"
+        "${CMAKE_SOURCE_DIR}/modules/platform/window-sdl/SdlAppWindow.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/platform/window-sdl/SdlAppWindow.h"
+        "${CMAKE_SOURCE_DIR}/modules/platform/window-sdl/util.h"
 )
 
 set(_FRAMELIFT_HOST_WATCH_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/platform/watch/DirWatcher.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/watch/DirWatcher.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/watch/LinuxDirWatcher.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/watch/LinuxDirWatcher.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/watch/Win32DirWatcher.cpp"
-        "${CMAKE_SOURCE_DIR}/src/platform/watch/Win32DirWatcher.h"
+        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/DirWatcher.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/DirWatcher.h"
+        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/LinuxDirWatcher.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/LinuxDirWatcher.h"
+        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/Win32DirWatcher.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/Win32DirWatcher.h"
 )
 
 set(_FRAMELIFT_HOST_FFMPEG_SOURCES
@@ -108,6 +117,9 @@ set(_FRAMELIFT_HOST_GRAPHICS_VULKAN_SOURCES
 
 set(FRAMELIFT_HOST_SOURCES
         ${_FRAMELIFT_HOST_CORE_SOURCES}
+        ${_FRAMELIFT_HOST_PLUGIN_RUNTIME_SOURCES}
+        ${_FRAMELIFT_HOST_SETTINGS_SOURCES}
+        ${_FRAMELIFT_HOST_SERVICES_SOURCES}
         ${_FRAMELIFT_HOST_UI_SOURCES}
         ${_FRAMELIFT_HOST_WINDOW_SOURCES}
         ${_FRAMELIFT_HOST_WATCH_SOURCES}

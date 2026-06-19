@@ -1,6 +1,6 @@
-// Linux-only translation unit. Compiled to nothing elsewhere so the recursive
-// src/*.cpp glob can include it on every platform (see Win32DirWatcher.cpp for
-// the mirror guard).
+// Linux-only translation unit. Compiled to nothing elsewhere so the explicit
+// host source list can include it on every platform (see Win32DirWatcher.cpp
+// for the mirror guard).
 #ifndef _WIN32
 
 #include "LinuxDirWatcher.h"

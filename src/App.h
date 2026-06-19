@@ -8,8 +8,8 @@
 #include "PluginRegistry.h"
 #include "Services.h"
 #include "Settings.h"
-#include "ui/ContextMenuImpl.h"
-#include "ui/UIContextImpl.h"
+#include "ContextMenuImpl.h"
+#include "UIContextImpl.h"
 #include <framelift/IRenderable.h>
 #include <framelift/platform/IAppWindow.h>
 #include <framelift/platform/IDirWatcher.h>

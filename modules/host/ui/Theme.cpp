@@ -1,7 +1,7 @@
 #include "Theme.h"
 
-#include "../Settings.h"
-#include "../ThemeUtil.h"
+#include "Settings.h"
+#include "ThemeUtil.h"
 
 #include "FontData.h"
 

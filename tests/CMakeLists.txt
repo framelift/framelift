@@ -47,6 +47,14 @@ set(FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS
 set(FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/media/ffmpeg"
 )
+set(FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS
+        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime"
+        "${FRAMELIFT_ROOT}/modules/host/settings"
+        "${FRAMELIFT_ROOT}/modules/host/services"
+        "${FRAMELIFT_ROOT}/modules/host/ui"
+        "${FRAMELIFT_ROOT}/modules/platform/window-sdl"
+        "${FRAMELIFT_ROOT}/modules/platform/dir-watch"
+)
 
 # ── Coverage (gcov/gcovr) ─────────────────────────────────────────────────────
 option(FRAMELIFT_COVERAGE "Instrument the tests for gcov/gcovr coverage" OFF)
@@ -92,10 +100,10 @@ add_executable(framelift_tests
         FFmpegSubtitleBlendTests.cpp
         FFmpegTrackLabelTests.cpp
         VulkanQueueLockTests.cpp
-        "${FRAMELIFT_ROOT}/src/Settings.cpp"
-        "${FRAMELIFT_ROOT}/src/PluginContext.cpp"
-        "${FRAMELIFT_ROOT}/src/PluginResolver.cpp"
-        "${FRAMELIFT_ROOT}/src/FontScan.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginResolver.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/services/FontScan.cpp"
         "${FRAMELIFT_ROOT}/sdk/src/KeyNames.cpp"
 )
 set_target_properties(framelift_tests PROPERTIES
@@ -105,6 +113,7 @@ target_include_directories(framelift_tests PRIVATE
         "${FRAMELIFT_ROOT}/src"
         ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
         ${FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS}
+        ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
         "${FRAMELIFT_ROOT}/plugins/updater/core"
         "${FRAMELIFT_ROOT}/plugins/playlist/core"
 )
@@ -123,15 +132,16 @@ target_include_directories(framelift_tests_vulkan_off PRIVATE
         "${FRAMELIFT_ROOT}/src"
         ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
         ${FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS}
+        ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
 )
 target_link_libraries(framelift_tests_vulkan_off PRIVATE GTest::gtest_main Threads::Threads)
 framelift_apply_coverage(framelift_tests_vulkan_off)
 gtest_discover_tests(framelift_tests_vulkan_off)
 
 # ── Helper: one test exe per plugin ───────────────────────────────────────────
-# add_framelift_plugin_test(NAME [METADATA_HEADER <header>] <test.cpp> <plugin.cpp> [extra .cpp]...)
+# add_framelift_plugin_test(NAME [EMIT_MODULE_ENTRY] [METADATA_HEADER <header>] <test.cpp> <plugin.cpp> [extra .cpp]...)
 function(add_framelift_plugin_test name)
-    cmake_parse_arguments(_FL_TEST "" "METADATA_HEADER" "" ${ARGN})
+    cmake_parse_arguments(_FL_TEST "EMIT_MODULE_ENTRY" "METADATA_HEADER" "" ${ARGN})
     if (NOT _FL_TEST_METADATA_HEADER)
         set(_FL_TEST_METADATA_HEADER "TestPluginMetadata.h")
     endif ()
@@ -140,13 +150,16 @@ function(add_framelift_plugin_test name)
             CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     target_compile_definitions(${name} PRIVATE
             FRAMELIFT_BUILDING_PLUGIN
-            FRAMELIFT_SUPPRESS_MODULE_ENTRY
             FRAMELIFT_PLUGIN_METADATA_HEADER="${_FL_TEST_METADATA_HEADER}")
+    if (NOT _FL_TEST_EMIT_MODULE_ENTRY)
+        target_compile_definitions(${name} PRIVATE FRAMELIFT_SUPPRESS_MODULE_ENTRY)
+    endif ()
     target_include_directories(${name} PRIVATE
             "${FRAMELIFT_ROOT}/sdk/include"
             "${FRAMELIFT_ROOT}/src"
             ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
             ${FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS}
+            ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
             "${FRAMELIFT_ROOT}/tests"
             "${FRAMELIFT_ROOT}/tests/stubs"  # stub IconData.h / Version.h for plugins that need generated headers
             "${FRAMELIFT_ROOT}/plugins/playlist/core"
@@ -167,10 +180,12 @@ endfunction()
 # Each invokes FRAMELIFT_MODULE_ENTRY on a dummy module entry and calls the generated
 # extern "C" entry points directly — two exes because the C symbols would clash.
 add_framelift_plugin_test(framelift_test_module_entry
+        EMIT_MODULE_ENTRY
         METADATA_HEADER "TestRenderingPluginMetadata.h"
         ModuleEntryTests.cpp)
 
 add_framelift_plugin_test(framelift_test_module_entry_norender
+        EMIT_MODULE_ENTRY
         METADATA_HEADER "TestNoRenderPluginMetadata.h"
         ModuleEntryNoRenderTests.cpp)
 
@@ -180,20 +195,20 @@ add_framelift_plugin_test(framelift_test_history
         "${FRAMELIFT_ROOT}/plugins/history/core/History.cpp")
 
 # Playlist + SettingsMenu drive the real PluginContext, so they also compile
-# src/PluginContext.cpp + src/Settings.cpp.
+# the host plugin runtime and settings modules.
 add_framelift_plugin_test(framelift_test_playlist
         PlaylistTests.cpp
         "${FRAMELIFT_ROOT}/plugins/playlist/core/Playlist.cpp"
-        "${FRAMELIFT_ROOT}/src/PluginContext.cpp"
-        "${FRAMELIFT_ROOT}/src/FontScan.cpp"
-        "${FRAMELIFT_ROOT}/src/Settings.cpp")
+        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/services/FontScan.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
 
 add_framelift_plugin_test(framelift_test_settingsmenu
         SettingsMenuTests.cpp
         "${FRAMELIFT_ROOT}/plugins/settings-menu/core/SettingsMenu.cpp"
-        "${FRAMELIFT_ROOT}/src/PluginContext.cpp"
-        "${FRAMELIFT_ROOT}/src/FontScan.cpp"
-        "${FRAMELIFT_ROOT}/src/Settings.cpp")
+        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/services/FontScan.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
 
 add_framelift_plugin_test(framelift_test_overlay
         OverlayTests.cpp
@@ -207,6 +222,9 @@ add_framelift_plugin_test(framelift_test_benchmark
         BenchmarkTests.cpp
         "${FRAMELIFT_ROOT}/plugins/benchmark/core/Benchmark.cpp"
         "${FRAMELIFT_ROOT}/plugins/benchmark/core/SysStats.cpp")
+if (WIN32)
+    target_link_libraries(framelift_test_benchmark PRIVATE pdh)
+endif ()
 
 add_framelift_plugin_test(framelift_test_remotestream
         RemoteStreamTests.cpp

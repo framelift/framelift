@@ -4,10 +4,10 @@
 #include "SettingsMapping.h"
 #include "GraphicsApi.h"
 #include "IGraphicsBackend.h"
-#include "platform/watch/DirWatcher.h"
+#include "DirWatcher.h"
 #include "FFmpegPlayer.h"
-#include "platform/window/SdlAppWindow.h"
-#include "ui/Theme.h"
+#include "SdlAppWindow.h"
+#include "Theme.h"
 #include <framelift/ContextHelpers.h>
 #include <framelift/Log.h>
 #include <framelift/Events.h>
