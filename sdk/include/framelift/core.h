@@ -10,12 +10,12 @@
 #include <framelift/HotkeyHelpers.h>
 #include <framelift/Hotkeys.h>
 #include <framelift/IModule.h>
-#include <framelift/IPluginContext.h>
-#include <framelift/IPluginSettings.h>
+#include <framelift/IModuleContext.h>
+#include <framelift/IModuleSettings.h>
 #include <framelift/IRenderable.h>
 #include <framelift/Log.h>
-#include <framelift/PluginABI.h>
+#include <framelift/ModuleABI.h>
 #include <framelift/ModuleBase.h>
 #include <framelift/ModuleEntry.h>
-#include <framelift/PluginFields.h>
+#include <framelift/ModuleFields.h>
 #include <framelift/UrlUtils.h>

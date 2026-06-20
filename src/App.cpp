@@ -1,49 +1,24 @@
 #include "App.h"
 #include "Cli.h"
 #include "IconData.h"
-#include "SettingsMapping.h"
 #include "CoreSettings.h"
+#include "PlaybackSettings.h"
 #include "GraphicsApi.h"
 #include "GraphicsSettings.h"
 #include "IGraphicsBackend.h"
 #include "DirWatcher.h"
 #include "FFmpegPlayer.h"
 #include "SdlAppWindow.h"
-#include "Theme.h"
-#include <framelift/ContextHelpers.h>
 #include <framelift/Log.h>
 #include <framelift/Events.h>
 #include <framelift/IModule.h>
-#include <framelift/services/IHistory.h>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <algorithm>
-#include <cstdio>
-#include <cstring>
-#include <filesystem>
 #include <ranges>
-
-// ── Static storage ────────────────────────────────────────────────────────────
-
-Services App::services_;
-PluginRegistry App::registry_;
-
-::Services& App::Services()
-{
-    return services_;
-}
-
-PluginRegistry& App::Registry()
-{
-    return registry_;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-// ParamsFromSettings / PlaybackOptsFromSettings live in SettingsMapping.h (pure,
-// unit-tested).
 
 // ── Constructor / Destructor ──────────────────────────────────────────────────
 
@@ -51,26 +26,59 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     : cliArgc_(cliArgc), cliArgv_(cliArgv), player_(std::make_unique<FFmpegPlayer>()),
       dirWatcher_(CreateDirWatcher())
 {
-    // ── Phase 1: Platform init ────────────────────────────────────────────────
-    // Resolve the pref dir and load settings BEFORE creating the window: the graphics
-    // backend — and thus the SDL window flag (SDL_WINDOW_OPENGL vs SDL_WINDOW_VULKAN) —
-    // is fixed at window-creation time, so graphics.backend must be known up front.
+    ffmpeg_ = static_cast<FFmpegPlayer*>(player_.get());
+
+    // Resolve the pref dir up front: the graphics backend — and thus the SDL window
+    // flag (SDL_WINDOW_OPENGL vs SDL_WINDOW_VULKAN) — is fixed at window-creation
+    // time, so graphics.backend must be loaded from settings before InitPlatform.
     char prefBuf[512] = {};
     (void)SdlAppWindow::ResolvePrefPath("", "FrameLift", prefBuf, sizeof(prefBuf));
     const std::string prefDir = prefBuf;
     const std::string settingsPath = prefDir.empty() ? "settings.ini" : prefDir + "settings.ini";
+    packagesPath_ = prefDir.empty() ? "packages.ini" : prefDir + "packages.ini";
 
-    // App owns the Settings instance; load it before any plugin sees it.
+    InitPlatform(title, width, height, prefDir, settingsPath);
+    InitServices(prefDir, settingsPath);
+
+    // The ContextMenu module owns the right-click menu: it registers the ContextMenu
+    // service that other modules extend, and assembles its core items plus their
+    // sections on its first frame.
+    LoadPackages();
+
+    BuildRenderables();
+}
+
+App::~App()
+{
+    appWindow_->ImGuiShutdown();
+
+    // Clear all DLL-owned lambdas before packageLoader_ calls FreeLibrary.
+    // packageLoader_ destructs after this body (declared after moduleCtx_),
+    // so modules can still call ctx_->GetService() in their destructors.
+    if (moduleCtx_)
+    {
+        moduleCtx_->ClearSubscriptions();
+    }
+    keys_.Clear();
+
+    player_.reset(); // destroy the player's render context before the GL context is torn down
+}
+
+// ── Construction phases ─────────────────────────────────────────────────────────
+
+void App::InitPlatform(const char* title, const int width, const int height, const std::string& prefDir,
+                       const std::string& settingsPath)
+{
+    // App owns the Settings instance; load it before any module sees it.
     settings_.Load(settingsPath);
 
-    // User plugin enablement manifest (opt-out): load before plugins are scanned.
-    pluginsPath_ = prefDir.empty() ? "plugins.ini" : prefDir + "plugins.ini";
-    pluginConfig_.Load(pluginsPath_);
+    // User package enablement manifest (opt-out): load before packages are scanned.
+    packageConfig_.Load(packagesPath_);
 
     appWindow_ =
         std::make_unique<SdlAppWindow>(title, width, height, GraphicsApiFromString(settings_.Get<GraphicsSettings>().backend));
 
-    // Let the UI context create plugin-icon textures through the active backend.
+    // Let the UI context create package-icon textures through the active backend.
     uiCtx_.SetGraphicsBackend(static_cast<IGraphicsBackend*>(appWindow_->GetGraphicsBackend()));
 
     if (!prefDir.empty())
@@ -84,134 +92,59 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     InitImGui();
 
     // Apply the persisted theme before the first frame (GL context is current,
-    // NewFrame has not run yet). Seed the snapshot so later Saves can diff.
-    Theme::ApplyStyle(settings_.Get<ThemeSettings>());
-    Theme::RebuildFonts(settings_.Get<ThemeSettings>());
-    appliedTheme_ = {settings_.Get<ThemeSettings>().preset, settings_.Get<ThemeSettings>().accentColor, settings_.Get<ThemeSettings>().fontFile,
-                     settings_.Get<ThemeSettings>().fontSize};
+    // NewFrame has not run yet) and seed the controller's snapshot.
+    themeController_.ApplyInitial(settings_.Get<ThemeSettings>());
 
     fileDialogService_.Init(appWindow_.get());
-
-    // ── Phase 2: Build PluginContext and register services ────────────────────
-    pluginCtx_ = std::make_unique<PluginContext>(prefDir, &settings_, settingsPath, &pluginConfig_, pluginsPath_);
-
-    pluginCtx_->RegisterService<IMediaPlayer>(player_.get());
-    pluginCtx_->RegisterService<IAppWindow>(appWindow_.get());
-    pluginCtx_->RegisterService<IDirWatcher>(dirWatcher_.get());
-    pluginCtx_->RegisterService<Hotkeys>(&keys_);
-    pluginCtx_->RegisterService<FocusManager>(&focus_);
-    pluginCtx_->RegisterService<IFileDialog>(&fileDialogService_);
-
-    // Playback options update when settings change.
-    player_->SetPlaybackOptions(PlaybackOptsFromSettings(settings_.Get<PlaybackSettings>()));
-    if (auto* ffmpeg = dynamic_cast<FFmpegPlayer*>(player_.get()))
-    {
-        ffmpeg->SetVideoDecodeMode(VideoDecodeModeFromSettings(settings_.Get<PlaybackSettings>()));
-    }
-    player_->SetReadAheadCache(ReadAheadOptsFromSettings(settings_.Get<CacheSettings>()));
-    player_->SetSubtitleStyle(SubtitleStyleFromSettings(settings_.Get<SubtitleSettings>()));
-    player_->SetAudioPreferences(AudioPrefsFromSettings(settings_.Get<AudioSettings>()));
-    player_->SetAudioNormalize(
-        settings_.Get<AudioSettings>().normalizeEnabled,
-        settings_.Get<AudioSettings>().normalizeEnabled ? ParamsFromSettings(settings_.Get<AudioSettings>()) : AudioNormalizeParams{}
-    );
-    appWindow_->SetVSync(settings_.Get<PlaybackSettings>().videoSync);
-
-    // Track idle state for TogglePauseAction (see DrainMediaEvents).
-    player_->ObserveProperty(PlayerProperty::IdleActive);
-    framelift::Subscribe<NotificationEvent>(
-        *pluginCtx_,
-        [this](const NotificationEvent&)
-        {
-            PulseAudioDucking();
-        }
-    );
-    framelift::RegisterSettingsChangeCallback(
-        *pluginCtx_,
-        [this]()
-        {
-            const Settings& s = pluginCtx_->GetSettingsDirect();
-            player_->SetPlaybackOptions(PlaybackOptsFromSettings(s.Get<PlaybackSettings>()));
-            if (auto* ffmpeg = dynamic_cast<FFmpegPlayer*>(player_.get()))
-            {
-                ffmpeg->SetVideoDecodeMode(VideoDecodeModeFromSettings(s.Get<PlaybackSettings>()));
-            }
-            player_->SetReadAheadCache(ReadAheadOptsFromSettings(s.Get<CacheSettings>()));
-            player_->SetSubtitleStyle(SubtitleStyleFromSettings(s.Get<SubtitleSettings>()));
-            player_->SetAudioPreferences(AudioPrefsFromSettings(s.Get<AudioSettings>()));
-            appWindow_->SetVSync(s.Get<PlaybackSettings>().videoSync);
-            player_->SetAudioNormalize(
-                s.Get<AudioSettings>().normalizeEnabled, s.Get<AudioSettings>().normalizeEnabled ? ParamsFromSettings(s.Get<AudioSettings>()) : AudioNormalizeParams{}
-            );
-
-            // This callback fires mid-frame (during SettingsMenu's
-            // Save inside Render), so only flag what changed; the
-            // actual ImGui work happens at the top of next Render().
-            if (s.Get<ThemeSettings>().preset != appliedTheme_.preset || s.Get<ThemeSettings>().accentColor != appliedTheme_.accentColor)
-            {
-                themeStyleDirty_ = true;
-            }
-            if (s.Get<ThemeSettings>().fontFile != appliedTheme_.fontFile || s.Get<ThemeSettings>().fontSize != appliedTheme_.fontSize)
-            {
-                fontAtlasDirty_ = true;
-            }
-            appliedTheme_ = {s.Get<ThemeSettings>().preset, s.Get<ThemeSettings>().accentColor, s.Get<ThemeSettings>().fontFile, s.Get<ThemeSettings>().fontSize};
-        }
-    );
-
-    // ── Phase 3: Plugins ──────────────────────────────────────────────────────
-    // The ContextMenu plugin owns the right-click menu: it registers the
-    // ContextMenu service that other plugins extend, and assembles its core items
-    // plus their sections on its first frame.
-    LoadPlugins();
-
-    BuildRenderables();
 }
 
-App::~App()
+void App::InitServices(const std::string& prefDir, const std::string& settingsPath)
 {
-    appWindow_->ImGuiShutdown();
+    moduleCtx_ = std::make_unique<ModuleContext>(prefDir, &settings_, settingsPath, &packageConfig_, packagesPath_);
 
-    // Clear all DLL-owned lambdas before pluginLoader_ calls FreeLibrary.
-    // pluginLoader_ destructs after this body (declared after pluginCtx_),
-    // so plugins can still call ctx_->GetService() in their destructors.
-    if (pluginCtx_)
-    {
-        pluginCtx_->ClearSubscriptions();
-    }
-    keys_.Clear();
+    moduleCtx_->RegisterService<IMediaPlayer>(player_.get());
+    moduleCtx_->RegisterService<IAppWindow>(appWindow_.get());
+    moduleCtx_->RegisterService<IDirWatcher>(dirWatcher_.get());
+    moduleCtx_->RegisterService<Hotkeys>(&keys_);
+    moduleCtx_->RegisterService<FocusManager>(&focus_);
+    moduleCtx_->RegisterService<IFileDialog>(&fileDialogService_);
 
-    player_.reset(); // destroy the player's render context before the GL context is torn down
+    // Controllers own their own event-bus wiring (settings re-apply, audio ducking,
+    // theme reaction) so App holds no subscriptions.
+    playbackControls_ =
+        std::make_unique<PlaybackControls>(keys_, settings_, *ffmpeg_, *appWindow_, fileDialogService_, *moduleCtx_);
+    playbackControls_->Connect();
+    themeController_.Connect(*moduleCtx_, settings_);
 }
 
-// ── Plugin loading ────────────────────────────────────────────────────────────
+// ── Package loading ─────────────────────────────────────────────────────────────
 
-void App::LoadPlugins()
+void App::LoadPackages()
 {
-    // Load every module package present in the Modules/ subdirectory. Enablement is
-    // driven by module JSON (a disabled package isn't built/shipped, so it's absent
-    // here); the loader resolves dependencies and load order from embedded metadata.
-    // Each plugin registers its own context menu section during Install().
+    // Load every package present in the Modules/ subdirectory. Enablement is driven
+    // by module JSON (a disabled package isn't built/shipped, so it's absent here);
+    // the loader resolves dependencies and load order from embedded metadata. Each
+    // package's modules register their own context menu sections during Install().
     char baseBuf[512] = {};
     (void)appWindow_->GetBasePath(baseBuf, sizeof(baseBuf));
     const std::string modulesDir = std::string(baseBuf) + "Modules/";
-    pluginLoader_.LoadAll(modulesDir, pluginConfig_.DisabledIds());
+    packageLoader_.LoadAll(modulesDir, packageConfig_.DisabledIds());
 
-    for (auto& p : pluginLoader_.Plugins())
+    for (auto& p : packageLoader_.Packages())
     {
-        // Record identity before Install so a plugin may list peers during it.
-        pluginCtx_->AddPlugin(p.name, /*enabled=*/true, p.info);
-        Registry().Add(p.module, *pluginCtx_);
+        // Record identity before Install so a module may list peers during it.
+        moduleCtx_->AddPackage(p.name, /*enabled=*/true, p.info);
+        registry_.Add(p.module, *moduleCtx_);
     }
 
-    // Append any plugin packages that are present but not loaded — either disabled
-    // by the user or rejected by the resolver — so the settings UI can list them.
+    // Append any packages that are present but not loaded — either disabled by the
+    // user or rejected by the resolver — so the settings UI can list them.
     std::vector<std::string> discoveredIds;
-    for (auto& package : PluginLoader::DiscoverAvailable(modulesDir))
+    for (auto& package : PackageLoader::DiscoverAvailable(modulesDir))
     {
         discoveredIds.push_back(package.packageId);
         const bool loaded = std::ranges::any_of(
-            pluginLoader_.Plugins(),
+            packageLoader_.Packages(),
             [&](const auto& p)
             {
                 return p.name == package.packageId;
@@ -223,36 +156,36 @@ void App::LoadPlugins()
         }
         // enabled=false ⇒ user-disabled (unchecked in the UI); enabled=true but not
         // loaded ⇒ resolver-rejected (surfaces as a load failure).
-        const bool enabled = pluginConfig_.IsEnabled(package.packageId);
-        pluginCtx_->AddPlugin(std::move(package.packageId), enabled, nullptr);
+        const bool enabled = packageConfig_.IsEnabled(package.packageId);
+        moduleCtx_->AddPackage(std::move(package.packageId), enabled, nullptr);
     }
 
-    // Refresh the manifest so it lists every discovered plugin (new ones default to
-    // enabled), keeping plugins.ini a complete, hand-editable record.
-    pluginConfig_.EnsureKnown(discoveredIds);
-    pluginConfig_.Save(pluginsPath_);
+    // Refresh the manifest so it lists every discovered package (new ones default to
+    // enabled), keeping packages.ini a complete, hand-editable record.
+    packageConfig_.EnsureKnown(discoveredIds);
+    packageConfig_.Save(packagesPath_);
 
-    Registry().BindHotkeys(keys_);
-    BindPlayerHotkeys();
+    registry_.BindHotkeys(keys_);
+    playbackControls_->Bind();
 
-    // Materialize plugin settings + keybinds on first run: plugins populate their
-    // PluginSettingsImpl caches during Install(), but those reach disk only via
-    // SaveSettings(). The startup Settings::Save (App ctor, before plugins) writes
-    // host sections only, so without this flush plugin sections appear only after
-    // the user presses Save in the Settings menu.
-    pluginCtx_->SaveSettings();
+    // Materialize module settings + keybinds on first run: modules populate their
+    // ModuleSettingsImpl caches during Install(), but those reach disk only via
+    // SaveSettings(). The startup Settings::Save (InitPlatform, before packages)
+    // writes host sections only, so without this flush module sections appear only
+    // after the user presses Save in the Settings menu.
+    moduleCtx_->SaveSettings();
 }
 
 // ── Renderables ───────────────────────────────────────────────────────────────
 
 void App::BuildRenderables()
 {
-    // Collect (order, renderable) pairs from plugins and sort. The context menu is
-    // itself a plugin (renderOrder 30), so it sorts in alongside the rest.
+    // Collect (order, renderable) pairs from packages and sort. The context menu is
+    // itself a module (renderOrder 30), so it sorts in alongside the rest.
     using OrderedR = std::pair<int, IRenderable*>;
     std::vector<OrderedR> items;
 
-    for (const auto& p : pluginLoader_.Plugins())
+    for (const auto& p : packageLoader_.Packages())
     {
         if (p.renderable)
         {
@@ -310,16 +243,7 @@ void App::Render()
 {
     // Apply any pending theme changes here — before UIBeginFrame, i.e. outside
     // any NewFrame()..Render() pair, which both calls require.
-    if (themeStyleDirty_)
-    {
-        themeStyleDirty_ = false;
-        Theme::ApplyStyle(settings_.Get<ThemeSettings>());
-    }
-    if (fontAtlasDirty_)
-    {
-        fontAtlasDirty_ = false;
-        Theme::RebuildFonts(settings_.Get<ThemeSettings>());
-    }
+    themeController_.ApplyPending(settings_.Get<ThemeSettings>());
 
     int w = 0, h = 0;
     appWindow_->GetSize(w, h);
@@ -360,9 +284,9 @@ void App::DrainMediaEvents()
         if (ev.type == MediaEventType::PropertyChange && ev.property.prop == PlayerProperty::IdleActive &&
             ev.property.type == PropertyType::Flag)
         {
-            playerIdle_ = ev.property.value.flag != 0;
+            playbackControls_->SetPlayerIdle(ev.property.value.flag != 0);
         }
-        Registry().OnMediaEvent(ev);
+        registry_.OnMediaEvent(ev);
         if (ev.type == MediaEventType::VideoReconfig)
         {
             pendingResize_ = true;
@@ -376,9 +300,9 @@ void App::Dispatch(const AppEvent& e)
     switch (e.type) // NOLINT(clang-diagnostic-switch-enum)
     {
     case AppEventType::Quit:
-        // Let plugins handle their own Quit cleanup (e.g. Playlist::FlushCurrentPos).
-        Registry().OnEvent(e);
-        Registry().OnShutdown();
+        // Let modules handle their own Quit cleanup (e.g. Playlist::FlushCurrentPos).
+        registry_.OnEvent(e);
+        registry_.OnShutdown();
         running_ = false;
         return;
     case AppEventType::WindowExposed:
@@ -398,7 +322,7 @@ void App::Dispatch(const AppEvent& e)
         const AppEvent::FilePayload& fp = e.AsFile();
         if (fp.filePath && fp.filePath[0])
         {
-            pluginCtx_->Publish<OpenFileRequestEvent>({fp.filePath, true});
+            moduleCtx_->Publish<OpenFileRequestEvent>({fp.filePath, true});
         }
         return;
     }
@@ -425,7 +349,7 @@ void App::Dispatch(const AppEvent& e)
         return;
     }
 
-    Registry().OnEvent(e);
+    registry_.OnEvent(e);
 }
 
 void App::DrainEvents(const int timeoutMs)
@@ -440,45 +364,11 @@ void App::DrainEvents(const int timeoutMs)
 
 void App::RenderFrame()
 {
-    RefreshAudioDucking();
     Render();
     if (pendingResize_)
     {
         pendingResize_ = false;
         ResizeToVideo();
-    }
-}
-
-void App::PulseAudioDucking()
-{
-    if (!settings_.Get<AudioSettings>().duckingEnabled)
-    {
-        return;
-    }
-    audioDuckUntil_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(800);
-    if (!audioDucked_)
-    {
-        audioDucked_ = true;
-        if (auto* ffmpeg = dynamic_cast<FFmpegPlayer*>(player_.get()))
-        {
-            ffmpeg->SetAudioDucked(true);
-        }
-    }
-}
-
-void App::RefreshAudioDucking()
-{
-    if (!audioDucked_)
-    {
-        return;
-    }
-    if (!settings_.Get<AudioSettings>().duckingEnabled || std::chrono::steady_clock::now() >= audioDuckUntil_)
-    {
-        audioDucked_ = false;
-        if (auto* ffmpeg = dynamic_cast<FFmpegPlayer*>(player_.get()))
-        {
-            ffmpeg->SetAudioDucked(false);
-        }
     }
 }
 
@@ -489,216 +379,22 @@ void App::ResizeToVideo() const
         return;
     }
 
-    struct SizeState
-    {
-        const App* app;
-    };
-
+    // Query the player's display size off-thread, then let the window size itself
+    // to it (the one spot that must touch both player and window).
     player_->GetDisplaySizeAsync(
         [](const DisplaySize* size, bool ok, void* ud)
         {
-            auto* s = static_cast<SizeState*>(ud);
+            const auto* s = static_cast<AsyncSelf*>(ud);
             const App* self = s->app;
             delete s;
-            if (!ok || !size || size->width <= 0 || size->height <= 0 || self->appWindow_->IsFullscreen())
+            if (!ok || !size)
             {
                 return;
             }
-
-            const Rect usable = self->appWindow_->GetDisplayUsableBounds();
-            int w = static_cast<int>(size->width);
-            int h = static_cast<int>(size->height);
             const float ratio = self->settings_.Get<GeneralSettings>().maxDisplayRatio;
-            const int maxW = static_cast<int>(static_cast<float>(usable.w) * ratio);
-            const int maxH = static_cast<int>(static_cast<float>(usable.h) * ratio);
-
-            if (w > maxW || h > maxH)
-            {
-                const float scale = std::min(
-                    static_cast<float>(maxW) / static_cast<float>(w), static_cast<float>(maxH) / static_cast<float>(h)
-                );
-                w = static_cast<int>(static_cast<float>(w) * scale);
-                h = static_cast<int>(static_cast<float>(h) * scale);
-            }
-            self->appWindow_->SetSize(w, h);
+            self->appWindow_->ResizeToVideo(static_cast<int>(size->width), static_cast<int>(size->height), ratio);
         },
-        new SizeState{this}
-    );
-}
-
-// ── Player actions ────────────────────────────────────────────────────────────
-
-void App::TogglePauseAction() const
-{
-    if (!playerIdle_)
-    {
-        player_->TogglePause();
-        return;
-    }
-
-    // Idle: resume the most recent file instead of toggling pause.
-    char lastBuf[2048] = {};
-    if (const auto* history = pluginCtx_->GetService<IHistory>())
-    {
-        (void)history->GetMostRecent(lastBuf, sizeof(lastBuf));
-    }
-    if (!lastBuf[0])
-    {
-        pluginCtx_->Publish<NotificationEvent>({"No recent files"});
-        return;
-    }
-    if (!std::filesystem::exists(lastBuf))
-    {
-        pluginCtx_->Publish<NotificationEvent>({"Error: File not found"});
-        return;
-    }
-    pluginCtx_->Publish<OpenFileRequestEvent>({lastBuf, true});
-}
-
-void App::AdjustVolumeAndNotify(const int delta) const
-{
-    player_->AdjustVolume(delta);
-
-    struct VolCtx
-    {
-        const App* app;
-    };
-
-    player_->GetDoubleAsync(
-        PlayerProperty::Volume,
-        [](const double v, const bool ok, void* ud)
-        {
-            const auto* c = static_cast<VolCtx*>(ud);
-            const auto* self = c->app;
-            delete c;
-            if (ok)
-            {
-                const std::string msg = "Volume: " + std::to_string(static_cast<int>(v));
-                self->pluginCtx_->Publish<NotificationEvent>({msg.c_str()});
-            }
-        },
-        new VolCtx{this}
-    );
-}
-
-void App::OpenFileAction()
-{
-    fileDialogService_.OpenFile(
-        [](const char* path, const bool ok, void* ud)
-        {
-            if (ok && path && path[0])
-            {
-                static_cast<App*>(ud)->pluginCtx_->Publish<OpenFileRequestEvent>({path, true});
-            }
-        },
-        this
-    );
-}
-
-void App::BindPlayerHotkeys()
-{
-    const Settings& cfg = settings_;
-
-    host::Bind(
-        keys_, "togglePause", cfg.Get<KeybindSettings>().togglePause,
-        [this]
-        {
-            TogglePauseAction();
-        }
-    );
-    host::Bind(
-        keys_, "toggleFullscreen", cfg.Get<KeybindSettings>().toggleFullscreen,
-        [this]
-        {
-            appWindow_->SetFullscreen(!appWindow_->IsFullscreen());
-        }
-    );
-    host::Bind(
-        keys_, "quit", cfg.Get<KeybindSettings>().quit,
-        [this]
-        {
-            appWindow_->PushQuitEvent();
-        }
-    );
-    host::Bind(
-        keys_, "toggleNormalize", cfg.Get<KeybindSettings>().toggleNormalize,
-        [this]
-        {
-            const bool on = !player_->IsNormalizeEnabled();
-            player_->SetAudioNormalize(on, on ? ParamsFromSettings(settings_.Get<AudioSettings>()) : AudioNormalizeParams{});
-            pluginCtx_->Publish<NotificationEvent>({on ? "Normalize: On" : "Normalize: Off"});
-        }
-    );
-    host::Bind(
-        keys_, "volumeUp", cfg.Get<KeybindSettings>().volumeUp,
-        [this]
-        {
-            AdjustVolumeAndNotify(5);
-        }
-    );
-    host::Bind(
-        keys_, "volumeDown", cfg.Get<KeybindSettings>().volumeDown,
-        [this]
-        {
-            AdjustVolumeAndNotify(-5);
-        }
-    );
-    host::Bind(
-        keys_, "toggleMute", cfg.Get<KeybindSettings>().toggleMute,
-        [this]
-        {
-            player_->ToggleMute();
-            pluginCtx_->Publish<NotificationEvent>({player_->IsMuted() ? "Mute: On" : "Mute: Off"});
-        }
-    );
-    host::Bind(
-        keys_, "toggleSubtitles", cfg.Get<KeybindSettings>().toggleSubtitles,
-        [this]
-        {
-            player_->ToggleSubtitles();
-            pluginCtx_->Publish<NotificationEvent>(
-                {player_->IsSubtitlesEnabled() ? "Subtitles: On" : "Subtitles: Off"}
-            );
-        }
-    );
-    host::Bind(
-        keys_, "seekForward", cfg.Get<KeybindSettings>().seekForward,
-        [this]
-        {
-            player_->Seek(5);
-            pluginCtx_->Publish<NotificationEvent>({"Seek +Short"});
-        }
-    );
-    host::Bind(
-        keys_, "seekBack", cfg.Get<KeybindSettings>().seekBack,
-        [this]
-        {
-            player_->Seek(-5);
-            pluginCtx_->Publish<NotificationEvent>({"Seek -Short"});
-        }
-    );
-    host::Bind(
-        keys_, "seekForwardLong", cfg.Get<KeybindSettings>().seekForwardLong,
-        [this]
-        {
-            player_->Seek(60);
-            pluginCtx_->Publish<NotificationEvent>({"Seek +Long"});
-        }
-    );
-    host::Bind(
-        keys_, "seekBackLong", cfg.Get<KeybindSettings>().seekBackLong,
-        [this]
-        {
-            player_->Seek(-60);
-            pluginCtx_->Publish<NotificationEvent>({"Seek -Long"});
-        }
-    );
-    host::Bind(
-        keys_, "openFileDialog", cfg.Get<KeybindSettings>().openFileDialog,
-        [this]
-        {
-            OpenFileAction();
-        }
+        new AsyncSelf{this}
     );
 }
 
@@ -706,13 +402,13 @@ void App::BindPlayerHotkeys()
 
 int App::Run()
 {
-    // Hand the command line to plugins (all loaded and subscribed by now), then
+    // Hand the command line to modules (all loaded and subscribed by now), then
     // open the first positional file/URL argument — the same request drag-drop and
     // the Open-File dialog publish, so Playlist/RemoteStream route it by scheme.
-    pluginCtx_->Publish<CliCommandEvent>({cliArgc_, cliArgv_});
+    moduleCtx_->Publish<CliCommandEvent>({cliArgc_, cliArgv_});
     if (const std::string target = ParseOpenTarget(cliArgc_, cliArgv_); !target.empty())
     {
-        pluginCtx_->Publish<OpenFileRequestEvent>({target.c_str(), true});
+        moduleCtx_->Publish<OpenFileRequestEvent>({target.c_str(), true});
     }
 
     // Paint one frame before the loop so the window (created hidden) is shown
@@ -730,7 +426,6 @@ int App::Run()
         // events (100 ms) to idle instead of busy-looping.
         const int timeoutMs = !renderable ? 100 : (settings_.Get<PlaybackSettings>().videoSync ? 0 : 4);
         DrainEvents(timeoutMs);
-        RefreshAudioDucking();
         if (running_ && appWindow_->IsRenderable())
         {
             RenderFrame();

@@ -1,5 +1,5 @@
-#include "PluginConfig.h"
-#include "PluginContext.h"
+#include "PackageConfig.h"
+#include "ModuleContext.h"
 #include "Settings.h"
 #include "UiSettings.h"
 
@@ -13,15 +13,15 @@
 
 namespace
 {
-// Construct a PluginContext over a default Settings. The ini path is unused here
+// Construct a ModuleContext over a default Settings. The ini path is unused here
 // (no Save), so a dummy is fine.
 struct Ctx
 {
     Settings settings;
-    PluginContext ctx{"pref/", &settings, "unused.ini"};
+    ModuleContext ctx{"pref/", &settings, "unused.ini"};
 };
 
-std::string GetStr(PluginContext& ctx, const char* key)
+std::string GetStr(ModuleContext& ctx, const char* key)
 {
     const int n = ctx.GetSettingString(key, nullptr, 0); // query length
     std::string s(static_cast<std::size_t>(n), '\0');
@@ -129,7 +129,7 @@ TEST(PluginContextTest, WrongTypeKeyDoesNotMatch)
 TEST(PluginContextTest, GetSettingsFilePathReportsPathWithBufferContract)
 {
     Settings settings;
-    PluginContext ctx{"pref/", &settings, "some/dir/settings.ini"};
+    ModuleContext ctx{"pref/", &settings, "some/dir/settings.ini"};
 
     // Full length reported regardless of buffer.
     EXPECT_EQ(ctx.GetSettingsFilePath(nullptr, 0), 21); // strlen("some/dir/settings.ini")
@@ -163,7 +163,7 @@ TEST(PluginContextTest, ReloadSettingsRereadsFileAndFiresCallbacks)
         f << "[ui]\npanelWidth=500\n";
     }
 
-    PluginContext ctx{"pref/", &settings, ini};
+    ModuleContext ctx{"pref/", &settings, ini};
     int changeCalls = 0;
     ctx.RegisterSettingsChangeCallback(&BumpCounter, &changeCalls, nullptr);
 
@@ -196,7 +196,7 @@ namespace
 {
 struct ReentrancyState
 {
-    IPluginContext* ctx = nullptr;
+    IModuleContext* ctx = nullptr;
     int firstCalls = 0;
     int lateCalls = 0;
     int otherCalls = 0;
@@ -234,7 +234,7 @@ void NestedPublishHandler(const void*, void* ud)
 TEST(PluginContextTest, SubscribeDuringDispatchIsSafeAndDeferred)
 {
     Ctx c;
-    IPluginContext& ic = c.ctx;
+    IModuleContext& ic = c.ctx;
     ReentrancyState st{&ic};
 
     ic.SubscribeRaw("test.event", &SubscribingHandler, &st);
@@ -255,7 +255,7 @@ TEST(PluginContextTest, SubscribeDuringDispatchIsSafeAndDeferred)
 TEST(PluginContextTest, NestedPublishDispatches)
 {
     Ctx c;
-    IPluginContext& ic = c.ctx;
+    IModuleContext& ic = c.ctx;
     ReentrancyState st{&ic};
 
     ic.SubscribeRaw("test.event", &NestedPublishHandler, &st);
@@ -281,17 +281,17 @@ struct CollectedPlugin
     bool loadFailed;
 };
 
-void CollectPlugin(const char* name, const FrameLiftPluginInfo& info, bool enabled, bool loaded, bool loadFailed, void* ud)
+void CollectPlugin(const char* name, const FrameLiftPackageInfo& info, bool enabled, bool loaded, bool loadFailed, void* ud)
 {
     auto& out = *static_cast<std::vector<CollectedPlugin>*>(ud);
     out.push_back({name, info.name ? info.name : "", {info.version[0], info.version[1], info.version[2]},
                    info.publisher ? info.publisher : "", enabled, loaded, loadFailed});
 }
 
-std::vector<CollectedPlugin> Enumerate(PluginContext& ctx)
+std::vector<CollectedPlugin> Enumerate(ModuleContext& ctx)
 {
     std::vector<CollectedPlugin> out;
-    ctx.EnumeratePlugins(&CollectPlugin, &out);
+    ctx.EnumeratePackages(&CollectPlugin, &out);
     return out;
 }
 } // namespace
@@ -299,9 +299,9 @@ std::vector<CollectedPlugin> Enumerate(PluginContext& ctx)
 TEST(PluginContextTest, EnumeratePluginsReportsLoadedAndDisabledEntries)
 {
     Ctx c;
-    const FrameLiftPluginInfo alpha{FRAMELIFT_PLUGIN_ABI_MAJOR,
-                                    FRAMELIFT_PLUGIN_ABI_MINOR,
-                                    FRAMELIFT_PLUGIN_ABI_PATCH,
+    const FrameLiftPackageInfo alpha{FRAMELIFT_MODULE_ABI_MAJOR,
+                                    FRAMELIFT_MODULE_ABI_MINOR,
+                                    FRAMELIFT_MODULE_ABI_PATCH,
                                     "framelift.alpha",
                                     "FrameLift.Alpha",
                                     "Alpha",
@@ -310,9 +310,9 @@ TEST(PluginContextTest, EnumeratePluginsReportsLoadedAndDisabledEntries)
                                     "First plugin",
                                     nullptr,
                                     0};
-    c.ctx.AddPlugin("framelift.alpha", true, &alpha); // loaded
-    c.ctx.AddPlugin("framelift.beta", false, nullptr); // present but disabled
-    c.ctx.AddPlugin("Gamma", true, nullptr); // enabled at startup yet not loaded → failed
+    c.ctx.AddPackage("framelift.alpha", true, &alpha); // loaded
+    c.ctx.AddPackage("framelift.beta", false, nullptr); // present but disabled
+    c.ctx.AddPackage("Gamma", true, nullptr); // enabled at startup yet not loaded → failed
 
     const auto got = Enumerate(c.ctx);
     ASSERT_EQ(got.size(), 3u);
@@ -348,17 +348,17 @@ TEST(PluginContextTest, EnumeratePluginsEmptyByDefault)
 TEST(PluginContextTest, SetPluginEnabledUpdatesCatalogueAndPersists)
 {
     Settings settings;
-    PluginConfig pluginConfig;
+    PackageConfig pluginConfig;
     const std::string pluginsIni =
         (std::filesystem::temp_directory_path() / "framelift_test_pluginsini.ini").string();
     std::filesystem::remove(pluginsIni);
-    PluginContext ctx{"pref/", &settings, "unused.ini", &pluginConfig, pluginsIni};
+    ModuleContext ctx{"pref/", &settings, "unused.ini", &pluginConfig, pluginsIni};
 
-    ctx.AddPlugin("framelift.playlist", true, nullptr);
-    ctx.AddPlugin("framelift.history", true, nullptr);
+    ctx.AddPackage("framelift.playlist", true, nullptr);
+    ctx.AddPackage("framelift.history", true, nullptr);
 
-    ctx.SetPluginEnabled("framelift.history", false); // disable one
-    ctx.SetPluginEnabled("Unknown", false);           // no-op for unknown names
+    ctx.SetPackageEnabled("framelift.history", false); // disable one
+    ctx.SetPackageEnabled("Unknown", false);           // no-op for unknown names
 
     // Catalogue reflects the toggle immediately (drives the live checkbox state).
     const auto got = Enumerate(ctx);
@@ -367,7 +367,7 @@ TEST(PluginContextTest, SetPluginEnabledUpdatesCatalogueAndPersists)
     EXPECT_FALSE(got[1].enabled); // framelift.history
 
     // The opt-out manifest persisted the disable and nothing else.
-    PluginConfig reloaded;
+    PackageConfig reloaded;
     reloaded.Load(pluginsIni);
     EXPECT_FALSE(reloaded.IsEnabled("framelift.history"));
     EXPECT_TRUE(reloaded.IsEnabled("framelift.playlist"));

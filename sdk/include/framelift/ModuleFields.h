@@ -1,6 +1,6 @@
 #pragma once
 #include <functional>
-#include <framelift/IPluginSettings.h>
+#include <framelift/IModuleSettings.h>
 #include <span>
 #include <string>
 
@@ -38,7 +38,7 @@ public:
     }
 
     // *member = ps.Get<type>(key, default)
-    void Load(const IPluginSettings& ps) const
+    void Load(const IModuleSettings& ps) const
     {
         switch (type_)
         {
@@ -58,7 +58,7 @@ public:
     }
 
     // ps.Set<type>(key, *member)
-    void Save(IPluginSettings& ps) const
+    void Save(IModuleSettings& ps) const
     {
         switch (type_)
         {
@@ -95,7 +95,7 @@ private:
     const char* defStr_ = "";
 };
 
-inline void LoadFields(const IPluginSettings& ps, const std::span<const SettingsField> fields)
+inline void LoadFields(const IModuleSettings& ps, const std::span<const SettingsField> fields)
 {
     for (const auto& f : fields)
     {
@@ -103,7 +103,7 @@ inline void LoadFields(const IPluginSettings& ps, const std::span<const Settings
     }
 }
 
-inline void SaveFields(IPluginSettings& ps, const std::span<const SettingsField> fields)
+inline void SaveFields(IModuleSettings& ps, const std::span<const SettingsField> fields)
 {
     for (const auto& f : fields)
     {

@@ -13,7 +13,7 @@ protected:
         return "HelloPlugin";
     }
 
-    void OnInstall(IPluginContext& ctx) override;
+    void OnInstall(IModuleContext& ctx) override;
 };
 
 FRAMELIFT_MODULE_ENTRY(HelloPlugin, {

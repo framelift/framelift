@@ -92,7 +92,7 @@ protected:
 
     std::vector<framelift::SettingsField> SettingsFields() override;
     std::vector<framelift::Keybind> Keybinds() override;
-    void OnInstall(IPluginContext& ctx) override;
+    void OnInstall(IModuleContext& ctx) override;
     void RenderSettings(UIContext& ctx) override;
 
     // Reset cursor to the currently playing entry when the panel opens.

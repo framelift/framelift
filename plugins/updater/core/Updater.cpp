@@ -262,7 +262,7 @@ std::vector<framelift::SettingsField> Updater::SettingsFields()
     return {{"autoUpdate", &autoUpdate_, true}};
 }
 
-void Updater::OnInstall(IPluginContext& ctx)
+void Updater::OnInstall(IModuleContext& ctx)
 {
     SetupSettingsPage(ctx);
 

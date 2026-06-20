@@ -31,11 +31,11 @@ FRAMELIFT_MODULE_ENTRY(RenderingDummy, {
 
 TEST(ModuleEntryTest, InfoCarriesAbiAndIdentity)
 {
-    const FrameLiftPluginInfo* info = framelift_plugin_info();
+    const FrameLiftPackageInfo* info = framelift_module_info();
     ASSERT_NE(info, nullptr);
-    EXPECT_EQ(info->abiMajor, FRAMELIFT_PLUGIN_ABI_MAJOR);
-    EXPECT_EQ(info->abiMinor, FRAMELIFT_PLUGIN_ABI_MINOR);
-    EXPECT_EQ(info->abiPatch, FRAMELIFT_PLUGIN_ABI_PATCH);
+    EXPECT_EQ(info->abiMajor, FRAMELIFT_MODULE_ABI_MAJOR);
+    EXPECT_EQ(info->abiMinor, FRAMELIFT_MODULE_ABI_MINOR);
+    EXPECT_EQ(info->abiPatch, FRAMELIFT_MODULE_ABI_PATCH);
     EXPECT_STREQ(info->packageId, "test.rendering");
     EXPECT_STREQ(info->moduleFile, "Acme.RenderingDummy.Core");
     EXPECT_STREQ(info->name, "RenderingDummy");

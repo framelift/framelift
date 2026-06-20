@@ -21,7 +21,7 @@ std::vector<framelift::Keybind> DebugOverlay::Keybinds()
     };
 }
 
-void DebugOverlay::OnInstall(IPluginContext& ctx)
+void DebugOverlay::OnInstall(IModuleContext& ctx)
 {
     SetupSettingsPage(ctx, false);
 }

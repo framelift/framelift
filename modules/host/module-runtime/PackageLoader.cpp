@@ -1,9 +1,9 @@
-#include "PluginLoader.h"
-#include "PluginResolver.h"
+#include "PackageLoader.h"
+#include "PackageResolver.h"
 #include <chrono>
 #include <filesystem>
 #include <framelift/Log.h>
-#include <framelift/PluginABI.h>
+#include <framelift/ModuleABI.h>
 #include <ranges>
 #include <string>
 #include <unordered_map>
@@ -26,7 +26,7 @@ Log::SinkFn HostLogSink();
 namespace
 {
 #ifdef _WIN32
-constexpr const char* kPluginExt = ".dll";
+constexpr const char* kPackageExt = ".dll";
 
 void* OpenLib(const char* path)
 {
@@ -48,7 +48,7 @@ std::string LastLoadError()
     return std::to_string(GetLastError());
 }
 #else
-constexpr const char* kPluginExt = ".so";
+constexpr const char* kPackageExt = ".so";
 
 void* OpenLib(const char* path)
 {
@@ -88,7 +88,7 @@ struct PackageCandidate
 {
     PackageBinary binary;
     void* handle = nullptr;
-    const FrameLiftPluginInfo* info = nullptr;
+    const FrameLiftPackageInfo* info = nullptr;
 };
 
 std::vector<PackageBinary> DiscoverPackageBinaries(const std::string& modulesDir)
@@ -100,7 +100,7 @@ std::vector<PackageBinary> DiscoverPackageBinaries(const std::string& modulesDir
     for (const auto& entry : fs::directory_iterator(modulesDir, ec))
     {
         std::error_code fec;
-        if (!entry.is_regular_file(fec) || entry.path().extension() != kPluginExt)
+        if (!entry.is_regular_file(fec) || entry.path().extension() != kPackageExt)
         {
             continue;
         }
@@ -111,26 +111,26 @@ std::vector<PackageBinary> DiscoverPackageBinaries(const std::string& modulesDir
     return out;
 }
 
-const FrameLiftPluginInfo* ReadPluginInfo(void* handle)
+const FrameLiftPackageInfo* ReadPackageInfo(void* handle)
 {
-    using PluginInfoFn = const FrameLiftPluginInfo* (*)();
-    const auto pluginInfoFn = LoadSym<PluginInfoFn>(handle, "framelift_plugin_info");
-    return pluginInfoFn ? pluginInfoFn() : nullptr;
+    using PackageInfoFn = const FrameLiftPackageInfo* (*)();
+    const auto packageInfoFn = LoadSym<PackageInfoFn>(handle, "framelift_module_info");
+    return packageInfoFn ? packageInfoFn() : nullptr;
 }
 
-bool AbiCompatible(const FrameLiftPluginInfo* info)
+bool AbiCompatible(const FrameLiftPackageInfo* info)
 {
     return info &&
-           FrameLiftAbiCompatible(info->abiMajor, info->abiMinor, FRAMELIFT_PLUGIN_ABI_MAJOR, FRAMELIFT_PLUGIN_ABI_MINOR);
+           FrameLiftAbiCompatible(info->abiMajor, info->abiMinor, FRAMELIFT_MODULE_ABI_MAJOR, FRAMELIFT_MODULE_ABI_MINOR);
 }
 
-std::string PackageId(const FrameLiftPluginInfo* info)
+std::string PackageId(const FrameLiftPackageInfo* info)
 {
     return info && info->packageId ? info->packageId : "<unknown>";
 }
 } // namespace
 
-void PluginLoader::LoadAll(const std::string& modulesDir, const std::unordered_set<std::string>& disabled)
+void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_set<std::string>& disabled)
 {
     using Clock = std::chrono::steady_clock;
     const auto loadStart = Clock::now();
@@ -147,10 +147,10 @@ void PluginLoader::LoadAll(const std::string& modulesDir, const std::unordered_s
             continue;
         }
 
-        const FrameLiftPluginInfo* const info = ReadPluginInfo(handle);
+        const FrameLiftPackageInfo* const info = ReadPackageInfo(handle);
         if (!info)
         {
-            Log::Warn("Module '{}': missing framelift_plugin_info - rebuild against current SDK", binary.moduleFile);
+            Log::Warn("Module '{}': missing framelift_module_info - rebuild against current SDK", binary.moduleFile);
             CloseLib(handle);
             continue;
         }
@@ -159,7 +159,7 @@ void PluginLoader::LoadAll(const std::string& modulesDir, const std::unordered_s
             Log::Warn(
                 "Plugin package '{}' v{}.{}.{}: ABI {}.{}.{} incompatible with host {}.{}.{} - skipped",
                 PackageId(info), info->version[0], info->version[1], info->version[2], info->abiMajor, info->abiMinor,
-                info->abiPatch, FRAMELIFT_PLUGIN_ABI_MAJOR, FRAMELIFT_PLUGIN_ABI_MINOR, FRAMELIFT_PLUGIN_ABI_PATCH
+                info->abiPatch, FRAMELIFT_MODULE_ABI_MAJOR, FRAMELIFT_MODULE_ABI_MINOR, FRAMELIFT_MODULE_ABI_PATCH
             );
             CloseLib(handle);
             continue;
@@ -182,17 +182,17 @@ void PluginLoader::LoadAll(const std::string& modulesDir, const std::unordered_s
 
     // Resolve dependencies over every discovered package, then load the accepted
     // ones in dependency order (providers before consumers).
-    std::vector<PluginResolveCandidate> resolveCandidates;
+    std::vector<PackageResolveCandidate> resolveCandidates;
     resolveCandidates.reserve(candidates.size());
     for (const auto& candidate : candidates)
     {
         resolveCandidates.push_back({candidate.info});
     }
 
-    const std::vector<PluginResolveDecision> decisions =
-        ResolvePluginPackages(resolveCandidates, FrameLiftCurrentPlatformId());
+    const std::vector<PackageResolveDecision> decisions =
+        ResolvePackages(resolveCandidates, FrameLiftCurrentPlatformId());
 
-    std::vector<PluginResolveCandidate> acceptedResolve;
+    std::vector<PackageResolveCandidate> acceptedResolve;
     std::vector<std::size_t> acceptedIndex;
     for (std::size_t i = 0; i < candidates.size(); ++i)
     {
@@ -209,10 +209,10 @@ void PluginLoader::LoadAll(const std::string& modulesDir, const std::unordered_s
         }
     }
 
-    for (const std::size_t orderIdx : OrderPluginPackages(acceptedResolve))
+    for (const std::size_t orderIdx : OrderPackages(acceptedResolve))
     {
         PackageCandidate& candidate = candidates[acceptedIndex[orderIdx]];
-        const FrameLiftPluginInfo* const info = candidate.info;
+        const FrameLiftPackageInfo* const info = candidate.info;
 
         const auto pluginStart = Clock::now();
         using CreateFn = IModule* (*)();
@@ -251,10 +251,10 @@ void PluginLoader::LoadAll(const std::string& modulesDir, const std::unordered_s
         const int order = renderOrderFn();
         IRenderable* renderable = getRenderFn(module);
 
-        plugins_.push_back(
+        packages_.push_back(
             {PackageId(info), candidate.binary.moduleFile, candidate.handle, module, renderable, order, destroyFn, info}
         );
-        candidate.handle = nullptr; // ownership moved to plugins_
+        candidate.handle = nullptr; // ownership moved to packages_
 
         const std::string by = info->publisher ? std::string(" by ") + info->publisher : std::string();
         const double pluginMs = std::chrono::duration<double, std::milli>(Clock::now() - pluginStart).count();
@@ -274,12 +274,12 @@ void PluginLoader::LoadAll(const std::string& modulesDir, const std::unordered_s
     }
 
     const double totalMs = std::chrono::duration<double, std::milli>(Clock::now() - loadStart).count();
-    Log::Info("Loaded {} plugin package(s) in {:.1f} ms", plugins_.size(), totalMs);
+    Log::Info("Loaded {} plugin package(s) in {:.1f} ms", packages_.size(), totalMs);
 }
 
-std::vector<PluginLoader::AvailablePlugin> PluginLoader::DiscoverAvailable(const std::string& modulesDir)
+std::vector<PackageLoader::AvailablePackage> PackageLoader::DiscoverAvailable(const std::string& modulesDir)
 {
-    std::vector<AvailablePlugin> out;
+    std::vector<AvailablePackage> out;
     for (const auto& binary : DiscoverPackageBinaries(modulesDir))
     {
         void* const handle = OpenLib(binary.path.c_str());
@@ -289,7 +289,7 @@ std::vector<PluginLoader::AvailablePlugin> PluginLoader::DiscoverAvailable(const
             continue;
         }
 
-        const FrameLiftPluginInfo* const info = ReadPluginInfo(handle);
+        const FrameLiftPackageInfo* const info = ReadPackageInfo(handle);
         if (info && AbiCompatible(info) && info->packageId)
         {
             out.push_back({info->packageId, binary.moduleFile});
@@ -303,9 +303,9 @@ std::vector<PluginLoader::AvailablePlugin> PluginLoader::DiscoverAvailable(const
     return out;
 }
 
-PluginLoader::~PluginLoader()
+PackageLoader::~PackageLoader()
 {
-    for (const auto& p : plugins_)
+    for (const auto& p : packages_)
     {
         p.destroyFn(p.module);
         CloseLib(p.handle);

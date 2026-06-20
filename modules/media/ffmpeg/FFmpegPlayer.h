@@ -30,6 +30,7 @@ struct AVBufferRef;
 class FFmpegAudioOutput;
 class FFmpegPacketQueue;
 class FFmpegHwDecode;
+class Settings;
 
 // Concrete FFmpeg + libass implementation of IMediaPlayer (issue #8).
 //
@@ -67,7 +68,15 @@ public:
     void SetSubtitleStyle(const SubtitleStyle& style) noexcept override;
     void SetAudioPreferences(const AudioPreferences& prefs) noexcept override;
     [[nodiscard]] AudioPreferences GetAudioPreferences() const noexcept override;
-    void SetAudioDucked(bool ducked) noexcept;
+
+    // Apply every player-side option from the host Settings in one call (playback,
+    // decode mode, read-ahead cache, subtitle style, audio preferences + normalize).
+    // Concrete-only: Settings can't cross the IMediaPlayer ABI.
+    void ApplySettings(const Settings& s);
+
+    // Briefly duck audio (used on UI notifications); auto-restores after a short
+    // timeout, decayed on the audio worker so the host needs no per-frame tick.
+    void PulseDucking() noexcept;
 
     void ToggleSubtitles() noexcept override;
     void CycleSubtitleTrack() noexcept override;

@@ -29,7 +29,7 @@ std::vector<framelift::Keybind> Benchmark::Keybinds()
     };
 }
 
-void Benchmark::OnInstall(IPluginContext& ctx)
+void Benchmark::OnInstall(IModuleContext& ctx)
 {
     // Observe playback position so the duration limit fires even when the
     // Overlay plugin (the usual TimePos observer) is disabled. Idempotent.

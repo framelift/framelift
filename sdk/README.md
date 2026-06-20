@@ -51,7 +51,7 @@ class MyPlugin : public ModuleBase
 {
 protected:
     const char* ModuleName() const override { return "MyPlugin"; }
-    void OnInstall(IPluginContext& ctx) override;
+    void OnInstall(IModuleContext& ctx) override;
 };
 
 FRAMELIFT_MODULE_ENTRY(MyPlugin, {
@@ -64,7 +64,7 @@ FRAMELIFT_MODULE_ENTRY(MyPlugin, {
 ```cpp
 #include "MyPlugin.h"
 
-void MyPlugin::OnInstall(IPluginContext&)
+void MyPlugin::OnInstall(IModuleContext&)
 {
     Log::Info("[MyPlugin] hello from the FrameLift SDK!");
 }
@@ -140,7 +140,7 @@ that does not implement `IRenderable` fails to compile until it states
 `.render = false` (or derives `IRenderable`). `renderOrder` is ignored when
 rendering is disabled.
 
-The macro bakes a `framelift_plugin_info()` export carrying the generated package/module metadata and
+The macro bakes a `framelift_module_info()` export carrying the generated package/module metadata and
 the ABI declared in JSON. The host reads it, rejects incompatible ABI versions, resolves package
 dependencies, and only then creates the module object.
 
@@ -230,9 +230,9 @@ no longer exposed to plugins; the host owns all video/UI rendering.)
 ## ABI compatibility
 
 The ABI is versioned `major.minor.patch` (`FRAMELIFT_PLUGIN_ABI_*` in
-`<framelift/PluginABI.h>`). Each plugin package declares its load-time ABI contract with
+`<framelift/ModuleABI.h>`). Each plugin package declares its load-time ABI contract with
 `"abi": "MAJOR.MINOR"` in `[Plugin].Plugin.json`; CMake validates that value against the SDK headers
-and embeds it into `framelift_plugin_info()`. Before touching a vtable the host loads a plugin only when
+and embeds it into `framelift_module_info()`. Before touching a vtable the host loads a plugin only when
 `plugin.major == host.major && plugin.minor <= host.minor`:
 
 - **major** bumps on breaking changes (and any addition to a host-*called* plugin

@@ -11,7 +11,7 @@
 
 // ── Key-based editing model ───────────────────────────────────────────────────
 // SettingsMenu is fully decoupled from the host Settings layout: it discovers the
-// available fields over the ABI (IPluginContext::EnumerateSettings) and edits a
+// available fields over the ABI (IModuleContext::EnumerateSettings) and edits a
 // typed value store keyed by "section.name". Accessors return references so the
 // existing widget call sites can bind directly; lookups default-insert, and
 // std::unordered_map keeps those references stable across later inserts.
@@ -97,7 +97,7 @@ protected:
     }
 
     std::vector<framelift::Keybind> Keybinds() override;
-    void OnInstall(IPluginContext& ctx) override;
+    void OnInstall(IModuleContext& ctx) override;
 
 private:
     // ── Core pages ──────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ private:
         return ud >= base && ud < base + corePages_.size();
     }
 
-    void RegisterCorePages(IPluginContext& ctx);
+    void RegisterCorePages(IModuleContext& ctx);
 
     void RenderSidebar(UIContext& ctx);
     void RenderPageGeneral(UIContext& ctx);
@@ -148,8 +148,8 @@ private:
     // Discover the settings fields over the ABI and seed the editing model with the
     // host's current values. Called once on install and again after a raw config
     // edit is saved so the typed pages reflect the new on-disk values.
-    void SeedFromContext(IPluginContext& ctx);
-    void SeedValue(IPluginContext& ctx, const FieldMeta& f);
+    void SeedFromContext(IModuleContext& ctx);
+    void SeedValue(IModuleContext& ctx, const FieldMeta& f);
     void ResetValue(const FieldMeta& f);
 
     // Read settings.ini (path resolved via the host) into configText_ for the raw

@@ -5,7 +5,7 @@
 #include <unordered_set>
 #include <vector>
 
-// User-editable plugin enablement manifest (pref-dir plugins.ini), independent of
+// User-editable plugin enablement manifest (pref-dir packages.ini), independent of
 // the typed Settings. Opt-out semantics: every package present in Modules/ loads
 // unless the user explicitly disables it here, so dropping in a third-party DLL
 // works with no edit. One plugin per row:
@@ -14,7 +14,7 @@
 //   framelift.playlist=enabled
 //
 // A package id absent from the file defaults to enabled.
-class PluginConfig
+class PackageConfig
 {
 public:
     // Parse "id=enabled|disabled" rows. A missing file leaves the manifest empty

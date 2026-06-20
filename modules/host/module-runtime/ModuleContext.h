@@ -1,15 +1,15 @@
 #pragma once
 #include "FontScan.h"
-#include "PluginSettingsImpl.h"
+#include "ModuleSettingsImpl.h"
 #include "SettingsRegistry.h"
-#include <framelift/IPluginContext.h>
+#include <framelift/IModuleContext.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 class Settings;
-class PluginConfig;
+class PackageConfig;
 class UIContext;
 
 // Host-side settings page and keybind entry (STL types OK — host-internal only).
@@ -47,29 +47,29 @@ struct ChangeCallbackRec
     void (*cleanup)(void*) = nullptr;
 };
 
-// Concrete IPluginContext implementation owned by App.
-class PluginContext final : public IPluginContext
+// Concrete IModuleContext implementation owned by App.
+class ModuleContext final : public IModuleContext
 {
 public:
-    PluginContext(
+    ModuleContext(
         std::string prefPath, Settings* settings, const std::string& settingsPath,
-        PluginConfig* pluginConfig = nullptr, std::string pluginsPath = {}
+        PackageConfig* pluginConfig = nullptr, std::string pluginsPath = {}
     );
 
     int GetPrefPath(char* buf, int cap) const noexcept override;
 
-    void EnumeratePlugins(
-        void (*visit)(const char*, const FrameLiftPluginInfo&, bool, bool, bool, void*), void* visitUd
+    void EnumeratePackages(
+        void (*visit)(const char*, const FrameLiftPackageInfo&, bool, bool, bool, void*), void* visitUd
     ) const noexcept override;
 
-    void SetPluginEnabled(const char* name, bool enabled) noexcept override;
+    void SetPackageEnabled(const char* name, bool enabled) noexcept override;
 
     void EnumerateSystemFonts(void (*visit)(const char*, const char*, void*), void* visitUd) const noexcept override;
 
-    // Host feeds the plugin catalogue here after PluginLoader::LoadAll, so
+    // Host feeds the plugin catalogue here after PackageLoader::LoadAll, so
     // SettingsMenu (and any consumer) can list and toggle plugins via the ABI.
     // info is the loaded descriptor, or nullptr for a present-but-disabled DLL.
-    void AddPlugin(std::string name, bool enabled, const FrameLiftPluginInfo* info);
+    void AddPackage(std::string name, bool enabled, const FrameLiftPackageInfo* info);
 
     // Settings getters
     float GetSettingFloat(const char* key) const noexcept override;
@@ -93,7 +93,7 @@ public:
 
     void RegisterSettingsChangeCallback(void (*cb)(void*), void* ud, void (*cleanup)(void*)) noexcept override;
 
-    IPluginSettings& GetPluginSettings(const char* sectionName) noexcept override;
+    IModuleSettings& GetModuleSettings(const char* sectionName) noexcept override;
 
     void RegisterSettingsPage(
         const char* title, void (*renderFn)(void*, UIContext&), void (*applyFn)(void*), void* ud, bool visible,
@@ -136,10 +136,10 @@ private:
     std::string settingsPath_;
     Settings* settings_;
 
-    // User plugin enablement manifest (plugins.ini) and its path. Null in contexts
+    // User plugin enablement manifest (packages.ini) and its path. Null in contexts
     // that don't manage plugin enablement (e.g. unit tests).
-    PluginConfig* pluginConfig_ = nullptr;
-    std::string pluginsPath_;
+    PackageConfig* packageConfig_ = nullptr;
+    std::string packagesPath_;
 
     // Field registry bound to *settings_, plus the serialized defaults (for
     // EnumerateSettings' defaultValue). Built once in the constructor.
@@ -148,20 +148,20 @@ private:
     std::unordered_map<std::string, void*> registry_;
     std::vector<ChangeCallbackRec> changeCallbacks_;
     std::vector<SubscriptionRec> subscriptions_;
-    std::unordered_map<std::string, std::unique_ptr<PluginSettingsImpl>> pluginSettings_;
+    std::unordered_map<std::string, std::unique_ptr<ModuleSettingsImpl>> moduleSettings_;
     std::vector<SettingsPageEntry> settingsPages_;
     std::vector<KeybindEntryRec> keybindEntries_;
 
     // One catalogue entry per available plugin (loaded or merely present).
-    struct PluginRec
+    struct PackageRec
     {
         std::string name;           // package id / load key — owns stable storage
         bool enabled;               // true once loaded (enablement is JSON/build-time driven)
         bool loadFailed;            // enabled at startup yet not loaded (fixed at build time)
-        const FrameLiftPluginInfo* info; // loaded descriptor, or nullptr if not loaded
+        const FrameLiftPackageInfo* info; // loaded descriptor, or nullptr if not loaded
     };
 
-    std::vector<PluginRec> pluginCatalog_;
+    std::vector<PackageRec> packageCatalog_;
 
     // System font catalogue — scanned lazily on first EnumerateSystemFonts call.
     mutable std::vector<FontEntry> fontCache_;

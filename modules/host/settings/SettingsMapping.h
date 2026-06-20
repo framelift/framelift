@@ -4,9 +4,9 @@
 // owning modules; this header just re-exports them so host call sites keep one
 // include. Each mapper takes its module's settings sub-struct.
 //
-//   ffmpeg     : ParamsFromSettings, PlaybackOptsFromSettings, VideoDecodeModeFromSettings,
-//                AudioPrefsFromSettings, SubtitleStyleFromSettings
-//   read-ahead : ReadAheadOptsFromSettings
+//   ffmpeg     : ToAudioNormalizeParams, ToPlaybackOptions, ToVideoDecodeMode,
+//                ToAudioPreferences, ToSubtitleStyle
+//   read-ahead : ToReadAheadCacheOptions
 
-#include "CacheSettings.h"          // host/read-ahead  (ReadAheadOptsFromSettings)
+#include "CacheSettings.h"          // host/read-ahead  (ToReadAheadCacheOptions)
 #include "FFmpegSettingsMapping.h"  // media/ffmpeg

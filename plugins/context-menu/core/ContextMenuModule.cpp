@@ -142,7 +142,7 @@ void ContextMenuModule::OnRender(UIContext& ctx)
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────────
 
-void ContextMenuModule::OnInstall(IPluginContext& ctx)
+void ContextMenuModule::OnInstall(IModuleContext& ctx)
 {
     player_ = ctx.GetService<IMediaPlayer>();
     appWindow_ = ctx.GetService<IAppWindow>();
@@ -410,7 +410,7 @@ void ContextMenuModule::OpenFileAction()
         {
             if (ok && path && path[0])
             {
-                static_cast<IPluginContext*>(ud)->Publish<OpenFileRequestEvent>({path, true});
+                static_cast<IModuleContext*>(ud)->Publish<OpenFileRequestEvent>({path, true});
             }
         },
         ctx_

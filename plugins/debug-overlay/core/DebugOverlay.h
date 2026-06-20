@@ -37,7 +37,7 @@ public:
 
 protected:
     std::vector<framelift::Keybind> Keybinds() override;
-    void OnInstall(IPluginContext& ctx) override;
+    void OnInstall(IModuleContext& ctx) override;
 
 private:
     void RequestRefresh();

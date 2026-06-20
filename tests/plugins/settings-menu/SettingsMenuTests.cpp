@@ -1,7 +1,7 @@
 #include "SettingsMenu.h"
 
 #include "FocusManagerImpl.h"
-#include "PluginContext.h"
+#include "ModuleContext.h"
 #include "Settings.h"
 #include "TempIni.h"
 
@@ -22,7 +22,7 @@ TEST(SettingsMenuTest, SeedsEditingModelFromContextOnInstall)
     settings.Get<FilesSettings>().videoExtensions = "avi;mov";
 
     const TempFile ini;
-    PluginContext ctx("pref/", &settings, ini.str());
+    ModuleContext ctx("pref/", &settings, ini.str());
 
     SettingsMenu sm;
     sm.Install(ctx); // OnInstall seeds the model via the ABI-stable ctx getters
@@ -40,7 +40,7 @@ TEST(SettingsMenuTest, SeedsThemeFieldsFromContextOnInstall)
     settings.Get<ThemeSettings>().fontSize = 20.f;
 
     const TempFile ini;
-    PluginContext ctx("pref/", &settings, ini.str());
+    ModuleContext ctx("pref/", &settings, ini.str());
 
     SettingsMenu sm;
     sm.Install(ctx);
@@ -54,7 +54,7 @@ TEST(SettingsMenuTest, RegistersVisibleThemePage)
 {
     Settings settings;
     const TempFile ini;
-    PluginContext ctx("pref/", &settings, ini.str());
+    ModuleContext ctx("pref/", &settings, ini.str());
 
     SettingsMenu sm;
     sm.Install(ctx);
@@ -92,7 +92,7 @@ TEST(SettingsMenuTest, BlocksKeybindsWhileOpen)
 {
     Settings settings;
     const TempFile ini;
-    PluginContext ctx("pref/", &settings, ini.str());
+    ModuleContext ctx("pref/", &settings, ini.str());
     FocusManagerImpl fm;
     ctx.RegisterService<FocusManager>(&fm);
 

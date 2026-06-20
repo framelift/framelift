@@ -41,9 +41,10 @@ set(FRAMELIFT_MEDIA_INCLUDE_DIRS
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg"
 )
 set(FRAMELIFT_HOST_MODULE_INCLUDE_DIRS
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime"
         "${CMAKE_SOURCE_DIR}/modules/host/settings"
         "${CMAKE_SOURCE_DIR}/modules/host/services"
+        "${CMAKE_SOURCE_DIR}/modules/host/controls"
         "${CMAKE_SOURCE_DIR}/modules/host/logging"
         "${CMAKE_SOURCE_DIR}/modules/host/fonts"
         "${CMAKE_SOURCE_DIR}/modules/host/read-ahead"
@@ -232,13 +233,13 @@ endif ()
 # --component sdk` + `cpack` (see .github/workflows/ci.yml). The package version tracks the
 # ABI version so find_package(FrameLiftSdk) can gate on SameMajorVersion.
 # ABI version is parsed from the SDK header — single source of truth.
-set(_FrameLift_abi_header "${CMAKE_SOURCE_DIR}/sdk/include/framelift/PluginABI.h")
+set(_FrameLift_abi_header "${CMAKE_SOURCE_DIR}/sdk/include/framelift/ModuleABI.h")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_FrameLift_abi_header}")
 foreach (_part MAJOR MINOR PATCH)
     file(STRINGS "${_FrameLift_abi_header}" _FrameLift_abi_line
-            REGEX "^#define FRAMELIFT_PLUGIN_ABI_${_part} +[0-9]+")
-    if (NOT _FrameLift_abi_line MATCHES "FRAMELIFT_PLUGIN_ABI_${_part} +([0-9]+)")
-        message(FATAL_ERROR "Could not parse FRAMELIFT_PLUGIN_ABI_${_part} from ${_FrameLift_abi_header}")
+            REGEX "^#define FRAMELIFT_MODULE_ABI_${_part} +[0-9]+")
+    if (NOT _FrameLift_abi_line MATCHES "FRAMELIFT_MODULE_ABI_${_part} +([0-9]+)")
+        message(FATAL_ERROR "Could not parse FRAMELIFT_MODULE_ABI_${_part} from ${_FrameLift_abi_header}")
     endif ()
     set(FRAMELIFT_SDK_ABI_${_part} "${CMAKE_MATCH_1}")
 endforeach ()

@@ -82,7 +82,7 @@ std::vector<framelift::Keybind> History::Keybinds()
     };
 }
 
-void History::OnInstall(IPluginContext& ctx)
+void History::OnInstall(IModuleContext& ctx)
 {
     SetupSettingsPage(ctx);
 

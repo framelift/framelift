@@ -84,8 +84,8 @@ function(add_framelift_plugin NAME)
             OUTPUT_NAME "${_framelift_module_binary_name}"
             PREFIX "")
     target_compile_definitions(${NAME} PRIVATE
-            FRAMELIFT_BUILDING_PLUGIN
-            FRAMELIFT_PLUGIN_METADATA_HEADER="${_framelift_metadata_header_name}")
+            FRAMELIFT_BUILDING_MODULE
+            FRAMELIFT_MODULE_METADATA_HEADER="${_framelift_metadata_header_name}")
     target_include_directories(${NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
     target_link_libraries(${NAME} PRIVATE FrameLiftSdk)
     if (MINGW)

@@ -68,6 +68,19 @@ void SdlAppWindow::SetSize(const int w, const int h) noexcept
     SDL_SetWindowSize(window_, w, h);
 }
 
+void SdlAppWindow::ResizeToVideo(const int videoW, const int videoH, const float maxDisplayRatio) noexcept
+{
+    if (IsFullscreen() || videoW <= 0 || videoH <= 0)
+    {
+        return;
+    }
+    const Rect usable = GetDisplayUsableBounds();
+    const int maxW = static_cast<int>(static_cast<float>(usable.w) * maxDisplayRatio);
+    const int maxH = static_cast<int>(static_cast<float>(usable.h) * maxDisplayRatio);
+    const WindowSize fit = FitWithinAspect(videoW, videoH, maxW, maxH);
+    SetSize(fit.w, fit.h);
+}
+
 bool SdlAppWindow::IsFullscreen() const noexcept
 {
     return (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0;

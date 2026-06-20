@@ -11,18 +11,18 @@ set(_FRAMELIFT_HOST_CORE_SOURCES
         "${CMAKE_SOURCE_DIR}/src/main.cpp"
 )
 
-set(_FRAMELIFT_HOST_PLUGIN_RUNTIME_SOURCES
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginConfig.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginConfig.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginContext.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginContext.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginLoader.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginLoader.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginRegistry.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginResolver.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginResolver.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginSettingsImpl.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/Services.h"
+set(_FRAMELIFT_HOST_MODULE_RUNTIME_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageConfig.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageConfig.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/ModuleContext.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/ModuleContext.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageLoader.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageLoader.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/ModuleRegistry.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageResolver.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageResolver.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/ModuleSettingsImpl.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/Services.h"
 )
 
 set(_FRAMELIFT_HOST_SETTINGS_SOURCES
@@ -39,6 +39,11 @@ set(_FRAMELIFT_HOST_SERVICES_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/services/FocusManagerImpl.h"
         "${CMAKE_SOURCE_DIR}/modules/host/services/HotkeysImpl.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/services/HotkeysImpl.h"
+)
+
+set(_FRAMELIFT_HOST_CONTROLS_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/controls/PlaybackControls.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/controls/PlaybackControls.h"
 )
 
 set(_FRAMELIFT_HOST_LOGGING_SOURCES
@@ -58,6 +63,8 @@ set(_FRAMELIFT_HOST_READ_AHEAD_SOURCES
 set(_FRAMELIFT_HOST_UI_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/ui/Theme.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/Theme.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeController.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeController.h"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeSettings.h"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeUtil.h"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/UIContextImpl.cpp"
@@ -136,9 +143,10 @@ set(_FRAMELIFT_HOST_GRAPHICS_VULKAN_SOURCES
 
 set(FRAMELIFT_HOST_SOURCES
         ${_FRAMELIFT_HOST_CORE_SOURCES}
-        ${_FRAMELIFT_HOST_PLUGIN_RUNTIME_SOURCES}
+        ${_FRAMELIFT_HOST_MODULE_RUNTIME_SOURCES}
         ${_FRAMELIFT_HOST_SETTINGS_SOURCES}
         ${_FRAMELIFT_HOST_SERVICES_SOURCES}
+        ${_FRAMELIFT_HOST_CONTROLS_SOURCES}
         ${_FRAMELIFT_HOST_LOGGING_SOURCES}
         ${_FRAMELIFT_HOST_FONTS_SOURCES}
         ${_FRAMELIFT_HOST_READ_AHEAD_SOURCES}

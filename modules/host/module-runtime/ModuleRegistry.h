@@ -6,10 +6,10 @@
 // Dynamic module registry. Add() installs the module immediately (services must
 // be registered in ctx first). Optional runtime surfaces are dispatched only to
 // modules that implement their small interfaces.
-class PluginRegistry
+class ModuleRegistry
 {
 public:
-    void Add(IModule* module, IPluginContext& ctx)
+    void Add(IModule* module, IModuleContext& ctx)
     {
         modules_.push_back(module);
         module->Install(ctx);

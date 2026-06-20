@@ -37,7 +37,7 @@
 //      Subscribers:    event const char* fields are valid only during the callback.
 //    Plugins that need to outlive the call must copy into their own storage.
 //
-// 5. ABI VERSION (major.minor.patch — sdk/include/framelift/PluginABI.h).
+// 5. ABI VERSION (major.minor.patch — sdk/include/framelift/ModuleABI.h).
 //    The loader accepts a plugin iff plugin.abiMajor == host.abiMajor and
 //    plugin.abiMinor <= host.abiMinor, checked before any vtable is touched.
 //      MAJOR — any breaking change: removing/reordering virtual methods,
@@ -45,10 +45,10 @@
 //              interface (IModule, IRenderable) or framelift_* export — the host
 //              would call a new slot on an older, shorter plugin vtable.
 //      MINOR — backward-compatible additions to host-PROVIDED surface:
-//              appending a method to IPluginContext, a new service interface, a
+//              appending a method to IModuleContext, a new service interface, a
 //              new optional export.  Old plugins keep loading.
 //      PATCH — ABI-neutral fixes; carried and logged but not gated.
-//    FrameLiftPluginInfo is itself part of the ABI: only a MAJOR bump may change its
+//    FrameLiftPackageInfo is itself part of the ABI: only a MAJOR bump may change its
 //    layout.
 //
 // ── Helper macros ─────────────────────────────────────────────────────────────

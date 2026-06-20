@@ -51,7 +51,7 @@ protected:
     }
 
     std::vector<framelift::SettingsField> SettingsFields() override;
-    void OnInstall(IPluginContext& ctx) override;
+    void OnInstall(IModuleContext& ctx) override;
     void RenderSettings(UIContext& ctx) override;
 
 private:

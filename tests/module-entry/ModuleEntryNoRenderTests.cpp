@@ -21,7 +21,7 @@ FRAMELIFT_MODULE_ENTRY(NonRenderingDummy, {
 
 TEST(ModuleEntryNoRenderTest, OptionalMetadataDefaultsToNull)
 {
-    const FrameLiftPluginInfo* info = framelift_plugin_info();
+    const FrameLiftPackageInfo* info = framelift_module_info();
     ASSERT_NE(info, nullptr);
     EXPECT_STREQ(info->packageId, "test.norender");
     EXPECT_STREQ(info->name, "NonRenderingDummy");

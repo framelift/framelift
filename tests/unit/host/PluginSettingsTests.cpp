@@ -1,4 +1,4 @@
-#include "PluginSettingsImpl.h"
+#include "ModuleSettingsImpl.h"
 #include "TempIni.h"
 
 #include <gtest/gtest.h>
@@ -9,7 +9,7 @@
 TEST(PluginSettingsTest, MissingSectionReturnsDefaults)
 {
     const TempFile f; // empty, non-existent section
-    const PluginSettingsImpl ps("MyPlugin", f.str());
+    const ModuleSettingsImpl ps("MyPlugin", f.str());
 
     EXPECT_FALSE(ps.WasLoaded());
     EXPECT_EQ(ps.KeyCount(), 0);
@@ -23,7 +23,7 @@ TEST(PluginSettingsTest, SaveThenReloadRoundTrips)
 {
     const TempFile f;
     {
-        PluginSettingsImpl ps("MyPlugin", f.str());
+        ModuleSettingsImpl ps("MyPlugin", f.str());
         ps.SetString("name", "FrameLift");
         ps.SetInt("count", 42);
         ps.SetBool("flag", true);
@@ -32,7 +32,7 @@ TEST(PluginSettingsTest, SaveThenReloadRoundTrips)
         ps.Save();
     }
 
-    const PluginSettingsImpl reloaded("MyPlugin", f.str());
+    const ModuleSettingsImpl reloaded("MyPlugin", f.str());
     EXPECT_TRUE(reloaded.WasLoaded());
     EXPECT_EQ(reloaded.KeyCount(), 4);
     EXPECT_STREQ(reloaded.GetString("name"), "FrameLift");
@@ -45,30 +45,30 @@ TEST(PluginSettingsTest, SectionsAreIsolated)
 {
     const TempFile f;
     {
-        PluginSettingsImpl a("SectionA", f.str());
+        ModuleSettingsImpl a("SectionA", f.str());
         a.SetString("k", "valueA");
         a.Save();
     }
     {
-        PluginSettingsImpl b("SectionB", f.str());
+        ModuleSettingsImpl b("SectionB", f.str());
         b.SetString("k", "valueB");
         b.Save();
     }
 
-    const PluginSettingsImpl a("SectionA", f.str());
-    const PluginSettingsImpl b("SectionB", f.str());
+    const ModuleSettingsImpl a("SectionA", f.str());
+    const ModuleSettingsImpl b("SectionB", f.str());
     EXPECT_STREQ(a.GetString("k"), "valueA");
     EXPECT_STREQ(b.GetString("k"), "valueB");
 
     // A section that was never written is not "loaded".
-    const PluginSettingsImpl c("SectionC", f.str());
+    const ModuleSettingsImpl c("SectionC", f.str());
     EXPECT_FALSE(c.WasLoaded());
 }
 
 TEST(PluginSettingsTest, BadNumericFallsBackToDefault)
 {
     const TempFile f("[MyPlugin]\ncount=notanumber\n");
-    const PluginSettingsImpl ps("MyPlugin", f.str());
+    const ModuleSettingsImpl ps("MyPlugin", f.str());
 
     EXPECT_TRUE(ps.WasLoaded());
     EXPECT_EQ(ps.GetInt("count", -1), -1); // stoi throws → default
@@ -83,7 +83,7 @@ TEST(PluginSettingsTest, BadNumericFallsBackToDefault)
 TEST(PluginSettingsTest, GetIntOutOfRangeFallsBack)
 {
     const TempFile f("[MyPlugin]\ncount=999999999999\n");
-    const PluginSettingsImpl ps("MyPlugin", f.str());
+    const ModuleSettingsImpl ps("MyPlugin", f.str());
 
     // std::stoi throws std::out_of_range → caught → returns caller's default.
     EXPECT_EQ(ps.GetInt("count", -1), -1);
@@ -92,7 +92,7 @@ TEST(PluginSettingsTest, GetIntOutOfRangeFallsBack)
 TEST(PluginSettingsTest, GetIntFromFloatStringTruncates)
 {
     const TempFile f("[MyPlugin]\ncount=3.14\n");
-    const PluginSettingsImpl ps("MyPlugin", f.str());
+    const ModuleSettingsImpl ps("MyPlugin", f.str());
 
     // std::stoi parses the leading integer prefix and stops — no throw.
     EXPECT_EQ(ps.GetInt("count"), 3);
@@ -103,19 +103,19 @@ TEST(PluginSettingsTest, GetBoolOnlyOneIsTrue)
     for (const char* token : {"true", "0", "2", "yes"})
     {
         const TempFile f(std::string("[MyPlugin]\nflag=") + token + "\n");
-        const PluginSettingsImpl ps("MyPlugin", f.str());
+        const ModuleSettingsImpl ps("MyPlugin", f.str());
         EXPECT_FALSE(ps.GetBool("flag", true)) << "token=" << token;
     }
 
     const TempFile one("[MyPlugin]\nflag=1\n");
-    const PluginSettingsImpl ps("MyPlugin", one.str());
+    const ModuleSettingsImpl ps("MyPlugin", one.str());
     EXPECT_TRUE(ps.GetBool("flag", false));
 }
 
 TEST(PluginSettingsTest, CrossTypeReadsAreSafe)
 {
     const TempFile f;
-    PluginSettingsImpl ps("MyPlugin", f.str());
+    ModuleSettingsImpl ps("MyPlugin", f.str());
 
     // An int stored, then read as a float.
     ps.SetInt("n", 42);
@@ -131,7 +131,7 @@ TEST(PluginSettingsTest, CrossTypeReadsAreSafe)
 TEST(PluginSettingsTest, EmptyValueFallsBackToDefault)
 {
     const TempFile f("[MyPlugin]\nx=\n");
-    const PluginSettingsImpl ps("MyPlugin", f.str());
+    const ModuleSettingsImpl ps("MyPlugin", f.str());
 
     EXPECT_TRUE(ps.WasLoaded());
     EXPECT_EQ(ps.GetInt("x", -1), -1);             // std::stoi("") throws → default
@@ -147,7 +147,7 @@ TEST(PluginSettingsTest, PluginKeybindSectionLeavesHostKeybindsIntact)
     );
 
     {
-        PluginSettingsImpl ps("history.keybinds", f.str());
+        ModuleSettingsImpl ps("history.keybinds", f.str());
         ps.SetString("toggleHistory", "H");
         ps.Save();
     }
@@ -164,7 +164,7 @@ TEST(PluginSettingsTest, PluginKeybindSectionLeavesHostKeybindsIntact)
     EXPECT_NE(text.find("quit=Ctrl+Q"), std::string::npos);
 
     // Reloading the plugin section yields the written value.
-    const PluginSettingsImpl reloaded("history.keybinds", f.str());
+    const ModuleSettingsImpl reloaded("history.keybinds", f.str());
     EXPECT_TRUE(reloaded.WasLoaded());
     EXPECT_STREQ(reloaded.GetString("toggleHistory"), "H");
 }

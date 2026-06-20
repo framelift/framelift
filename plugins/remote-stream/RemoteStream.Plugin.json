@@ -5,7 +5,7 @@
   "publisher": "FrameLift",
   "description": "Plays remote network streams and custom encrypted streams",
   "version": "1.0.0",
-  "abi": "3.0",
+  "abi": "4.0",
   "modules": [
     "core/Core.Module.json"
   ]

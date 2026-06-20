@@ -1,4 +1,4 @@
-#include "PluginConfig.h"
+#include "PackageConfig.h"
 #include "TempIni.h"
 
 #include <fstream>
@@ -8,14 +8,14 @@
 
 TEST(PluginConfigTest, AbsentIdDefaultsToEnabled)
 {
-    const PluginConfig cfg; // nothing loaded
+    const PackageConfig cfg; // nothing loaded
     EXPECT_TRUE(cfg.IsEnabled("framelift.anything"));
     EXPECT_TRUE(cfg.DisabledIds().empty());
 }
 
 TEST(PluginConfigTest, MissingFileLeavesEverythingEnabled)
 {
-    PluginConfig cfg;
+    PackageConfig cfg;
     cfg.Load(UniqueTempPath().string()); // file does not exist
     EXPECT_TRUE(cfg.IsEnabled("framelift.overlay"));
     EXPECT_TRUE(cfg.DisabledIds().empty());
@@ -25,7 +25,7 @@ TEST(PluginConfigTest, LoadParsesRowsAndDefaultsUnlisted)
 {
     const TempFile f("# header\nframelift.overlay=disabled\nframelift.playlist=enabled\n");
 
-    PluginConfig cfg;
+    PackageConfig cfg;
     cfg.Load(f.str());
 
     EXPECT_FALSE(cfg.IsEnabled("framelift.overlay"));
@@ -41,13 +41,13 @@ TEST(PluginConfigTest, SetAndSaveRoundTrip)
 {
     const TempFile f;
     {
-        PluginConfig cfg;
+        PackageConfig cfg;
         cfg.Set("framelift.overlay", false);
         cfg.Set("framelift.playlist", true);
         cfg.Save(f.str());
     }
 
-    PluginConfig reloaded;
+    PackageConfig reloaded;
     reloaded.Load(f.str());
     EXPECT_FALSE(reloaded.IsEnabled("framelift.overlay"));
     EXPECT_TRUE(reloaded.IsEnabled("framelift.playlist"));
@@ -55,7 +55,7 @@ TEST(PluginConfigTest, SetAndSaveRoundTrip)
 
 TEST(PluginConfigTest, EnsureKnownAddsAsEnabledWithoutOverriding)
 {
-    PluginConfig cfg;
+    PackageConfig cfg;
     cfg.Set("framelift.overlay", false);
     cfg.EnsureKnown({"framelift.overlay", "framelift.history"});
 
@@ -66,7 +66,7 @@ TEST(PluginConfigTest, EnsureKnownAddsAsEnabledWithoutOverriding)
 TEST(PluginConfigTest, SaveWritesSortedRowsWithHeader)
 {
     const TempFile f;
-    PluginConfig cfg;
+    PackageConfig cfg;
     cfg.Set("framelift.zzz", true);
     cfg.Set("framelift.aaa", false);
     cfg.Save(f.str());

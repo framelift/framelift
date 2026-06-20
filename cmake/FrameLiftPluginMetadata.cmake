@@ -2,8 +2,8 @@
 
 if (NOT DEFINED FRAMELIFT_SDK_ABI_MAJOR OR NOT DEFINED FRAMELIFT_SDK_ABI_MINOR OR NOT DEFINED FRAMELIFT_SDK_ABI_PATCH)
     set(_framelift_abi_header_candidates
-            "${CMAKE_CURRENT_LIST_DIR}/../sdk/include/framelift/PluginABI.h"
-            "${CMAKE_CURRENT_LIST_DIR}/../include/framelift/PluginABI.h")
+            "${CMAKE_CURRENT_LIST_DIR}/../sdk/include/framelift/ModuleABI.h"
+            "${CMAKE_CURRENT_LIST_DIR}/../include/framelift/ModuleABI.h")
     set(_framelift_abi_header "")
     foreach (_candidate IN LISTS _framelift_abi_header_candidates)
         if (EXISTS "${_candidate}")
@@ -12,14 +12,14 @@ if (NOT DEFINED FRAMELIFT_SDK_ABI_MAJOR OR NOT DEFINED FRAMELIFT_SDK_ABI_MINOR O
         endif ()
     endforeach ()
     if ("${_framelift_abi_header}" STREQUAL "")
-        message(FATAL_ERROR "Unable to find PluginABI.h for plugin metadata generation")
+        message(FATAL_ERROR "Unable to find ModuleABI.h for plugin metadata generation")
     endif ()
     file(READ "${_framelift_abi_header}" _framelift_plugin_abi_h)
     foreach (_part MAJOR MINOR PATCH)
-        if (_framelift_plugin_abi_h MATCHES "#define[ \t]+FRAMELIFT_PLUGIN_ABI_${_part}[ \t]+([0-9]+)")
+        if (_framelift_plugin_abi_h MATCHES "#define[ \t]+FRAMELIFT_MODULE_ABI_${_part}[ \t]+([0-9]+)")
             set(FRAMELIFT_SDK_ABI_${_part} "${CMAKE_MATCH_1}")
         else ()
-            message(FATAL_ERROR "Unable to parse FRAMELIFT_PLUGIN_ABI_${_part} from PluginABI.h")
+            message(FATAL_ERROR "Unable to parse FRAMELIFT_MODULE_ABI_${_part} from ModuleABI.h")
         endif ()
     endforeach ()
 endif ()
@@ -329,7 +329,7 @@ function(framelift_generate_plugin_metadata target plugin_json out_header out_en
     endforeach ()
 
     set(_header "${CMAKE_CURRENT_BINARY_DIR}/${target}PluginMetadata.h")
-    set(_code "#pragma once\n#include <framelift/PluginABI.h>\n\nnamespace framelift::generated\n{\n")
+    set(_code "#pragma once\n#include <framelift/ModuleABI.h>\n\nnamespace framelift::generated\n{\n")
     set(_module_entries)
     set(_module_index 0)
 
@@ -377,8 +377,8 @@ function(framelift_generate_plugin_metadata target plugin_json out_header out_en
     list(LENGTH _module_entries _module_count)
     if (_module_count GREATER 0)
         list(JOIN _module_entries ",\n" _modules_joined)
-        string(APPEND _code "inline constexpr FrameLiftModuleInfo kPluginModules[] = {\n${_modules_joined}\n};\n")
-        set(_modules_expr "kPluginModules")
+        string(APPEND _code "inline constexpr FrameLiftModuleInfo kPackageModules[] = {\n${_modules_joined}\n};\n")
+        set(_modules_expr "kPackageModules")
     else ()
         set(_modules_expr "nullptr")
     endif ()
@@ -389,7 +389,7 @@ function(framelift_generate_plugin_metadata target plugin_json out_header out_en
     _framelift_cpp_optional_string(_package_publisher_cpp "${_package_publisher}")
     _framelift_cpp_optional_string(_package_description_cpp "${_package_description}")
     string(APPEND _code
-            "inline constexpr FrameLiftPluginInfo kPluginInfo{\n"
+            "inline constexpr FrameLiftPackageInfo kPackageInfo{\n"
             "    ${_abi_MAJOR},\n"
             "    ${_abi_MINOR},\n"
             "    ${_abi_PATCH},\n"
@@ -403,7 +403,7 @@ function(framelift_generate_plugin_metadata target plugin_json out_header out_en
             "    ${_module_count}\n"
             "};\n"
             "} // namespace framelift::generated\n\n"
-            "#define FRAMELIFT_PLUGIN_METADATA ::framelift::generated::kPluginInfo\n")
+            "#define FRAMELIFT_MODULE_METADATA ::framelift::generated::kPackageInfo\n")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     file(WRITE "${_header}" "${_code}")
 

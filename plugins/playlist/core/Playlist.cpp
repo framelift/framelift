@@ -17,7 +17,7 @@
 
 // Read a string setting via the ABI-stable per-key getter (host owns the value).
 // Falls back to the supplied default if no context is available.
-static std::string ReadStringSetting(IPluginContext* ctx, const char* key, const char* fallback)
+static std::string ReadStringSetting(IModuleContext* ctx, const char* key, const char* fallback)
 {
     if (!ctx)
     {
@@ -135,7 +135,7 @@ std::vector<framelift::Keybind> Playlist::Keybinds()
     };
 }
 
-void Playlist::OnInstall(IPluginContext& ctx)
+void Playlist::OnInstall(IModuleContext& ctx)
 {
     if (auto* w = ctx.GetService<IAppWindow>())
     {

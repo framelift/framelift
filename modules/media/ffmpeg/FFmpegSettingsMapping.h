@@ -14,23 +14,23 @@
 // Pure mappers from the media/ffmpeg settings sub-structs to the POD player option
 // structs. Header-only so they can be unit-tested without pulling in SDL/FFmpeg.
 
-inline AudioNormalizeParams ParamsFromSettings(const AudioSettings& s)
+inline AudioNormalizeParams ToAudioNormalizeParams(const AudioSettings& s)
 {
     return {s.dynaudnormFrameLen, s.dynaudnormGaussSize, s.dynaudnormPeak, s.dynaudnormMaxGain, s.dynaudnormVolume};
 }
 
-inline PlaybackOptions PlaybackOptsFromSettings(const PlaybackSettings& s)
+inline PlaybackOptions ToPlaybackOptions(const PlaybackSettings& s)
 {
     return {s.hwdec && IsVideoDecodeModeEnabled(VideoDecodeModeFromString(s.hwdecMode)), s.hrSeek, s.subAutoLoad,
             s.audioFileAutoLoad};
 }
 
-inline VideoDecodeMode VideoDecodeModeFromSettings(const PlaybackSettings& s)
+inline VideoDecodeMode ToVideoDecodeMode(const PlaybackSettings& s)
 {
     return s.hwdec ? VideoDecodeModeFromString(s.hwdecMode) : VideoDecodeMode::Off;
 }
 
-inline AudioPreferences AudioPrefsFromSettings(const AudioSettings& s)
+inline AudioPreferences ToAudioPreferences(const AudioSettings& s)
 {
     AudioPreferences prefs;
     std::strncpy(prefs.preferredLang, s.defaultLanguage.c_str(), sizeof(prefs.preferredLang) - 1);
@@ -44,7 +44,7 @@ inline AudioPreferences AudioPrefsFromSettings(const AudioSettings& s)
     return prefs;
 }
 
-inline SubtitleStyle SubtitleStyleFromSettings(const SubtitleSettings& s)
+inline SubtitleStyle ToSubtitleStyle(const SubtitleSettings& s)
 {
     // Pack a "#RRGGBB" colour + an inverted-alpha transparency byte into the ASS
     // 0xRRGGBBAA convention used by libass (AA: 0x00 = opaque, 0xFF = transparent).

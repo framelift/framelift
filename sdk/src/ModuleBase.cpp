@@ -5,7 +5,7 @@
 #include <framelift/ui/UIContext.h>
 #include <cstring>
 
-void ModuleBase::Install(IPluginContext& ctx) noexcept
+void ModuleBase::Install(IModuleContext& ctx) noexcept
 {
     ctx_ = &ctx;
     // Note: ImGui context is now managed by the host-side UIContextImpl.
@@ -20,7 +20,7 @@ void ModuleBase::Install(IPluginContext& ctx) noexcept
             keybinds_ = Keybinds();
 
             // Load module-specific settings; write defaults to disk on first run.
-            IPluginSettings& ps = ctx.GetPluginSettings(SettingsSection().c_str());
+            IModuleSettings& ps = ctx.GetModuleSettings(SettingsSection().c_str());
             LoadSettings(ps);
             if (!ps.WasLoaded())
             {
@@ -29,7 +29,7 @@ void ModuleBase::Install(IPluginContext& ctx) noexcept
             }
 
             // Load module keybinds from this module's own [<Module>.keybinds] section.
-            IPluginSettings& kps = ctx.GetPluginSettings(KeybindsSection().c_str());
+            IModuleSettings& kps = ctx.GetModuleSettings(KeybindsSection().c_str());
             LoadKeybinds(kps);
             const int keysBefore = kps.KeyCount();
             SaveKeybinds(kps);
@@ -138,17 +138,17 @@ bool ModuleBase::HandleEvent(const AppEvent& e)
 
 // Table-driven hook defaults
 
-void ModuleBase::LoadSettings(IPluginSettings& ps)
+void ModuleBase::LoadSettings(IModuleSettings& ps)
 {
     framelift::LoadFields(ps, fields_);
 }
 
-void ModuleBase::SaveSettings(IPluginSettings& ps)
+void ModuleBase::SaveSettings(IModuleSettings& ps)
 {
     framelift::SaveFields(ps, fields_);
 }
 
-void ModuleBase::LoadKeybinds(IPluginSettings& kps)
+void ModuleBase::LoadKeybinds(IModuleSettings& kps)
 {
     for (const auto& kb : keybinds_)
     {
@@ -156,7 +156,7 @@ void ModuleBase::LoadKeybinds(IPluginSettings& kps)
     }
 }
 
-void ModuleBase::SaveKeybinds(IPluginSettings& kps)
+void ModuleBase::SaveKeybinds(IModuleSettings& kps)
 {
     for (const auto& kb : keybinds_)
     {
@@ -164,7 +164,7 @@ void ModuleBase::SaveKeybinds(IPluginSettings& kps)
     }
 }
 
-void ModuleBase::RegisterKeybinds(IPluginContext& ctx)
+void ModuleBase::RegisterKeybinds(IModuleContext& ctx)
 {
     for (auto& kb : keybinds_)
     {
@@ -183,7 +183,7 @@ void ModuleBase::OnBindHotkeys(Hotkeys& keys)
     }
 }
 
-void ModuleBase::SetupSettingsPage(IPluginContext& ctx, const bool visible)
+void ModuleBase::SetupSettingsPage(IModuleContext& ctx, const bool visible)
 {
     ctx.RegisterSettingsPage(
         ModuleName(),
@@ -208,9 +208,9 @@ void ModuleBase::SetupSettingsPage(IPluginContext& ctx, const bool visible)
                     {
                         return;
                     }
-                    IPluginSettings& ps = fp->ctx_->GetPluginSettings(fp->SettingsSection().c_str());
+                    IModuleSettings& ps = fp->ctx_->GetModuleSettings(fp->SettingsSection().c_str());
                     fp->SaveSettings(ps);
-                    IPluginSettings& kps = fp->ctx_->GetPluginSettings(fp->KeybindsSection().c_str());
+                    IModuleSettings& kps = fp->ctx_->GetModuleSettings(fp->KeybindsSection().c_str());
                     fp->SaveKeybinds(kps);
                 }
             );

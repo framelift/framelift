@@ -1,7 +1,7 @@
 #pragma once
 #include <framelift/IModule.h>
 #include <framelift/IRenderable.h>
-#include <framelift/PluginABI.h>
+#include <framelift/ModuleABI.h>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -17,10 +17,10 @@
 //   IRenderable* framelift_get_renderable(IModule*);   // nullptr if not renderable
 //   int          framelift_render_order();               // z-order for renderables
 // }
-class PluginLoader
+class PackageLoader
 {
 public:
-    struct LoadedPlugin
+    struct LoadedPackage
     {
         std::string name;          // package id / enabled-list entry
         std::string moduleFile; // shipped module binary filename.
@@ -29,10 +29,10 @@ public:
         IRenderable* renderable; // may be nullptr
         int renderOrder;
         void (*destroyFn)(IModule*);
-        const FrameLiftPluginInfo* info; // identity descriptor (points into the loaded DLL)
+        const FrameLiftPackageInfo* info; // identity descriptor (points into the loaded DLL)
     };
 
-    struct AvailablePlugin
+    struct AvailablePackage
     {
         std::string packageId;
         std::string moduleFile;
@@ -44,18 +44,18 @@ public:
     // Does NOT call Install(); the caller does that via Registry().Add(p, ctx).
     void LoadAll(const std::string& modulesDir, const std::unordered_set<std::string>& disabled = {});
 
-    const std::vector<LoadedPlugin>& Plugins() const
+    const std::vector<LoadedPackage>& Packages() const
     {
-        return plugins_;
+        return packages_;
     }
 
     // Discover every module binary present in modulesDir, so the settings UI can
     // list and re-enable packages that are currently disabled.
-    static std::vector<AvailablePlugin> DiscoverAvailable(const std::string& modulesDir);
+    static std::vector<AvailablePackage> DiscoverAvailable(const std::string& modulesDir);
 
     // Calls framelift_destroy and FreeLibrary for every loaded plugin.
-    ~PluginLoader();
+    ~PackageLoader();
 
 private:
-    std::vector<LoadedPlugin> plugins_;
+    std::vector<LoadedPackage> packages_;
 };

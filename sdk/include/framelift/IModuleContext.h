@@ -1,7 +1,7 @@
 #pragma once
 #include <framelift/Abi.h>
-#include <framelift/IPluginSettings.h>
-#include <framelift/PluginABI.h>
+#include <framelift/IModuleSettings.h>
+#include <framelift/ModuleABI.h>
 #include <type_traits>
 
 class UIContext;
@@ -24,11 +24,11 @@ struct FrameLiftSettingDesc
 // All virtual methods use a stable C-compatible ABI — no STL types cross the boundary.
 // Use the non-virtual template helpers (GetService, RegisterService, Publish, Subscribe)
 // for ergonomic access; they compile into the plugin and call the raw virtuals below.
-class IPluginContext
+class IModuleContext
 {
 public:
-    static constexpr const char* InterfaceId = "framelift.IPluginContext";
-    virtual ~IPluginContext() = default;
+    static constexpr const char* InterfaceId = "framelift.IModuleContext";
+    virtual ~IModuleContext() = default;
 
     // ── Service registry ───────────────────────────────────────────────────────
     // Keys are InterfaceId strings (e.g. T::InterfaceId).
@@ -67,7 +67,7 @@ public:
     ) noexcept = 0;
 
     // ── Per-plugin settings (INI section) ──────────────────────────────────────
-    virtual IPluginSettings& GetPluginSettings(const char* sectionName) noexcept = 0;
+    virtual IModuleSettings& GetModuleSettings(const char* sectionName) noexcept = 0;
 
     // ── Settings page registration ─────────────────────────────────────────────
     // renderFn(ud, ctx): called each frame while the page is visible.
@@ -114,26 +114,26 @@ public:
     // Enumerate every plugin discovered in the Modules/ directory - both the
     // loaded ones and any present-but-disabled DLLs.
     //   name    — the load key (package id / [plugins] enabled entry); use it for
-    //             SetPluginEnabled. Stable identity even when info is synthesized.
+    //             SetPackageEnabled. Stable identity even when info is synthesized.
     //   info    — full descriptor when loaded == true; when loaded == false only
     //             info.name is meaningful (equals name), the rest is zero/null.
     //   enabled    — whether the plugin is in the persisted enabled list (live:
-    //                 reflects SetPluginEnabled toggles made this session).
+    //                 reflects SetPackageEnabled toggles made this session).
     //   loaded     — whether the plugin is currently loaded this session.
     //   loadFailed — true iff it was enabled at startup but did not load (a real
     //                error); false for a plugin merely toggled on this session,
     //                which is pending a restart rather than failed.
     // All pointers are valid only for the duration of the call.
-    virtual void EnumeratePlugins(
+    virtual void EnumeratePackages(
         void (*visit)(
-            const char* name, const FrameLiftPluginInfo& info, bool enabled, bool loaded, bool loadFailed, void* visitUd
+            const char* name, const FrameLiftPackageInfo& info, bool enabled, bool loaded, bool loadFailed, void* visitUd
         ),
         void* visitUd
     ) const noexcept = 0;
 
     // Add/remove a plugin from the persisted enabled list and save. Unknown names
     // are ignored. The change takes effect on the next application start.
-    virtual void SetPluginEnabled(const char* name, bool enabled) noexcept = 0;
+    virtual void SetPackageEnabled(const char* name, bool enabled) noexcept = 0;
 
     // ── System fonts (ABI 1.1) ──────────────────────────────────────────────────
     // Enumerate installed .ttf/.otf fonts found in the OS font directories. The

@@ -1,10 +1,10 @@
-#include "PluginConfig.h"
+#include "PackageConfig.h"
 
 #include <filesystem>
 #include <fstream>
 #include <string>
 
-void PluginConfig::Load(const std::string& path)
+void PackageConfig::Load(const std::string& path)
 {
     states_.clear();
 
@@ -43,7 +43,7 @@ void PluginConfig::Load(const std::string& path)
     }
 }
 
-void PluginConfig::Save(const std::string& path) const
+void PackageConfig::Save(const std::string& path) const
 {
     std::error_code ec;
     std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
@@ -57,7 +57,7 @@ void PluginConfig::Save(const std::string& path) const
     }
 }
 
-std::unordered_set<std::string> PluginConfig::DisabledIds() const
+std::unordered_set<std::string> PackageConfig::DisabledIds() const
 {
     std::unordered_set<std::string> out;
     for (const auto& [id, enabled] : states_)

@@ -6,6 +6,7 @@ extern "C"
 #include <libavutil/samplefmt.h>
 }
 
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -63,7 +64,9 @@ public:
     void SetVolume(int volume0to100); // applied as device gain unless muted
     void SetMute(bool muted);
     void SetPreferences(const AudioPreferences& prefs);
-    void SetDucked(bool ducked);
+    // Duck the output now and schedule auto-restore after a short timeout. The
+    // decay runs inside Feed() on the audio worker, so no external tick is needed.
+    void PulseDuck();
     void EnumerateDevices(void (*visit)(const AudioOutputDevice* device, void* ud), void* ud) const;
 
     void Flush(); // drop queued audio and reset the clock baseline (seek / restart)
@@ -90,4 +93,5 @@ private:
     bool duckingEnabled_ = false;
     int duckingLevel_ = 50;
     bool ducked_ = false;
+    std::chrono::steady_clock::time_point duckUntil_{}; // auto-restore deadline while ducked_
 };

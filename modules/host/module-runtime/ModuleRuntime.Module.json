@@ -1,15 +1,15 @@
 {
   "fileVersion": 1,
-  "id": "framelift.host.plugin_runtime",
-  "name": "Plugin Runtime",
-  "description": "Runtime plugin discovery, dependency resolution, context, and settings bridge.",
+  "id": "framelift.host.module_runtime",
+  "name": "Module Runtime",
+  "description": "Runtime package discovery, dependency resolution, module context, and settings bridge.",
   "enabled": true,
   "required": true,
   "provides": {
     "features": [
-      "plugins.runtime",
-      "plugins.resolution",
-      "plugins.context"
+      "modules.runtime",
+      "modules.resolution",
+      "modules.context"
     ]
   },
   "requires": {

@@ -1,4 +1,4 @@
-#include "PluginResolver.h"
+#include "PackageResolver.h"
 #include <algorithm>
 #include <cstddef>
 #include <set>
@@ -38,7 +38,7 @@ bool PlatformSupported(const FrameLiftModuleInfo& module, std::string_view platf
     return module.platforms.count <= 0 || Contains(module.platforms, platformId);
 }
 
-std::string PackageId(const FrameLiftPluginInfo* info)
+std::string PackageId(const FrameLiftPackageInfo* info)
 {
     return info && info->packageId ? info->packageId : "<unknown>";
 }
@@ -57,15 +57,15 @@ const char* FrameLiftCurrentPlatformId() noexcept
 #endif
 }
 
-std::vector<PluginResolveDecision> ResolvePluginPackages(
-    const std::vector<PluginResolveCandidate>& candidates, std::string_view platformId
+std::vector<PackageResolveDecision> ResolvePackages(
+    const std::vector<PackageResolveCandidate>& candidates, std::string_view platformId
 )
 {
-    std::vector<PluginResolveDecision> decisions(candidates.size());
+    std::vector<PackageResolveDecision> decisions(candidates.size());
 
     for (std::size_t i = 0; i < candidates.size(); ++i)
     {
-        const FrameLiftPluginInfo* info = candidates[i].info;
+        const FrameLiftPackageInfo* info = candidates[i].info;
         if (!info)
         {
             decisions[i].reason = "missing plugin metadata";
@@ -115,7 +115,7 @@ std::vector<PluginResolveDecision> ResolvePluginPackages(
             {
                 continue;
             }
-            const FrameLiftPluginInfo* info = candidates[i].info;
+            const FrameLiftPackageInfo* info = candidates[i].info;
             for (int m = 0; m < info->moduleCount; ++m)
             {
                 const FrameLiftModuleInfo& module = info->modules[m];
@@ -131,7 +131,7 @@ std::vector<PluginResolveDecision> ResolvePluginPackages(
                 continue;
             }
 
-            const FrameLiftPluginInfo* info = candidates[i].info;
+            const FrameLiftPackageInfo* info = candidates[i].info;
             for (int m = 0; m < info->moduleCount && decisions[i].accepted; ++m)
             {
                 const FrameLiftModuleInfo& module = info->modules[m];
@@ -164,7 +164,7 @@ std::vector<PluginResolveDecision> ResolvePluginPackages(
     return decisions;
 }
 
-std::vector<std::size_t> OrderPluginPackages(const std::vector<PluginResolveCandidate>& candidates)
+std::vector<std::size_t> OrderPackages(const std::vector<PackageResolveCandidate>& candidates)
 {
     const std::size_t n = candidates.size();
 
@@ -175,7 +175,7 @@ std::vector<std::size_t> OrderPluginPackages(const std::vector<PluginResolveCand
     std::vector<std::string> ids(n);
     for (std::size_t i = 0; i < n; ++i)
     {
-        const FrameLiftPluginInfo* info = candidates[i].info;
+        const FrameLiftPackageInfo* info = candidates[i].info;
         ids[i] = PackageId(info);
         if (!info)
         {

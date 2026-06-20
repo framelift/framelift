@@ -42,7 +42,7 @@ protected:
         return "Overlay";
     }
 
-    void OnInstall(IPluginContext& ctx) override;
+    void OnInstall(IModuleContext& ctx) override;
 
 private:
     // Draw the seek bar and playback controls centred at the bottom of the window.

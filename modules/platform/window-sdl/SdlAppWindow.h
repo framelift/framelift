@@ -26,6 +26,10 @@ public:
 
     void GetSize(int& w, int& h) const noexcept override;
     void SetSize(int w, int h) noexcept override;
+    // Resize the window to a video's native size, scaled down to fit within
+    // maxDisplayRatio of the usable display bounds (aspect preserved). No-op while
+    // fullscreen. videoW/videoH are the decoded display dimensions.
+    void ResizeToVideo(int videoW, int videoH, float maxDisplayRatio) noexcept;
     [[nodiscard]] bool IsFullscreen() const noexcept override;
     void SetFullscreen(bool fs) noexcept override;
     [[nodiscard]] Rect GetDisplayUsableBounds() const noexcept override;

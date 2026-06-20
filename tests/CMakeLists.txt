@@ -48,7 +48,7 @@ set(FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/media/ffmpeg"
 )
 set(FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS
-        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime"
         "${FRAMELIFT_ROOT}/modules/host/settings"
         "${FRAMELIFT_ROOT}/modules/host/services"
         "${FRAMELIFT_ROOT}/modules/host/logging"
@@ -105,9 +105,9 @@ add_executable(framelift_tests
         unit/media/FFmpegTrackLabelTests.cpp
         unit/gfx/VulkanQueueLockTests.cpp
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginConfig.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginResolver.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PackageConfig.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PackageResolver.cpp"
         "${FRAMELIFT_ROOT}/modules/host/fonts/FontScan.cpp"
         "${FRAMELIFT_ROOT}/sdk/src/KeyNames.cpp"
 )
@@ -119,7 +119,7 @@ target_include_directories(framelift_tests PRIVATE
         ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
         ${FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS}
         ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
-        "${FRAMELIFT_ROOT}/tests/support"  # TempIni.h for PluginConfig/PluginSettings tests
+        "${FRAMELIFT_ROOT}/tests/support"  # TempIni.h for PackageConfig/PluginSettings tests
         "${FRAMELIFT_ROOT}/plugins/updater/core"
         "${FRAMELIFT_ROOT}/plugins/playlist/core"
 )
@@ -156,8 +156,8 @@ function(add_framelift_plugin_test name)
     set_target_properties(${name} PROPERTIES
             CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     target_compile_definitions(${name} PRIVATE
-            FRAMELIFT_BUILDING_PLUGIN
-            FRAMELIFT_PLUGIN_METADATA_HEADER="${_FL_TEST_METADATA_HEADER}")
+            FRAMELIFT_BUILDING_MODULE
+            FRAMELIFT_MODULE_METADATA_HEADER="${_FL_TEST_METADATA_HEADER}")
     if (NOT _FL_TEST_EMIT_MODULE_ENTRY)
         target_compile_definitions(${name} PRIVATE FRAMELIFT_SUPPRESS_MODULE_ENTRY)
     endif ()
@@ -201,21 +201,21 @@ add_framelift_plugin_test(framelift_test_history
         plugins/history/HistoryTests.cpp
         "${FRAMELIFT_ROOT}/plugins/history/core/History.cpp")
 
-# Playlist + SettingsMenu drive the real PluginContext, so they also compile
+# Playlist + SettingsMenu drive the real ModuleContext, so they also compile
 # the host plugin runtime and settings modules.
 add_framelift_plugin_test(framelift_test_playlist
         plugins/playlist/PlaylistTests.cpp
         "${FRAMELIFT_ROOT}/plugins/playlist/core/Playlist.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginConfig.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PackageConfig.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
         "${FRAMELIFT_ROOT}/modules/host/fonts/FontScan.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
 
 add_framelift_plugin_test(framelift_test_settingsmenu
         plugins/settings-menu/SettingsMenuTests.cpp
         "${FRAMELIFT_ROOT}/plugins/settings-menu/core/SettingsMenu.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginConfig.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PackageConfig.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
         "${FRAMELIFT_ROOT}/modules/host/fonts/FontScan.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
 

@@ -69,7 +69,7 @@ constexpr DecodeModeItem kDecodeModes[] = {
 };
 #endif
 
-bool HasNvidiaAdapter(const IPluginContext* ctx)
+bool HasNvidiaAdapter(const IModuleContext* ctx)
 {
     auto* window = ctx ? ctx->GetService<IAppWindow>() : nullptr;
     auto* backend = window ? static_cast<IGraphicsBackend*>(window->GetGraphicsBackend()) : nullptr;
@@ -89,7 +89,7 @@ std::vector<framelift::Keybind> SettingsMenu::Keybinds()
     };
 }
 
-void SettingsMenu::SeedValue(IPluginContext& ctx, const FieldMeta& f)
+void SettingsMenu::SeedValue(IModuleContext& ctx, const FieldMeta& f)
 {
     // Pull one field's current host value into the editing model, by type tag.
     switch (f.type)
@@ -119,7 +119,7 @@ void SettingsMenu::SeedValue(IPluginContext& ctx, const FieldMeta& f)
     }
 }
 
-void SettingsMenu::SeedFromContext(IPluginContext& ctx)
+void SettingsMenu::SeedFromContext(IModuleContext& ctx)
 {
     // Discover every host settings field over the ABI (no Settings struct crosses
     // the boundary), then seed the editing model with the current values.
@@ -129,7 +129,7 @@ void SettingsMenu::SeedFromContext(IPluginContext& ctx)
     struct SeedCtx
     {
         SettingsMenu* self;
-        IPluginContext* ctx;
+        IModuleContext* ctx;
     };
     SeedCtx sc{this, &ctx};
     ctx.EnumerateSettings(
@@ -145,7 +145,7 @@ void SettingsMenu::SeedFromContext(IPluginContext& ctx)
     dirty_ = false;
 }
 
-void SettingsMenu::OnInstall(IPluginContext& ctx)
+void SettingsMenu::OnInstall(IModuleContext& ctx)
 {
     SeedFromContext(ctx);
 
@@ -182,7 +182,7 @@ void SettingsMenu::CoreRenderThunk(void* ud, UIContext& ctx)
     (page->self->*(page->render))(ctx);
 }
 
-void SettingsMenu::RegisterCorePages(IPluginContext& ctx)
+void SettingsMenu::RegisterCorePages(IModuleContext& ctx)
 {
     corePages_ = {{
         {this, &SettingsMenu::RenderPageGeneral, "General", "general"},
@@ -1150,8 +1150,8 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
     };
 
     PluginsCtx pc{this, &ctx};
-    ctx_->EnumeratePlugins(
-        [](const char* name, const FrameLiftPluginInfo& info, bool enabled, bool loaded, bool loadFailed, void* pv)
+    ctx_->EnumeratePackages(
+        [](const char* name, const FrameLiftPackageInfo& info, bool enabled, bool loaded, bool loadFailed, void* pv)
         {
             auto& [self, ctx, count] = *static_cast<PluginsCtx*>(pv);
             if (count++ > 0)
@@ -1176,7 +1176,7 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
                 bool en = enabled;
                 if (ctx->Checkbox("Enabled", &en))
                 {
-                    self->ctx_->SetPluginEnabled(name, en);
+                    self->ctx_->SetPackageEnabled(name, en);
                 }
             }
 

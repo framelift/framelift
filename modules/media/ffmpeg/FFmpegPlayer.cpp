@@ -14,6 +14,10 @@
 
 #include "IGraphicsBackend.h"
 
+#include "CacheSettings.h"           // ToReadAheadCacheOptions (host/read-ahead)
+#include "FFmpegSettingsMapping.h"   // To{PlaybackOptions,VideoDecodeMode,...}
+#include "Settings.h"                // host aggregate settings
+
 #include <framelift/Log.h>
 
 #include <algorithm>
@@ -1856,9 +1860,20 @@ AudioPreferences FFmpegPlayer::GetAudioPreferences() const noexcept
     return audioPrefs_;
 }
 
-void FFmpegPlayer::SetAudioDucked(bool ducked) noexcept
+void FFmpegPlayer::ApplySettings(const Settings& s)
 {
-    audioOut_->SetDucked(ducked);
+    SetPlaybackOptions(ToPlaybackOptions(s.Get<PlaybackSettings>()));
+    SetVideoDecodeMode(ToVideoDecodeMode(s.Get<PlaybackSettings>()));
+    SetReadAheadCache(ToReadAheadCacheOptions(s.Get<CacheSettings>()));
+    SetSubtitleStyle(ToSubtitleStyle(s.Get<SubtitleSettings>()));
+    SetAudioPreferences(ToAudioPreferences(s.Get<AudioSettings>()));
+    const AudioSettings& a = s.Get<AudioSettings>();
+    SetAudioNormalize(a.normalizeEnabled, a.normalizeEnabled ? ToAudioNormalizeParams(a) : AudioNormalizeParams{});
+}
+
+void FFmpegPlayer::PulseDucking() noexcept
+{
+    audioOut_->PulseDuck();
 }
 
 void FFmpegPlayer::ToggleSubtitles() noexcept

@@ -4,7 +4,7 @@
 #include <framelift/platform/IMediaPlayer.h>
 
 class Hotkeys;
-class IPluginContext;
+class IModuleContext;
 
 // Minimal lifecycle interface for a runtime module.
 //
@@ -17,7 +17,7 @@ public:
     static constexpr const char* InterfaceId = "framelift.IModule";
     virtual ~IModule() = default;
 
-    virtual void Install(IPluginContext& /*ctx*/) noexcept
+    virtual void Install(IModuleContext& /*ctx*/) noexcept
     {
     }
 

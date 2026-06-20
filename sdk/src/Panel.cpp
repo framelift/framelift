@@ -3,7 +3,7 @@
 #include <framelift/Events.h>
 #include <framelift/FocusManager.h>
 #include <framelift/Guard.h>
-#include <framelift/IPluginContext.h>
+#include <framelift/IModuleContext.h>
 #include <framelift/platform/IAppWindow.h>
 #include <framelift/ui/Panel.h>
 #include <framelift/ui/UIContext.h>

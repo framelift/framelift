@@ -140,6 +140,14 @@ void FFmpegAudioOutput::Feed(const AVFrame* frame, double ptsSec)
         return;
     }
 
+    // Decay a pending audio duck: the audio worker drives this regularly, so the
+    // host needs no per-frame tick to restore the gain after the pulse expires.
+    if (ducked_ && std::chrono::steady_clock::now() >= duckUntil_)
+    {
+        ducked_ = false;
+        ApplyGainLocked();
+    }
+
     const int inRate = frame->sample_rate > 0 ? frame->sample_rate : dstRate_;
     // Output sample count incl. samples still buffered inside the resampler.
     const int64_t maxOut = av_rescale_rnd(swr_get_delay(swr_, inRate) + frame->nb_samples, dstRate_, inRate, AV_ROUND_UP);
@@ -233,10 +241,11 @@ void FFmpegAudioOutput::SetPreferences(const AudioPreferences& prefs)
     ApplyGainLocked();
 }
 
-void FFmpegAudioOutput::SetDucked(bool ducked)
+void FFmpegAudioOutput::PulseDuck()
 {
     std::lock_guard lock(mutex_);
-    ducked_ = ducked;
+    ducked_ = true;
+    duckUntil_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(800);
     ApplyGainLocked();
 }
 

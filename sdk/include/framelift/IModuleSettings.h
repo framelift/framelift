@@ -2,13 +2,13 @@
 #include <framelift/Abi.h>
 
 // Per-plugin INI section accessor.
-// Returned by IPluginContext::GetPluginSettings(); the host owns the storage.
+// Returned by IModuleContext::GetModuleSettings(); the host owns the storage.
 // All methods are noexcept — safe to call from any plugin lifetime stage.
-class IPluginSettings
+class IModuleSettings
 {
 public:
-    static constexpr const char* InterfaceId = "framelift.IPluginSettings";
-    virtual ~IPluginSettings() = default;
+    static constexpr const char* InterfaceId = "framelift.IModuleSettings";
+    virtual ~IModuleSettings() = default;
 
     // ── Typed getters ─────────────────────────────────────────────────────────
     // Return the stored value, or def if the key is absent.

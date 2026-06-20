@@ -21,7 +21,7 @@ inline void RegisterCacheSettings(SettingsRegistry& reg, CacheSettings& s)
                "Read-ahead demuxer cache size in MB (total across audio/video/subtitle).");
 }
 
-inline ReadAheadCacheOptions ReadAheadOptsFromSettings(const CacheSettings& s)
+inline ReadAheadCacheOptions ToReadAheadCacheOptions(const CacheSettings& s)
 {
     const int64_t mb = s.readAheadSizeMB > 0 ? s.readAheadSizeMB : 0;
     return {s.readAheadEnabled, mb * 1024 * 1024};

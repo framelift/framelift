@@ -1,4 +1,4 @@
-#include <framelift/PluginABI.h>
+#include <framelift/ModuleABI.h>
 
 #include <gtest/gtest.h>
 
@@ -25,8 +25,8 @@ TEST(PluginAbiTest, DifferentMajorRejectedEitherDirection)
 
 TEST(PluginAbiTest, PackageMetadataIsAbiThree)
 {
-    EXPECT_EQ(FRAMELIFT_PLUGIN_ABI_MAJOR, 3);
-    EXPECT_EQ(FRAMELIFT_PLUGIN_ABI_MINOR, 1);
+    EXPECT_EQ(FRAMELIFT_MODULE_ABI_MAJOR, 3);
+    EXPECT_EQ(FRAMELIFT_MODULE_ABI_MINOR, 1);
 }
 
 TEST(PluginAbiTest, MetadataCarriesPackageAndModules)
@@ -43,9 +43,9 @@ TEST(PluginAbiTest, MetadataCarriesPackageAndModules)
          {nullptr, 0},
          {nullptr, 0}},
     };
-    static constexpr FrameLiftPluginInfo info{FRAMELIFT_PLUGIN_ABI_MAJOR,
-                                              FRAMELIFT_PLUGIN_ABI_MINOR,
-                                              FRAMELIFT_PLUGIN_ABI_PATCH,
+    static constexpr FrameLiftPackageInfo info{FRAMELIFT_MODULE_ABI_MAJOR,
+                                              FRAMELIFT_MODULE_ABI_MINOR,
+                                              FRAMELIFT_MODULE_ABI_PATCH,
                                               "framelift.playlist",
                                               "FrameLift.Playlist.Core",
                                               "Playlist",

@@ -37,7 +37,7 @@ protected:
         return "RemoteStream";
     }
 
-    void OnInstall(IPluginContext& ctx) override;
+    void OnInstall(IModuleContext& ctx) override;
 
 private:
     // Resolve `url`, hand the result to the media player, then update the window

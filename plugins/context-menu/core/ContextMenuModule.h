@@ -46,7 +46,7 @@ protected:
         return "ContextMenu";
     }
 
-    void OnInstall(IPluginContext& ctx) override;
+    void OnInstall(IModuleContext& ctx) override;
     void HandleMediaEvent(const MediaEvent& e) override;
     void HandleShutdown() override;
     void OnRender(UIContext& ctx) override;

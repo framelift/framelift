@@ -1,18 +1,18 @@
 #pragma once
 #include <fstream>
-#include <framelift/IPluginSettings.h>
+#include <framelift/IModuleSettings.h>
 #include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
-// Concrete IPluginSettings backed by one named section in a shared INI file.
-// Host-internal — never exposed to plugins directly; plugins receive IPluginSettings&.
-class PluginSettingsImpl final : public IPluginSettings
+// Concrete IModuleSettings backed by one named section in a shared INI file.
+// Host-internal — never exposed to plugins directly; plugins receive IModuleSettings&.
+class ModuleSettingsImpl final : public IModuleSettings
 {
 public:
-    PluginSettingsImpl(std::string section, std::string iniPath)
+    ModuleSettingsImpl(std::string section, std::string iniPath)
         : section_(std::move(section)), iniPath_(std::move(iniPath))
     {
         Load();

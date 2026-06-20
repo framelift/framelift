@@ -5,7 +5,7 @@
 
 class FocusManager;
 class IModule;
-class IPluginContext;
+class IModuleContext;
 
 // Reusable slide-in panel that can be anchored to the left or right edge.
 // Subclasses implement RenderContent() to fill the panel body.
@@ -24,7 +24,7 @@ public:
 
     // Provide the plugin context so the panel reads ui.panelWidth/ui.slideSpeed
     // live via the ABI-stable per-key setting getters.
-    void SetContext(IPluginContext* ctx)
+    void SetContext(IModuleContext* ctx)
     {
         panelCtx_ = ctx;
     }
@@ -66,7 +66,7 @@ protected:
     {
     }
 
-    [[nodiscard]] IPluginContext* GetContext() const
+    [[nodiscard]] IModuleContext* GetContext() const
     {
         return panelCtx_;
     }
@@ -101,7 +101,7 @@ private:
     bool poppedOut_ = false;     // detached into its own OS window
     bool justPoppedOut_ = false; // set the frame pop-out begins, to seed window pos/size once
     float lastPublishedWidth_ = -1.f; // last VisibleWidth() sent via PanelLayoutEvent
-    IPluginContext* panelCtx_ = nullptr;
+    IModuleContext* panelCtx_ = nullptr;
     FocusManager* focusManager_ = nullptr;
     IModule* selfModule_ = nullptr;
 };

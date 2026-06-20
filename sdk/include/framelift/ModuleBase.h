@@ -1,8 +1,8 @@
 #pragma once
 #include <framelift/IModule.h>
-#include <framelift/IPluginContext.h>
-#include <framelift/IPluginSettings.h>
-#include <framelift/PluginFields.h>
+#include <framelift/IModuleContext.h>
+#include <framelift/IModuleSettings.h>
+#include <framelift/ModuleFields.h>
 #include <cctype>
 #include <string>
 #include <vector>
@@ -22,7 +22,7 @@ class ModuleBase : public IModule,
 public:
     // Stores ctx_, loads settings, registers keybind metadata, then calls
     // OnInstall for module-specific setup.
-    void Install(IPluginContext& ctx) noexcept final;
+    void Install(IModuleContext& ctx) noexcept final;
 
     void Uninstall() noexcept final;
     void* QueryInterface(const char* interfaceId) noexcept final;
@@ -62,10 +62,10 @@ protected:
     {
     }
 
-    virtual void LoadSettings(IPluginSettings& ps);
-    virtual void RegisterKeybinds(IPluginContext& ctx);
+    virtual void LoadSettings(IModuleSettings& ps);
+    virtual void RegisterKeybinds(IModuleContext& ctx);
 
-    virtual void OnInstall(IPluginContext& ctx)
+    virtual void OnInstall(IModuleContext& ctx)
     {
     }
 
@@ -77,9 +77,9 @@ protected:
     {
     }
 
-    virtual void SaveSettings(IPluginSettings& ps);
-    virtual void LoadKeybinds(IPluginSettings& kps);
-    virtual void SaveKeybinds(IPluginSettings& kps);
+    virtual void SaveSettings(IModuleSettings& ps);
+    virtual void LoadKeybinds(IModuleSettings& kps);
+    virtual void SaveKeybinds(IModuleSettings& kps);
     virtual void OnBindHotkeys(Hotkeys& keys);
 
     [[nodiscard]] std::string PrefixedKey(const char* name) const
@@ -102,9 +102,9 @@ protected:
         return SettingsSection() + ".keybinds";
     }
 
-    void SetupSettingsPage(IPluginContext& ctx, bool visible = true);
+    void SetupSettingsPage(IModuleContext& ctx, bool visible = true);
 
-    IPluginContext* ctx_ = nullptr;
+    IModuleContext* ctx_ = nullptr;
 
 private:
     std::vector<framelift::SettingsField> fields_;

@@ -1,4 +1,4 @@
-#include "PluginResolver.h"
+#include "PackageResolver.h"
 
 #include <gtest/gtest.h>
 #include <string>
@@ -19,16 +19,16 @@ constexpr FrameLiftStringList List(const char* const (&items)[N])
 struct PackageFixture
 {
     FrameLiftModuleInfo module{};
-    FrameLiftPluginInfo info{};
+    FrameLiftPackageInfo info{};
 
     PackageFixture(
         const char* packageId, const char* moduleId, FrameLiftStringList provides, FrameLiftStringList reqModules,
         FrameLiftStringList reqFeatures, FrameLiftStringList optional, FrameLiftStringList platformList
     )
         : module{moduleId, "Module", nullptr, provides, reqModules, reqFeatures, EmptyList(), optional, platformList},
-          info{FRAMELIFT_PLUGIN_ABI_MAJOR,
-               FRAMELIFT_PLUGIN_ABI_MINOR,
-               FRAMELIFT_PLUGIN_ABI_PATCH,
+          info{FRAMELIFT_MODULE_ABI_MAJOR,
+               FRAMELIFT_MODULE_ABI_MINOR,
+               FRAMELIFT_MODULE_ABI_PATCH,
                packageId,
                packageId,
                packageId,
@@ -53,7 +53,7 @@ TEST(PluginResolverTest, AcceptsValidDependencyGraph)
         "framelift.playlist", "framelift.playlist.core", EmptyList(), EmptyList(), List(consumerRequires), EmptyList(),
         EmptyList()};
 
-    const auto decisions = ResolvePluginPackages({{&provider.info}, {&consumer.info}}, "linux");
+    const auto decisions = ResolvePackages({{&provider.info}, {&consumer.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 2u);
     EXPECT_TRUE(decisions[0].accepted);
@@ -67,7 +67,7 @@ TEST(PluginResolverTest, RejectsMissingRequiredModule)
         "framelift.playlist", "framelift.playlist.core", EmptyList(), List(requiredModules), EmptyList(), EmptyList(),
         EmptyList()};
 
-    const auto decisions = ResolvePluginPackages({{&consumer.info}}, "linux");
+    const auto decisions = ResolvePackages({{&consumer.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 1u);
     EXPECT_FALSE(decisions[0].accepted);
@@ -81,7 +81,7 @@ TEST(PluginResolverTest, RejectsMissingRequiredFeature)
         "framelift.playlist", "framelift.playlist.core", EmptyList(), EmptyList(), List(requiredFeatures), EmptyList(),
         EmptyList()};
 
-    const auto decisions = ResolvePluginPackages({{&consumer.info}}, "linux");
+    const auto decisions = ResolvePackages({{&consumer.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 1u);
     EXPECT_FALSE(decisions[0].accepted);
@@ -95,7 +95,7 @@ TEST(PluginResolverTest, RejectsUnsupportedPlatform)
         "framelift.updater", "framelift.updater.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(),
         List(platforms)};
 
-    const auto decisions = ResolvePluginPackages({{&updater.info}}, "linux");
+    const auto decisions = ResolvePackages({{&updater.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 1u);
     EXPECT_FALSE(decisions[0].accepted);
@@ -113,7 +113,7 @@ TEST(PluginResolverTest, CascadesRejectedDependencies)
         "framelift.consumer", "framelift.consumer.core", EmptyList(), List(requiresModule), EmptyList(), EmptyList(),
         EmptyList()};
 
-    const auto decisions = ResolvePluginPackages({{&provider.info}, {&consumer.info}}, "linux");
+    const auto decisions = ResolvePackages({{&provider.info}, {&consumer.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 2u);
     EXPECT_FALSE(decisions[0].accepted);
@@ -128,7 +128,7 @@ TEST(PluginResolverTest, OptionalFeaturesDoNotGateLoading)
         "framelift.optional", "framelift.optional.core", EmptyList(), EmptyList(), EmptyList(), List(optional),
         EmptyList()};
 
-    const auto decisions = ResolvePluginPackages({{&package.info}}, "linux");
+    const auto decisions = ResolvePackages({{&package.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 1u);
     EXPECT_TRUE(decisions[0].accepted);
@@ -146,7 +146,7 @@ TEST(PluginResolverTest, OrdersProviderBeforeOptionalConsumer)
         EmptyList()};
 
     // Consumer listed first in the input; ordering must still load the provider first.
-    const auto order = OrderPluginPackages({{&consumer.info}, {&provider.info}});
+    const auto order = OrderPackages({{&consumer.info}, {&provider.info}});
     ASSERT_EQ(order.size(), 2u);
     EXPECT_EQ(order[0], 1u); // provider (input index 1)
     EXPECT_EQ(order[1], 0u); // consumer (input index 0)
@@ -159,7 +159,7 @@ TEST(PluginResolverTest, OrdersIndependentPackagesByPackageId)
     PackageFixture aaa{
         "framelift.aaa", "framelift.aaa.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
 
-    const auto order = OrderPluginPackages({{&zzz.info}, {&aaa.info}});
+    const auto order = OrderPackages({{&zzz.info}, {&aaa.info}});
     ASSERT_EQ(order.size(), 2u);
     EXPECT_EQ(order[0], 1u); // framelift.aaa sorts first
     EXPECT_EQ(order[1], 0u);

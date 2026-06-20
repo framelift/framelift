@@ -106,7 +106,7 @@ void RemoteStream::OpenUrl(const std::string& url) noexcept
     ctx_->Publish<FileOpenedEvent>({url.c_str()});
 }
 
-void RemoteStream::OnInstall(IPluginContext& ctx)
+void RemoteStream::OnInstall(IModuleContext& ctx)
 {
     framelift::Subscribe<OpenFileRequestEvent>(
         ctx,

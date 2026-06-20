@@ -1,11 +1,11 @@
 #pragma once
-#include <framelift/PluginABI.h>
+#include <framelift/ModuleABI.h>
 
 namespace framelift::generated
 {
 inline constexpr const char* const kFeatures[] = {"test.rendering"};
 inline constexpr const char* const kOptionalFeatures[] = {"test.optional"};
-inline constexpr FrameLiftModuleInfo kPluginModules[] = {
+inline constexpr FrameLiftModuleInfo kPackageModules[] = {
     {"test.rendering.core",
      "Rendering Core",
      "Rendering dummy module",
@@ -16,17 +16,17 @@ inline constexpr FrameLiftModuleInfo kPluginModules[] = {
      {kOptionalFeatures, 1},
      {nullptr, 0}},
 };
-inline constexpr FrameLiftPluginInfo kPluginInfo{FRAMELIFT_PLUGIN_ABI_MAJOR,
-                                                 FRAMELIFT_PLUGIN_ABI_MINOR,
-                                                 FRAMELIFT_PLUGIN_ABI_PATCH,
+inline constexpr FrameLiftPackageInfo kPackageInfo{FRAMELIFT_MODULE_ABI_MAJOR,
+                                                 FRAMELIFT_MODULE_ABI_MINOR,
+                                                 FRAMELIFT_MODULE_ABI_PATCH,
                                                  "test.rendering",
                                                  "Acme.RenderingDummy.Core",
                                                  "RenderingDummy",
                                                  {2, 5, 9},
                                                  "Acme",
                                                  "Does a thing",
-                                                 kPluginModules,
+                                                 kPackageModules,
                                                  1};
 } // namespace framelift::generated
 
-#define FRAMELIFT_PLUGIN_METADATA ::framelift::generated::kPluginInfo
+#define FRAMELIFT_MODULE_METADATA ::framelift::generated::kPackageInfo

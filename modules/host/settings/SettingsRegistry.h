@@ -10,7 +10,7 @@
 // Replaces the former monolithic SETTINGS_FIELDS X-macro. Each module registers
 // the fields it owns by binding a typed sub-struct member to a "section.name" key.
 // The registry is the single source of truth for INI load/save and the ABI-stable
-// per-key getters exposed through IPluginContext.
+// per-key getters exposed through IModuleContext.
 //
 // A field's value is reached through type-erased closures captured over the bound
 // member, so the registry stays decoupled from the concrete settings structs.

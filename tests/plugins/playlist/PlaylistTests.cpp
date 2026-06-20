@@ -1,6 +1,6 @@
 #include "Playlist.h"
 
-#include "PluginContext.h"
+#include "ModuleContext.h"
 #include "Settings.h"
 #include "TempIni.h"
 #include "fakes/FakeMediaPlayer.h"
@@ -99,7 +99,7 @@ TEST(PlaylistTest, LoadFileDrivesPlayerAndPublishesEvent)
 {
     Settings settings;
     const TempFile ini;
-    PluginContext ctx("pref/", &settings, ini.str());
+    ModuleContext ctx("pref/", &settings, ini.str());
 
     FakeMediaPlayer player;
     ctx.RegisterService<IMediaPlayer>(&player);
@@ -128,7 +128,7 @@ TEST(PlaylistTest, InstallPersistsSettingsAndKeybindsOnFirstRun)
 {
     Settings settings;
     const TempFile ini; // unique path, file does not exist yet
-    PluginContext ctx("pref/", &settings, ini.str());
+    ModuleContext ctx("pref/", &settings, ini.str());
 
     Playlist pl;
     pl.Install(ctx); // first run → defaults must be written to disk
@@ -156,7 +156,7 @@ TEST(PlaylistTest, OpenFileRequestRespectsRebuildFlag)
 
     Settings settings;
     const TempFile ini;
-    PluginContext ctx("pref/", &settings, ini.str());
+    ModuleContext ctx("pref/", &settings, ini.str());
     FakeMediaPlayer player;
     ctx.RegisterService<IMediaPlayer>(&player);
 
@@ -182,7 +182,7 @@ TEST(PlaylistTest, ThrowingSubscriberIsContained)
 {
     Settings settings;
     const TempFile ini;
-    PluginContext ctx("pref/", &settings, ini.str());
+    ModuleContext ctx("pref/", &settings, ini.str());
 
     framelift::Subscribe<FileOpenedEvent>(ctx,
                                      [](const FileOpenedEvent&)

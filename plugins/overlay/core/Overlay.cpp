@@ -16,7 +16,7 @@ namespace
 Overlay* Instance = nullptr;
 }
 
-void Overlay::OnInstall(IPluginContext& ctx)
+void Overlay::OnInstall(IModuleContext& ctx)
 {
     Instance = this;
 
