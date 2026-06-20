@@ -20,6 +20,7 @@ set(_FRAMELIFT_HOST_PLUGIN_RUNTIME_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginResolver.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginResolver.h"
         "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginSettingsImpl.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/Services.h"
 )
 
 set(_FRAMELIFT_HOST_SETTINGS_SOURCES
@@ -32,12 +33,17 @@ set(_FRAMELIFT_HOST_SERVICES_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/services/FileDialogServiceImpl.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/services/FileDialogServiceImpl.h"
         "${CMAKE_SOURCE_DIR}/modules/host/services/FocusManagerImpl.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/services/FontScan.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/services/FontScan.h"
         "${CMAKE_SOURCE_DIR}/modules/host/services/HotkeysImpl.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/services/HotkeysImpl.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/services/Log.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/services/Services.h"
+)
+
+set(_FRAMELIFT_HOST_LOGGING_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/logging/Log.cpp"
+)
+
+set(_FRAMELIFT_HOST_FONTS_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/fonts/FontScan.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/fonts/FontScan.h"
 )
 
 set(_FRAMELIFT_HOST_READ_AHEAD_SOURCES
@@ -121,6 +127,8 @@ set(FRAMELIFT_HOST_SOURCES
         ${_FRAMELIFT_HOST_PLUGIN_RUNTIME_SOURCES}
         ${_FRAMELIFT_HOST_SETTINGS_SOURCES}
         ${_FRAMELIFT_HOST_SERVICES_SOURCES}
+        ${_FRAMELIFT_HOST_LOGGING_SOURCES}
+        ${_FRAMELIFT_HOST_FONTS_SOURCES}
         ${_FRAMELIFT_HOST_READ_AHEAD_SOURCES}
         ${_FRAMELIFT_HOST_UI_SOURCES}
         ${_FRAMELIFT_HOST_WINDOW_SOURCES}

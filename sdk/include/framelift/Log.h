@@ -29,7 +29,7 @@ void SetSink(SinkFn fn);
 // Format target — defined in sdk/src/Log.cpp; forwards to the installed sink.
 void Emit(Level level, const std::string& msg);
 
-// Host-only: configure the backing logger. Defined in src/Log.cpp.
+// Host-only: configure the backing logger. Defined in modules/host/logging/Log.cpp.
 void Init();
 
 template <typename... Args>

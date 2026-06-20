@@ -51,6 +51,8 @@ set(FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/host/plugin-runtime"
         "${FRAMELIFT_ROOT}/modules/host/settings"
         "${FRAMELIFT_ROOT}/modules/host/services"
+        "${FRAMELIFT_ROOT}/modules/host/logging"
+        "${FRAMELIFT_ROOT}/modules/host/fonts"
         "${FRAMELIFT_ROOT}/modules/host/read-ahead"
         "${FRAMELIFT_ROOT}/modules/host/ui"
         "${FRAMELIFT_ROOT}/modules/platform/window-sdl"
@@ -104,7 +106,7 @@ add_executable(framelift_tests
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp"
         "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
         "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginResolver.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/services/FontScan.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/fonts/FontScan.cpp"
         "${FRAMELIFT_ROOT}/sdk/src/KeyNames.cpp"
 )
 set_target_properties(framelift_tests PROPERTIES
@@ -201,14 +203,14 @@ add_framelift_plugin_test(framelift_test_playlist
         PlaylistTests.cpp
         "${FRAMELIFT_ROOT}/plugins/playlist/core/Playlist.cpp"
         "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/services/FontScan.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/fonts/FontScan.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
 
 add_framelift_plugin_test(framelift_test_settingsmenu
         SettingsMenuTests.cpp
         "${FRAMELIFT_ROOT}/plugins/settings-menu/core/SettingsMenu.cpp"
         "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/services/FontScan.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/fonts/FontScan.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
 
 add_framelift_plugin_test(framelift_test_overlay
