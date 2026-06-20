@@ -15,7 +15,9 @@
     ]
   },
   "requires": {
-    "modules": [],
+    "modules": [
+      "framelift.host.read_ahead"
+    ],
     "features": []
   },
   "optional": {

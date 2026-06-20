@@ -37,8 +37,11 @@ set(_FRAMELIFT_HOST_SERVICES_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/services/HotkeysImpl.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/services/HotkeysImpl.h"
         "${CMAKE_SOURCE_DIR}/modules/host/services/Log.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/services/ReadAheadCache.h"
         "${CMAKE_SOURCE_DIR}/modules/host/services/Services.h"
+)
+
+set(_FRAMELIFT_HOST_READ_AHEAD_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/read-ahead/ReadAheadCache.h"
 )
 
 set(_FRAMELIFT_HOST_UI_SOURCES
@@ -120,6 +123,7 @@ set(FRAMELIFT_HOST_SOURCES
         ${_FRAMELIFT_HOST_PLUGIN_RUNTIME_SOURCES}
         ${_FRAMELIFT_HOST_SETTINGS_SOURCES}
         ${_FRAMELIFT_HOST_SERVICES_SOURCES}
+        ${_FRAMELIFT_HOST_READ_AHEAD_SOURCES}
         ${_FRAMELIFT_HOST_UI_SOURCES}
         ${_FRAMELIFT_HOST_WINDOW_SOURCES}
         ${_FRAMELIFT_HOST_WATCH_SOURCES}

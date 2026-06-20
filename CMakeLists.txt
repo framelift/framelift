@@ -44,6 +44,7 @@ set(FRAMELIFT_HOST_MODULE_INCLUDE_DIRS
         "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime"
         "${CMAKE_SOURCE_DIR}/modules/host/settings"
         "${CMAKE_SOURCE_DIR}/modules/host/services"
+        "${CMAKE_SOURCE_DIR}/modules/host/read-ahead"
         "${CMAKE_SOURCE_DIR}/modules/host/ui"
         "${CMAKE_SOURCE_DIR}/modules/platform/window-sdl"
         "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch"

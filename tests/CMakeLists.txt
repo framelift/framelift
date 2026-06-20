@@ -51,6 +51,7 @@ set(FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/host/plugin-runtime"
         "${FRAMELIFT_ROOT}/modules/host/settings"
         "${FRAMELIFT_ROOT}/modules/host/services"
+        "${FRAMELIFT_ROOT}/modules/host/read-ahead"
         "${FRAMELIFT_ROOT}/modules/host/ui"
         "${FRAMELIFT_ROOT}/modules/platform/window-sdl"
         "${FRAMELIFT_ROOT}/modules/platform/dir-watch"

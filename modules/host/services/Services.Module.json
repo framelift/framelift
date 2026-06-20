@@ -2,7 +2,7 @@
   "fileVersion": 1,
   "id": "framelift.host.services",
   "name": "Host Services",
-  "description": "Host service implementations for hotkeys, focus, file dialogs, fonts, logging, and read-ahead budgets.",
+  "description": "Host service implementations for hotkeys, focus, file dialogs, fonts, and logging.",
   "enabled": true,
   "required": true,
   "provides": {
@@ -11,8 +11,7 @@
       "services.focus",
       "services.file_dialog",
       "services.fonts",
-      "services.logging",
-      "media.read_ahead_cache"
+      "services.logging"
     ]
   },
   "requires": {
