@@ -1,4 +1,5 @@
 #include "FileDialogServiceImpl.h"
+#include "CoreSettings.h"
 #include "Settings.h"
 #include <framelift/platform/IAppWindow.h>
 
@@ -59,8 +60,9 @@ void FileDialogServiceImpl::OpenFile(void (*cb)(const char* path, bool ok, void*
     auto* p = new Payload{cb, ud, appWindow_, eventType_, {}, {}};
     if (settings_)
     {
-        p->sdlFilters.push_back({"Video files", settings_->videoExtensions.c_str()});
-        p->sdlFilters.push_back({"Image files", settings_->imageExtensions.c_str()});
+        const FilesSettings& files = settings_->Get<FilesSettings>();
+        p->sdlFilters.push_back({"Video files", files.videoExtensions.c_str()});
+        p->sdlFilters.push_back({"Image files", files.imageExtensions.c_str()});
     }
 
     SDL_ShowOpenFileDialog(

@@ -1,5 +1,6 @@
 #include "PluginContext.h"
 #include "Settings.h"
+#include "PlaybackSettings.h"
 #include "VideoDecodeMode.h"
 #include <algorithm>
 #include <cstddef>
@@ -12,6 +13,15 @@
 PluginContext::PluginContext(std::string prefPath, Settings* settings, const std::string& settingsPath)
     : prefPath_(std::move(prefPath)), settingsPath_(settingsPath), settings_(settings)
 {
+    // Bind the field registry to the live settings, and snapshot the serialized
+    // defaults from a fresh Settings so EnumerateSettings can report them.
+    settingsRegistry_ = BuildSettingsRegistry(*settings_);
+    Settings defaults;
+    const SettingsRegistry defaultsReg = BuildSettingsRegistry(defaults);
+    for (const auto& f : defaultsReg.Fields())
+    {
+        settingDefaults_.emplace(f.key, f.save());
+    }
 }
 
 // ── Pref path ─────────────────────────────────────────────────────────────────
@@ -63,40 +73,11 @@ void PluginContext::EnumeratePlugins(
     }
 }
 
-void PluginContext::SetPluginEnabled(const char* name, bool enabled) noexcept
+void PluginContext::SetPluginEnabled(const char* /*name*/, bool /*enabled*/) noexcept
 {
-    if (!name)
-    {
-        return;
-    }
-
-    const auto rec = std::ranges::find_if(
-        pluginCatalog_,
-        [&](const PluginRec& r)
-        {
-            return r.name == name;
-        }
-    );
-    if (rec == pluginCatalog_.end())
-    {
-        return; // unknown plugin
-    }
-    rec->enabled = enabled; // reflect immediately so the UI checkbox updates
-
-    auto& list = settings_->enabledPlugins;
-    const auto it = std::ranges::find(list, rec->name);
-    if (enabled && it == list.end())
-    {
-        list.push_back(rec->name);
-    }
-    else if (!enabled && it != list.end())
-    {
-        list.erase(it);
-    }
-
-    // Persist the enabled list only; the toggle takes effect on next launch, so
-    // there is no live state to notify (skip the change-callback fan-out).
-    settings_->Save(settingsPath_);
+    // Plugin enablement is driven entirely by module JSON (a disabled package isn't
+    // built/shipped, so it's absent from Modules/). There is no runtime enabled list
+    // to persist, so this is a non-persistent no-op kept only for ABI stability.
 }
 
 void PluginContext::EnumerateSystemFonts(void (*visit)(const char*, const char*, void*), void* visitUd) const noexcept
@@ -118,99 +99,33 @@ void PluginContext::EnumerateSystemFonts(void (*visit)(const char*, const char*,
 
 // ── Settings getters ──────────────────────────────────────────────────────────
 
-namespace
-{
-// Visit every settings field, invoking fn("section.name", fieldRef) for each.
-// fn is a GENERIC lambda so the per-field `if constexpr` is dependent on the
-// field type and the mismatched branches are correctly discarded (this would NOT
-// hold in a non-template function — float.c_str() etc. would be hard errors).
-template <typename S, typename Fn>
-void ForEachField(S&& settings, Fn&& fn)
-{
-#define X(section, name, type, def, desc) fn(#section "." #name, settings.name);
-    SETTINGS_FIELDS(X)
-#undef X
-}
-} // namespace
-
 float PluginContext::GetSettingFloat(const char* key) const noexcept
 {
-    float result = 0.f;
-    ForEachField(
-        *settings_,
-        [&]<typename T0>(const char* k, const T0& field)
-        {
-            if constexpr (std::is_same_v<std::decay_t<T0>, float>)
-            {
-                if (std::strcmp(key, k) == 0)
-                {
-                    result = field;
-                }
-            }
-        }
-    );
-    return result;
+    const SettingField* f = settingsRegistry_.Find(key);
+    return (f && f->type == SettingType::Float && f->getFloat) ? f->getFloat() : 0.f;
 }
 
 bool PluginContext::GetSettingBool(const char* key) const noexcept
 {
-    bool result = false;
-    ForEachField(
-        *settings_,
-        [&]<typename T0>(const char* k, const T0& field)
-        {
-            if constexpr (std::is_same_v<std::decay_t<T0>, bool>)
-            {
-                if (std::strcmp(key, k) == 0)
-                {
-                    result = field;
-                }
-            }
-        }
-    );
-    return result;
+    const SettingField* f = settingsRegistry_.Find(key);
+    return (f && f->type == SettingType::Bool && f->getBool) ? f->getBool() : false;
 }
 
 int PluginContext::GetSettingInt(const char* key) const noexcept
 {
-    int result = 0;
-    ForEachField(
-        *settings_,
-        [&]<typename T0>(const char* k, const T0& field)
-        {
-            if constexpr (std::is_same_v<std::decay_t<T0>, int>)
-            {
-                if (std::strcmp(key, k) == 0)
-                {
-                    result = field;
-                }
-            }
-        }
-    );
-    return result;
+    const SettingField* f = settingsRegistry_.Find(key);
+    return (f && f->type == SettingType::Int && f->getInt) ? f->getInt() : 0;
 }
 
 int PluginContext::GetSettingString(const char* key, char* buf, int cap) const noexcept
 {
-    const char* val = "";
-    ForEachField(
-        *settings_,
-        [&]<typename T0>(const char* k, const T0& field)
-        {
-            if constexpr (std::is_same_v<std::decay_t<T0>, std::string>)
-            {
-                if (std::strcmp(key, k) == 0)
-                {
-                    val = field.c_str();
-                }
-            }
-        }
-    );
-    const int len = static_cast<int>(std::strlen(val));
+    const SettingField* f = settingsRegistry_.Find(key);
+    const std::string val = (f && f->type == SettingType::String && f->getString) ? f->getString() : std::string();
+    const int len = static_cast<int>(val.size());
     if (buf && cap > 0)
     {
         const int n = len < cap - 1 ? len : cap - 1;
-        std::memcpy(buf, val, static_cast<std::size_t>(n));
+        std::memcpy(buf, val.data(), static_cast<std::size_t>(n));
         buf[n] = '\0';
     }
     return len;
@@ -220,57 +135,34 @@ int PluginContext::GetSettingString(const char* key, char* buf, int cap) const n
 
 void PluginContext::CommitSettingFloat(const char* key, float value) noexcept
 {
-    ForEachField(
-        *settings_,
-        [&]<typename T0>(const char* k, T0& field)
-        {
-            if constexpr (std::is_same_v<std::decay_t<T0>, float>)
-            {
-                if (std::strcmp(key, k) == 0)
-                {
-                    field = value;
-                }
-            }
-        }
-    );
+    const SettingField* f = settingsRegistry_.Find(key);
+    if (f && f->type == SettingType::Float && f->setFloat)
+    {
+        f->setFloat(value);
+    }
 }
 
 void PluginContext::CommitSettingBool(const char* key, bool value) noexcept
 {
-    ForEachField(
-        *settings_,
-        [&]<typename T0>(const char* k, T0& field)
-        {
-            if constexpr (std::is_same_v<std::decay_t<T0>, bool>)
-            {
-                if (std::strcmp(key, k) == 0)
-                {
-                    field = value;
-                }
-            }
-        }
-    );
+    const SettingField* f = settingsRegistry_.Find(key);
+    if (f && f->type == SettingType::Bool && f->setBool)
+    {
+        f->setBool(value);
+    }
     if (std::strcmp(key, "playback.hwdec") == 0)
     {
-        settings_->hwdecMode = VideoDecodeModeName(value ? VideoDecodeMode::Auto : VideoDecodeMode::Off);
+        settings_->Get<PlaybackSettings>().hwdecMode =
+            VideoDecodeModeName(value ? VideoDecodeMode::Auto : VideoDecodeMode::Off);
     }
 }
 
 void PluginContext::CommitSettingInt(const char* key, int value) noexcept
 {
-    ForEachField(
-        *settings_,
-        [&]<typename T0>(const char* k, T0& field)
-        {
-            if constexpr (std::is_same_v<std::decay_t<T0>, int>)
-            {
-                if (std::strcmp(key, k) == 0)
-                {
-                    field = value;
-                }
-            }
-        }
-    );
+    const SettingField* f = settingsRegistry_.Find(key);
+    if (f && f->type == SettingType::Int && f->setInt)
+    {
+        f->setInt(value);
+    }
 }
 
 void PluginContext::CommitSettingString(const char* key, const char* value) noexcept
@@ -279,23 +171,16 @@ void PluginContext::CommitSettingString(const char* key, const char* value) noex
     {
         return;
     }
-    ForEachField(
-        *settings_,
-        [&]<typename T0>(const char* k, T0& field)
-        {
-            if constexpr (std::is_same_v<std::decay_t<T0>, std::string>)
-            {
-                if (std::strcmp(key, k) == 0)
-                {
-                    field = value;
-                }
-            }
-        }
-    );
+    const SettingField* f = settingsRegistry_.Find(key);
+    if (f && f->type == SettingType::String && f->setString)
+    {
+        f->setString(value);
+    }
     if (std::strcmp(key, "playback.hwdecMode") == 0)
     {
-        settings_->hwdecMode = VideoDecodeModeName(VideoDecodeModeFromString(settings_->hwdecMode));
-        settings_->hwdec = IsVideoDecodeModeEnabled(VideoDecodeModeFromString(settings_->hwdecMode));
+        PlaybackSettings& pb = settings_->Get<PlaybackSettings>();
+        pb.hwdecMode = VideoDecodeModeName(VideoDecodeModeFromString(pb.hwdecMode));
+        pb.hwdec = IsVideoDecodeModeEnabled(VideoDecodeModeFromString(pb.hwdecMode));
     }
 }
 
@@ -310,12 +195,6 @@ void PluginContext::SaveSettings() noexcept
     {
         ps->Save();
     }
-}
-
-void PluginContext::CommitSettingsDirect(const Settings& s)
-{
-    *settings_ = s;
-    SaveSettings();
 }
 
 int PluginContext::GetSettingsFilePath(char* buf, int cap) const noexcept
@@ -336,7 +215,8 @@ void PluginContext::ReloadSettings() noexcept
     // its stale in-memory value — "what's in the file is the truth". Re-parse the
     // (possibly hand-edited) file, then re-apply via the same change-callback path
     // that SaveSettings uses (pushes settings into the player, theme, etc.).
-    *settings_ = Settings{};
+    // ResetToDefaults() resets sections in place so settingsRegistry_ stays bound.
+    settings_->ResetToDefaults();
     settings_->Load(settingsPath_);
     for (const auto& rec : changeCallbacks_)
     {
@@ -347,6 +227,23 @@ void PluginContext::ReloadSettings() noexcept
 void PluginContext::RegisterSettingsChangeCallback(void (*cb)(void*), void* ud, void (*cleanup)(void*)) noexcept
 {
     changeCallbacks_.push_back({cb, ud, cleanup});
+}
+
+void PluginContext::EnumerateSettings(
+    void (*visit)(const FrameLiftSettingDesc*, void*), void* visitUd
+) const noexcept
+{
+    if (!visit)
+    {
+        return;
+    }
+    for (const auto& f : settingsRegistry_.Fields())
+    {
+        const auto it = settingDefaults_.find(f.key);
+        const char* defaultValue = it != settingDefaults_.end() ? it->second.c_str() : "";
+        const FrameLiftSettingDesc desc{f.key.c_str(), static_cast<int>(f.type), f.desc.c_str(), defaultValue};
+        visit(&desc, visitUd);
+    }
 }
 
 // ── Plugin settings ───────────────────────────────────────────────────────────

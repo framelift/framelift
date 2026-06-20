@@ -1,13 +1,14 @@
 #pragma once
 #include "FontScan.h"
 #include "PluginSettingsImpl.h"
+#include "SettingsRegistry.h"
 #include <framelift/IPluginContext.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-struct Settings;
+class Settings;
 class UIContext;
 
 // Host-side settings page and keybind entry (STL types OK — host-internal only).
@@ -82,6 +83,10 @@ public:
     int GetSettingsFilePath(char* buf, int cap) const noexcept override;
     void ReloadSettings() noexcept override;
 
+    void EnumerateSettings(
+        void (*visit)(const FrameLiftSettingDesc*, void*), void* visitUd
+    ) const noexcept override;
+
     void RegisterSettingsChangeCallback(void (*cb)(void*), void* ud, void (*cleanup)(void*)) noexcept override;
 
     IPluginSettings& GetPluginSettings(const char* sectionName) noexcept override;
@@ -108,13 +113,11 @@ public:
     // Drop all subscriber/DLL-owned callbacks before FreeLibrary.
     void ClearSubscriptions();
 
-    // SettingsMenu direct access (host-internal, avoids the string-key API).
+    // Host-internal direct access to the live settings (avoids the string-key API).
     [[nodiscard]] Settings& GetSettingsDirect() const
     {
         return *settings_;
     }
-
-    void CommitSettingsDirect(const Settings& s);
 
 protected:
     void* GetServiceRaw(const char* id) const noexcept override;
@@ -128,6 +131,11 @@ private:
     std::string prefPath_;
     std::string settingsPath_;
     Settings* settings_;
+
+    // Field registry bound to *settings_, plus the serialized defaults (for
+    // EnumerateSettings' defaultValue). Built once in the constructor.
+    SettingsRegistry settingsRegistry_;
+    std::unordered_map<std::string, std::string> settingDefaults_;
     std::unordered_map<std::string, void*> registry_;
     std::vector<ChangeCallbackRec> changeCallbacks_;
     std::vector<SubscriptionRec> subscriptions_;
@@ -139,7 +147,7 @@ private:
     struct PluginRec
     {
         std::string name;           // package id / load key — owns stable storage
-        bool enabled;               // in settings_->enabledPlugins (mutated by SetPluginEnabled)
+        bool enabled;               // true once loaded (enablement is JSON/build-time driven)
         bool loadFailed;            // enabled at startup yet not loaded (fixed at build time)
         const FrameLiftPluginInfo* info; // loaded descriptor, or nullptr if not loaded
     };

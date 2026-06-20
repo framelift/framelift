@@ -130,12 +130,14 @@ std::string PackageId(const FrameLiftPluginInfo* info)
 }
 } // namespace
 
-void PluginLoader::LoadAll(const std::string& modulesDir, const std::vector<std::string>& enabled)
+void PluginLoader::LoadAll(const std::string& modulesDir)
 {
     using Clock = std::chrono::steady_clock;
     const auto loadStart = Clock::now();
 
-    std::unordered_map<std::string, PackageCandidate> available;
+    // Open and ABI-check every package present in the directory (dedupe by id).
+    std::vector<PackageCandidate> candidates;
+    std::unordered_map<std::string, std::size_t> seenIds;
     for (const auto& binary : DiscoverPackageBinaries(modulesDir))
     {
         void* const handle = OpenLib(binary.path.c_str());
@@ -162,44 +164,49 @@ void PluginLoader::LoadAll(const std::string& modulesDir, const std::vector<std:
             CloseLib(handle);
             continue;
         }
-
-        const auto [it, inserted] = available.emplace(PackageId(info), PackageCandidate{binary, handle, info});
-        if (!inserted)
+        if (seenIds.contains(PackageId(info)))
         {
             Log::Warn("Plugin package '{}': duplicate package id - skipped", PackageId(info));
             CloseLib(handle);
-        }
-    }
-
-    std::vector<PackageCandidate*> enabledCandidates;
-    std::vector<PluginResolveCandidate> resolveCandidates;
-    for (const auto& packageId : enabled)
-    {
-        const auto it = available.find(packageId);
-        if (it == available.end())
-        {
-            Log::Warn("Plugin package '{}': not found", packageId);
             continue;
         }
+        seenIds.emplace(PackageId(info), candidates.size());
+        candidates.push_back(PackageCandidate{binary, handle, info});
+    }
 
-        enabledCandidates.push_back(&it->second);
-        resolveCandidates.push_back({it->second.info});
+    // Resolve dependencies over every discovered package, then load the accepted
+    // ones in dependency order (providers before consumers).
+    std::vector<PluginResolveCandidate> resolveCandidates;
+    resolveCandidates.reserve(candidates.size());
+    for (const auto& candidate : candidates)
+    {
+        resolveCandidates.push_back({candidate.info});
     }
 
     const std::vector<PluginResolveDecision> decisions =
         ResolvePluginPackages(resolveCandidates, FrameLiftCurrentPlatformId());
 
-    for (std::size_t i = 0; i < enabledCandidates.size(); ++i)
+    std::vector<PluginResolveCandidate> acceptedResolve;
+    std::vector<std::size_t> acceptedIndex;
+    for (std::size_t i = 0; i < candidates.size(); ++i)
     {
-        PackageCandidate& candidate = *enabledCandidates[i];
-        const FrameLiftPluginInfo* const info = candidate.info;
-        if (!decisions[i].accepted)
+        if (decisions[i].accepted)
         {
-            Log::Warn("Plugin package '{}': {} - skipped", PackageId(info), decisions[i].reason);
-            CloseLib(candidate.handle);
-            candidate.handle = nullptr;
-            continue;
+            acceptedResolve.push_back({candidates[i].info});
+            acceptedIndex.push_back(i);
         }
+        else
+        {
+            Log::Warn("Plugin package '{}': {} - skipped", PackageId(candidates[i].info), decisions[i].reason);
+            CloseLib(candidates[i].handle);
+            candidates[i].handle = nullptr;
+        }
+    }
+
+    for (const std::size_t orderIdx : OrderPluginPackages(acceptedResolve))
+    {
+        PackageCandidate& candidate = candidates[acceptedIndex[orderIdx]];
+        const FrameLiftPluginInfo* const info = candidate.info;
 
         const auto pluginStart = Clock::now();
         using CreateFn = IModule* (*)();
@@ -252,7 +259,7 @@ void PluginLoader::LoadAll(const std::string& modulesDir, const std::vector<std:
         );
     }
 
-    for (auto& [_, candidate] : available)
+    for (auto& candidate : candidates)
     {
         if (candidate.handle)
         {

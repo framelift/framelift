@@ -15,6 +15,7 @@
     "modules": [
       "framelift.host.graphics_core",
       "framelift.host.ffmpeg",
+      "framelift.host.read_ahead",
       "framelift.host.ui"
     ],
     "features": []

@@ -5,7 +5,7 @@
 
 TEST(SettingsMappingTest, AudioParamsFromDefaults)
 {
-    const Settings s;
+    const AudioSettings s;
     const AudioNormalizeParams p = ParamsFromSettings(s);
     EXPECT_EQ(p.frameLen, s.dynaudnormFrameLen);
     EXPECT_EQ(p.gaussSize, s.dynaudnormGaussSize);
@@ -16,7 +16,7 @@ TEST(SettingsMappingTest, AudioParamsFromDefaults)
 
 TEST(SettingsMappingTest, AudioParamsTrackEditedSettings)
 {
-    Settings s;
+    AudioSettings s;
     s.dynaudnormFrameLen = 321;
     s.dynaudnormVolume = 2.25f;
     const AudioNormalizeParams p = ParamsFromSettings(s);
@@ -26,7 +26,7 @@ TEST(SettingsMappingTest, AudioParamsTrackEditedSettings)
 
 TEST(SettingsMappingTest, AudioPreferencesMapDefaults)
 {
-    const Settings s;
+    const AudioSettings s;
     const AudioPreferences p = AudioPrefsFromSettings(s);
     EXPECT_STREQ(p.preferredLang, "");
     EXPECT_STREQ(p.outputDevice, "");
@@ -39,8 +39,8 @@ TEST(SettingsMappingTest, AudioPreferencesMapDefaults)
 
 TEST(SettingsMappingTest, AudioPreferencesClampAndCopyFields)
 {
-    Settings s;
-    s.defaultAudioLanguage = "english-too-long";
+    AudioSettings s;
+    s.defaultLanguage = "english-too-long";
     s.outputDevice = "Headphones";
     s.defaultVolume = 150;
     s.syncOffsetMs = -125;
@@ -68,7 +68,7 @@ TEST(SettingsMappingTest, AudioChannelModeMapsToOutputChannels)
 
 TEST(SettingsMappingTest, PlaybackOptionsMapBooleans)
 {
-    Settings s;
+    PlaybackSettings s;
     s.hwdec = false;
     s.hwdecMode = "off";
     s.hrSeek = true;
@@ -84,7 +84,7 @@ TEST(SettingsMappingTest, PlaybackOptionsMapBooleans)
 
 TEST(SettingsMappingTest, PlaybackOptionsTreatHwdecModeOffAsDisabled)
 {
-    Settings s;
+    PlaybackSettings s;
     s.hwdec = true;
     s.hwdecMode = "off";
 
@@ -95,7 +95,7 @@ TEST(SettingsMappingTest, PlaybackOptionsTreatHwdecModeOffAsDisabled)
 
 TEST(SettingsMappingTest, VideoDecodeModeMapsFromSettings)
 {
-    Settings s;
+    PlaybackSettings s;
     s.hwdecMode = "vulkan-zero-copy";
     EXPECT_EQ(VideoDecodeModeFromSettings(s), VideoDecodeMode::VulkanZeroCopy);
 
@@ -105,7 +105,7 @@ TEST(SettingsMappingTest, VideoDecodeModeMapsFromSettings)
 
 TEST(SettingsMappingTest, ReadAheadDefaultsConvertMbToBytes)
 {
-    const Settings s;
+    const CacheSettings s;
     const ReadAheadCacheOptions o = ReadAheadOptsFromSettings(s);
     EXPECT_TRUE(o.enabled);
     EXPECT_EQ(o.maxBytes, static_cast<int64_t>(s.readAheadSizeMB) * 1024 * 1024);
@@ -113,7 +113,7 @@ TEST(SettingsMappingTest, ReadAheadDefaultsConvertMbToBytes)
 
 TEST(SettingsMappingTest, ReadAheadTracksEditedSettings)
 {
-    Settings s;
+    CacheSettings s;
     s.readAheadEnabled = false;
     s.readAheadSizeMB = 128;
     const ReadAheadCacheOptions o = ReadAheadOptsFromSettings(s);
@@ -123,7 +123,7 @@ TEST(SettingsMappingTest, ReadAheadTracksEditedSettings)
 
 TEST(SettingsMappingTest, ReadAheadClampsNegativeSizeToZero)
 {
-    Settings s;
+    CacheSettings s;
     s.readAheadSizeMB = -10;
     const ReadAheadCacheOptions o = ReadAheadOptsFromSettings(s);
     EXPECT_EQ(o.maxBytes, 0);
@@ -131,8 +131,8 @@ TEST(SettingsMappingTest, ReadAheadClampsNegativeSizeToZero)
 
 TEST(SettingsMappingTest, SubtitleColorsPackToAssRgba)
 {
-    Settings s;
-    s.textColor = "#FF8040";   // R=255 G=128 B=64
+    SubtitleSettings s;
+    s.textColor = "#FF8040"; // R=255 G=128 B=64
     s.outlineColor = "#000000";
     const SubtitleStyle st = SubtitleStyleFromSettings(s);
     // 0xRRGGBBAA, AA = transparency; text/outline are fully opaque (AA = 0x00).
@@ -142,7 +142,7 @@ TEST(SettingsMappingTest, SubtitleColorsPackToAssRgba)
 
 TEST(SettingsMappingTest, SubtitleBackOpacityFoldsIntoAlpha)
 {
-    Settings s;
+    SubtitleSettings s;
     s.backColor = "#102030";
     s.backOpacity = 1.0f; // fully opaque ⇒ alpha byte 0x00
     EXPECT_EQ(SubtitleStyleFromSettings(s).backColor, 0x102030'00u);
@@ -156,14 +156,14 @@ TEST(SettingsMappingTest, SubtitleBackOpacityFoldsIntoAlpha)
 
 TEST(SettingsMappingTest, SubtitleStyleTracksFieldsAndDefaults)
 {
-    const Settings def;
+    const SubtitleSettings def;
     const SubtitleStyle dst = SubtitleStyleFromSettings(def);
     EXPECT_FALSE(dst.overrideEnabled);
     EXPECT_EQ(dst.edgeStyle, SubtitleEdgeStyle::Outline);
     EXPECT_EQ(dst.alignment, 2);
     EXPECT_STREQ(dst.fontFamily, "");
 
-    Settings s;
+    SubtitleSettings s;
     s.overrideStyle = true;
     s.fontScale = 1.5f;
     s.fontFamily = "Arial";
@@ -183,7 +183,7 @@ TEST(SettingsMappingTest, SubtitleStyleTracksFieldsAndDefaults)
 
 TEST(SettingsMappingTest, SubtitleAlignmentClampsOutOfRangeToFileDefault)
 {
-    Settings s;
+    SubtitleSettings s;
     s.alignment = 42; // invalid \an value
     EXPECT_EQ(SubtitleStyleFromSettings(s).alignment, 0);
 }

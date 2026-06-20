@@ -1,6 +1,6 @@
 #pragma once
 
-struct Settings;
+#include "ThemeSettings.h"
 
 // ── Host-side theme application ───────────────────────────────────────────────
 // Applies the user's theme settings to the live Dear ImGui context. Both calls
@@ -9,12 +9,12 @@ struct Settings;
 namespace Theme
 {
 // Apply the base preset (Dark/Light/Classic) then retint accent-bearing colors
-// from settings.accentColor. Cheap; safe to call every time the style changes.
-void ApplyStyle(const Settings& s);
+// from s.accentColor. Cheap; safe to call every time the style changes.
+void ApplyStyle(const ThemeSettings& s);
 
-// Rebuild the font atlas from settings.fontFile/fontSize and re-upload the GPU
-// font texture. Falls back to the embedded default font (at the requested size)
-// when no/invalid font file is set. Relatively expensive — call only when the
-// font settings actually change.
-void RebuildFonts(const Settings& s);
+// Rebuild the font atlas from s.fontFile/fontSize and re-upload the GPU font
+// texture. Falls back to the embedded default font (at the requested size) when
+// no/invalid font file is set. Relatively expensive — call only when the font
+// settings actually change.
+void RebuildFonts(const ThemeSettings& s);
 } // namespace Theme

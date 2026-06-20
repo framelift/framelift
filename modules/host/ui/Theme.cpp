@@ -1,6 +1,5 @@
 #include "Theme.h"
 
-#include "Settings.h"
 #include "ThemeUtil.h"
 
 #include "FontData.h"
@@ -47,7 +46,7 @@ constexpr ImGuiCol kAccentSlots[] = {
 };
 } // namespace
 
-void Theme::ApplyStyle(const Settings& s)
+void Theme::ApplyStyle(const ThemeSettings& s)
 {
     if (ThemeUtil::PresetIndex(s.preset.c_str()) == 1)
     {
@@ -74,7 +73,7 @@ void Theme::ApplyStyle(const Settings& s)
     }
 }
 
-void Theme::RebuildFonts(const Settings& s)
+void Theme::RebuildFonts(const ThemeSettings& s)
 {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();

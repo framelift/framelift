@@ -1,6 +1,10 @@
 #include "PluginResolver.h"
+#include <algorithm>
+#include <cstddef>
+#include <set>
 #include <string>
 #include <unordered_set>
+#include <utility>
 
 namespace
 {
@@ -158,4 +162,113 @@ std::vector<PluginResolveDecision> ResolvePluginPackages(
     }
 
     return decisions;
+}
+
+std::vector<std::size_t> OrderPluginPackages(const std::vector<PluginResolveCandidate>& candidates)
+{
+    const std::size_t n = candidates.size();
+
+    // Per package: the set of tokens it provides (module ids + features) and the set
+    // it depends on (requires + optional, modules + features).
+    std::vector<std::unordered_set<std::string>> provides(n);
+    std::vector<std::unordered_set<std::string>> needs(n);
+    std::vector<std::string> ids(n);
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const FrameLiftPluginInfo* info = candidates[i].info;
+        ids[i] = PackageId(info);
+        if (!info)
+        {
+            continue;
+        }
+        for (int m = 0; m < info->moduleCount; ++m)
+        {
+            const FrameLiftModuleInfo& module = info->modules[m];
+            if (module.id && module.id[0])
+            {
+                provides[i].emplace(module.id);
+            }
+            AddAll(provides[i], module.providesFeatures);
+            AddAll(needs[i], module.requiresModules);
+            AddAll(needs[i], module.requiresFeatures);
+            AddAll(needs[i], module.optionalModules);
+            AddAll(needs[i], module.optionalFeatures);
+        }
+    }
+
+    // Edge i → j when consumer j depends on a token provider i offers. Dedupe edges
+    // so indegree counts distinct predecessors.
+    std::vector<std::set<std::size_t>> succ(n);
+    std::vector<int> indeg(n, 0);
+    for (std::size_t j = 0; j < n; ++j)
+    {
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            if (i == j)
+            {
+                continue;
+            }
+            bool dependsOnI = false;
+            for (const auto& token : needs[j])
+            {
+                if (provides[i].contains(token))
+                {
+                    dependsOnI = true;
+                    break;
+                }
+            }
+            if (dependsOnI && succ[i].insert(j).second)
+            {
+                ++indeg[j];
+            }
+        }
+    }
+
+    // Kahn's algorithm, draining zero-indegree nodes in ascending package-id order
+    // for determinism. Any nodes left in a cycle are appended by package-id order.
+    std::vector<std::size_t> order;
+    order.reserve(n);
+    std::vector<bool> done(n, false);
+    while (order.size() < n)
+    {
+        std::size_t pick = n;
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            if (done[i] || indeg[i] != 0)
+            {
+                continue;
+            }
+            if (pick == n || ids[i] < ids[pick])
+            {
+                pick = i;
+            }
+        }
+        if (pick == n)
+        {
+            // Cycle: append the remaining nodes in package-id order and stop.
+            std::vector<std::size_t> rest;
+            for (std::size_t i = 0; i < n; ++i)
+            {
+                if (!done[i])
+                {
+                    rest.push_back(i);
+                }
+            }
+            std::ranges::sort(rest, [&](std::size_t a, std::size_t b) { return ids[a] < ids[b]; });
+            for (const std::size_t i : rest)
+            {
+                order.push_back(i);
+            }
+            break;
+        }
+
+        done[pick] = true;
+        order.push_back(pick);
+        for (const std::size_t s : succ[pick])
+        {
+            --indeg[s];
+        }
+    }
+
+    return order;
 }

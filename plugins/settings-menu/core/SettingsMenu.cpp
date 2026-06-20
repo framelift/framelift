@@ -79,13 +79,6 @@ bool HasNvidiaAdapter(const IPluginContext* ctx)
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
-void SettingsMenu::SetStoragePath(std::string path)
-{
-    storagePath_ = std::move(path);
-    settings_.Load(storagePath_);
-    saved_ = settings_;
-}
-
 std::vector<framelift::Keybind> SettingsMenu::Keybinds()
 {
     return {
@@ -96,40 +89,59 @@ std::vector<framelift::Keybind> SettingsMenu::Keybinds()
     };
 }
 
+void SettingsMenu::SeedValue(IPluginContext& ctx, const FieldMeta& f)
+{
+    // Pull one field's current host value into the editing model, by type tag.
+    switch (f.type)
+    {
+    case 0: // bool
+        model_.Bool(f.key) = ctx.GetSettingBool(f.key.c_str());
+        break;
+    case 1: // int
+        model_.Int(f.key) = ctx.GetSettingInt(f.key.c_str());
+        break;
+    case 2: // float
+        model_.Float(f.key) = ctx.GetSettingFloat(f.key.c_str());
+        break;
+    case 3: // string
+    {
+        const int n = ctx.GetSettingString(f.key.c_str(), nullptr, 0);
+        std::string s(static_cast<std::size_t>(n), '\0');
+        if (n > 0)
+        {
+            ctx.GetSettingString(f.key.c_str(), s.data(), n + 1);
+        }
+        model_.Str(f.key) = std::move(s);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void SettingsMenu::SeedFromContext(IPluginContext& ctx)
 {
-    // Seed the editing model from the authoritative host settings via the
-    // ABI-stable per-key getters (no Settings struct crosses the boundary).
-    auto load = [&]<typename T0>(const char* key, T0& field)
+    // Discover every host settings field over the ABI (no Settings struct crosses
+    // the boundary), then seed the editing model with the current values.
+    fields_.clear();
+    model_.Clear();
+
+    struct SeedCtx
     {
-        using T = std::decay_t<T0>;
-        if constexpr (std::is_same_v<T, float>)
-        {
-            field = ctx.GetSettingFloat(key);
-        }
-        else if constexpr (std::is_same_v<T, bool>)
-        {
-            field = ctx.GetSettingBool(key);
-        }
-        else if constexpr (std::is_same_v<T, int>)
-        {
-            field = ctx.GetSettingInt(key);
-        }
-        else if constexpr (std::is_same_v<T, std::string>)
-        {
-            const int n = ctx.GetSettingString(key, nullptr, 0);
-            std::string s(static_cast<std::size_t>(n), '\0');
-            if (n > 0)
-            {
-                ctx.GetSettingString(key, s.data(), n + 1);
-            }
-            field = std::move(s);
-        }
+        SettingsMenu* self;
+        IPluginContext* ctx;
     };
-#define X(section, name, type, def, desc) load(#section "." #name, settings_.name);
-    SETTINGS_FIELDS(X)
-#undef X
-    saved_ = settings_;
+    SeedCtx sc{this, &ctx};
+    ctx.EnumerateSettings(
+        [](const FrameLiftSettingDesc* d, void* ud)
+        {
+            auto& sc = *static_cast<SeedCtx*>(ud);
+            FieldMeta meta{d->key ? d->key : "", d->type, d->defaultValue ? d->defaultValue : ""};
+            sc.self->SeedValue(*sc.ctx, meta);
+            sc.self->fields_.push_back(std::move(meta));
+        },
+        &sc
+    );
     dirty_ = false;
 }
 
@@ -189,8 +201,8 @@ void SettingsMenu::RegisterCorePages(IPluginContext& ctx)
         {this, &SettingsMenu::RenderPageConfig, "Config", nullptr},
     }};
 
-    // applyFn is null: core fields are committed wholesale in Save() via the
-    // SETTINGS_FIELDS macro, so no per-page apply is needed.
+    // applyFn is null: core fields are committed wholesale in Save() by iterating
+    // the ABI-discovered field list, so no per-page apply is needed.
     for (auto& page : corePages_)
     {
         ctx.RegisterSettingsPage(page.title, &CoreRenderThunk, nullptr, &page, true, nullptr);
@@ -284,71 +296,94 @@ void SettingsMenu::Close() noexcept
     }
 }
 
-void SettingsMenu::RegisterChangeCallback(std::function<void(const Settings&)> cb)
-{
-    changeCallbacks_.push_back(std::move(cb));
-}
-
 // ── Internal helpers ─────────────────────────────────────────────────────────────
 
 void SettingsMenu::Save()
 {
-    saved_ = settings_;
     dirty_ = false;
-    if (ctx_)
+    if (!ctx_)
     {
-        // Call all plugin applyFns first so plugin settings are written before SaveSettings().
-        ctx_->EnumerateSettingsPages(
-            [](const char*, void (*)(void*, UIContext&), void (*applyFn)(void*), void* ud, bool, void*)
-            {
-                if (applyFn)
-                {
-                    applyFn(ud);
-                }
-            },
-            nullptr
-        );
+        return;
+    }
 
-        // Commit each typed settings field via the ABI-stable per-key API.
-        // Generic lambda → the per-field if constexpr is dependent and discards
-        // mismatched branches correctly (a plain function body would hard-check them).
-        auto commit = [&]<typename T0>(const char* key, const T0& field)
+    // Call all plugin applyFns first so plugin settings are written before SaveSettings().
+    ctx_->EnumerateSettingsPages(
+        [](const char*, void (*)(void*, UIContext&), void (*applyFn)(void*), void* ud, bool, void*)
         {
-            using T = std::decay_t<T0>;
-            if constexpr (std::is_same_v<T, float>)
+            if (applyFn)
             {
-                ctx_->CommitSettingFloat(key, field);
+                applyFn(ud);
             }
-            else if constexpr (std::is_same_v<T, bool>)
-            {
-                ctx_->CommitSettingBool(key, field);
-            }
-            else if constexpr (std::is_same_v<T, int>)
-            {
-                ctx_->CommitSettingInt(key, field);
-            }
-            else if constexpr (std::is_same_v<T, std::string>)
-            {
-                ctx_->CommitSettingString(key, field.c_str());
-            }
-        };
-#define X(section, name, type, def, desc) commit(#section "." #name, settings_.name);
-        SETTINGS_FIELDS(X)
-#undef X
-        ctx_->SaveSettings();
-    }
-    else if (!storagePath_.empty())
+        },
+        nullptr
+    );
+
+    // Commit each discovered field via the ABI-stable per-key API, by type tag.
+    for (const auto& f : fields_)
     {
-        settings_.Save(storagePath_);
+        switch (f.type)
+        {
+        case 0:
+            ctx_->CommitSettingBool(f.key.c_str(), model_.Bool(f.key));
+            break;
+        case 1:
+            ctx_->CommitSettingInt(f.key.c_str(), model_.Int(f.key));
+            break;
+        case 2:
+            ctx_->CommitSettingFloat(f.key.c_str(), model_.Float(f.key));
+            break;
+        case 3:
+            ctx_->CommitSettingString(f.key.c_str(), model_.Str(f.key).c_str());
+            break;
+        default:
+            break;
+        }
     }
-    FireChangeCallbacks();
+    ctx_->SaveSettings();
+}
+
+void SettingsMenu::ResetValue(const FieldMeta& f)
+{
+    switch (f.type)
+    {
+    case 0:
+        model_.Bool(f.key) = (f.defaultValue == "1");
+        break;
+    case 1:
+        try
+        {
+            model_.Int(f.key) = std::stoi(f.defaultValue);
+        }
+        catch (...)
+        {
+            model_.Int(f.key) = 0;
+        }
+        break;
+    case 2:
+        try
+        {
+            model_.Float(f.key) = std::stof(f.defaultValue);
+        }
+        catch (...)
+        {
+            model_.Float(f.key) = 0.f;
+        }
+        break;
+    case 3:
+        model_.Str(f.key) = f.defaultValue;
+        break;
+    default:
+        break;
+    }
 }
 
 void SettingsMenu::Reset()
 {
-    settings_ = Settings{};
+    for (const auto& f : fields_)
+    {
+        ResetValue(f);
+    }
     dirty_ = true;
-    FireChangeCallbacks();
 }
 
 const char* SettingsMenu::PageName() const
@@ -415,24 +450,22 @@ void SettingsMenu::ResetPage()
         return; // plugin pages have no per-page reset
     }
     const char* const sec0 = static_cast<const CorePage*>(s.ud)->resetSection;
+    if (!sec0)
+    {
+        return;
+    }
 
-    const Settings defaults{};
-#define X(section, name, type, def, desc)                                                                             \
-    if (sec0 && strcmp(#section, sec0) == 0)                                                                           \
-        settings_.name = defaults.name;
-    SETTINGS_FIELDS(X)
-#undef X
+    // Reset every discovered field whose key is in this page's section.
+    const std::string prefix = std::string(sec0) + ".";
+    for (const auto& f : fields_)
+    {
+        if (f.key.compare(0, prefix.size(), prefix) == 0)
+        {
+            ResetValue(f);
+        }
+    }
 
     dirty_ = true;
-    FireChangeCallbacks();
-}
-
-void SettingsMenu::FireChangeCallbacks() const
-{
-    for (const auto& cb : changeCallbacks_)
-    {
-        cb(settings_);
-    }
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -493,7 +526,7 @@ void SettingsMenu::RenderPageGeneral(UIContext& ctx)
     Widgets::SectionHeader(ctx, "Window");
     dirty_ |= Widgets::SliderFloat(
         ctx, "Max display ratio", "Maximum fraction of the display the window may occupy (0.3 – 1.0).",
-        settings_.maxDisplayRatio, 0.3f, 1.0f
+        model_.Float("general.maxDisplayRatio"), 0.3f, 1.0f
     );
 }
 
@@ -503,7 +536,7 @@ void SettingsMenu::RenderPageGraphics(UIContext& ctx)
 
 #if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     // backend stores "vulkan" or "gl"; map to/from the combo index.
-    const bool isVulkan = settings_.backend == "vulkan" || settings_.backend == "vk" || settings_.backend == "Vulkan";
+    const bool isVulkan = model_.Str("graphics.backend") == "vulkan" || model_.Str("graphics.backend") == "vk" || model_.Str("graphics.backend") == "Vulkan";
     const char* const items[] = {"Vulkan", "OpenGL"};
     int idx = isVulkan ? 0 : 1;
     if (Widgets::Combo(
@@ -513,22 +546,22 @@ void SettingsMenu::RenderPageGraphics(UIContext& ctx)
             items, 2, idx
         ))
     {
-        settings_.backend = idx == 0 ? "vulkan" : "gl";
+        model_.Str("graphics.backend") = idx == 0 ? "vulkan" : "gl";
         dirty_ = true;
     }
 #else
     const char* const items[] = {"OpenGL"};
     int idx = 0;
-    if (settings_.backend != "gl")
+    if (model_.Str("graphics.backend") != "gl")
     {
-        settings_.backend = "gl";
+        model_.Str("graphics.backend") = "gl";
         dirty_ = true;
     }
     if (Widgets::Combo(
             ctx, "Backend", "Graphics API used for video + UI rendering. Takes effect after a restart.", items, 1, idx
         ))
     {
-        settings_.backend = "gl";
+        model_.Str("graphics.backend") = "gl";
         dirty_ = true;
     }
 #endif
@@ -554,7 +587,7 @@ void SettingsMenu::RenderPagePlayback(UIContext& ctx)
     for (std::size_t i = 0; i < visibleModes.size(); ++i)
     {
         labels.push_back(visibleModes[i]->label);
-        if (settings_.hwdecMode == visibleModes[i]->value)
+        if (model_.Str("playback.hwdecMode") == visibleModes[i]->value)
         {
             decodeIdx = static_cast<int>(i);
         }
@@ -566,30 +599,30 @@ void SettingsMenu::RenderPagePlayback(UIContext& ctx)
             labels.data(), static_cast<int>(labels.size()), decodeIdx
         ))
     {
-        settings_.hwdecMode = visibleModes[static_cast<std::size_t>(decodeIdx)]->value;
-        settings_.hwdec = settings_.hwdecMode != "off";
+        model_.Str("playback.hwdecMode") = visibleModes[static_cast<std::size_t>(decodeIdx)]->value;
+        model_.Bool("playback.hwdec") = model_.Str("playback.hwdecMode") != "off";
         dirty_ = true;
     }
     dirty_ |= Widgets::Checkbox(
         ctx, "High-precision seeking",
         "Seek to the exact requested frame instead of the nearest keyframe. "
         "Disable for faster seeking on large files.",
-        settings_.hrSeek
+        model_.Bool("playback.hrSeek")
     );
     dirty_ |= Widgets::Checkbox(
         ctx, "Sync video to display",
         "Resample audio to stay in sync with the display refresh rate (display-resample). "
         "Disable to use audio-driven sync instead.",
-        settings_.videoSync
+        model_.Bool("playback.videoSync")
     );
     Widgets::SectionHeader(ctx, "Auto-load");
     dirty_ |= Widgets::Checkbox(
         ctx, "Subtitle files", "Automatically load external subtitle files found in the same directory.",
-        settings_.subAutoLoad
+        model_.Bool("playback.subAutoLoad")
     );
     dirty_ |= Widgets::Checkbox(
         ctx, "External audio files", "Automatically load external audio files found in the same directory.",
-        settings_.audioFileAutoLoad
+        model_.Bool("playback.audioFileAutoLoad")
     );
 }
 
@@ -617,7 +650,7 @@ void SettingsMenu::RenderPageSubtitles(UIContext& ctx)
         ctx, "Override subtitle styling",
         "Apply the options below on top of each file's own subtitle style. "
         "When off, subtitles render exactly as authored.",
-        settings_.overrideStyle
+        model_.Bool("subtitles.overrideStyle")
     );
 
     EnsureFontsQueried();
@@ -626,7 +659,7 @@ void SettingsMenu::RenderPageSubtitles(UIContext& ctx)
     int familyIdx = 0;
     for (std::size_t i = 1; i < fontNames_.size(); ++i)
     {
-        if (fontNames_[i] == settings_.fontFamily)
+        if (fontNames_[i] == model_.Str("subtitles.fontFamily"))
         {
             familyIdx = static_cast<int>(i);
             break;
@@ -644,59 +677,59 @@ void SettingsMenu::RenderPageSubtitles(UIContext& ctx)
             families.data(), static_cast<int>(families.size()), familyIdx
         ))
     {
-        settings_.fontFamily = familyIdx == 0 ? "" : fontNames_[familyIdx];
+        model_.Str("subtitles.fontFamily") = familyIdx == 0 ? "" : fontNames_[familyIdx];
         dirty_ = true;
     }
 
     dirty_ |= Widgets::SliderFloat(
-        ctx, "Font size", "Multiplier applied to the file's subtitle size.", settings_.fontScale, 0.5f, 3.0f
+        ctx, "Font size", "Multiplier applied to the file's subtitle size.", model_.Float("subtitles.fontScale"), 0.5f, 3.0f
     );
 
-    colorRow("Text color", "Primary fill color of the subtitle glyphs.", settings_.textColor);
-    colorRow("Outline color", "Color of the outline / border around glyphs.", settings_.outlineColor);
+    colorRow("Text color", "Primary fill color of the subtitle glyphs.", model_.Str("subtitles.textColor"));
+    colorRow("Outline color", "Color of the outline / border around glyphs.", model_.Str("subtitles.outlineColor"));
 
     Widgets::SectionHeader(ctx, "Edges & background");
     const char* const edgeItems[] = {"None", "Outline", "Drop shadow", "Opaque box"};
-    int edgeIdx = std::clamp(settings_.edgeStyle, 0, 3);
+    int edgeIdx = std::clamp(model_.Int("subtitles.edgeStyle"), 0, 3);
     if (Widgets::Combo(ctx, "Edge style", "How glyphs are separated from the video.", edgeItems, 4, edgeIdx))
     {
-        settings_.edgeStyle = edgeIdx;
+        model_.Int("subtitles.edgeStyle") = edgeIdx;
         dirty_ = true;
     }
     dirty_ |= Widgets::SliderFloat(ctx, "Outline width", "Outline / box border thickness in pixels.",
-                                   settings_.outlineWidth, 0.f, 6.f);
-    dirty_ |= Widgets::SliderFloat(ctx, "Shadow depth", "Drop-shadow / box offset in pixels.", settings_.shadowDepth,
+                                   model_.Float("subtitles.outlineWidth"), 0.f, 6.f);
+    dirty_ |= Widgets::SliderFloat(ctx, "Shadow depth", "Drop-shadow / box offset in pixels.", model_.Float("subtitles.shadowDepth"),
                                    0.f, 6.f);
-    colorRow("Background color", "Drop-shadow / opaque-box color.", settings_.backColor);
+    colorRow("Background color", "Drop-shadow / opaque-box color.", model_.Str("subtitles.backColor"));
     dirty_ |= Widgets::SliderFloat(ctx, "Background opacity", "Opacity of the shadow / box (0 = transparent).",
-                                   settings_.backOpacity, 0.f, 1.f);
+                                   model_.Float("subtitles.backOpacity"), 0.f, 1.f);
 
     Widgets::SectionHeader(ctx, "Layout");
     // Alignment combo maps the numpad value (1-9) plus a "file default" (0) entry.
     const char* const alignItems[] = {"File default", "Bottom left", "Bottom center", "Bottom right",
                                        "Middle left",  "Middle center", "Middle right",
                                        "Top left",     "Top center",    "Top right"};
-    int alignIdx = (settings_.alignment >= 1 && settings_.alignment <= 9) ? settings_.alignment : 0;
+    int alignIdx = (model_.Int("subtitles.alignment") >= 1 && model_.Int("subtitles.alignment") <= 9) ? model_.Int("subtitles.alignment") : 0;
     if (Widgets::Combo(ctx, "Alignment", "On-screen position of the subtitles.", alignItems, 10, alignIdx))
     {
-        settings_.alignment = alignIdx; // 0 = file default, 1-9 = \an position
+        model_.Int("subtitles.alignment") = alignIdx; // 0 = file default, 1-9 = \an position
         dirty_ = true;
     }
-    dirty_ |= Widgets::SliderFloat(ctx, "Line spacing", "Extra space between lines, pixels.", settings_.lineSpacing,
+    dirty_ |= Widgets::SliderFloat(ctx, "Line spacing", "Extra space between lines, pixels.", model_.Float("subtitles.lineSpacing"),
                                    0.f, 30.f);
     dirty_ |= Widgets::SliderFloat(ctx, "Letter spacing", "Extra space between glyphs, pixels.",
-                                   settings_.letterSpacing, 0.f, 20.f);
+                                   model_.Float("subtitles.letterSpacing"), 0.f, 20.f);
 
     Widgets::SectionHeader(ctx, "Track selection");
     dirty_ |= Widgets::InputText(
         ctx, "Preferred language",
         "Auto-select a subtitle track in this language when loading a file (ISO 639 code, e.g. eng). "
         "Empty = no preference.",
-        settings_.defaultLanguage
+        model_.Str("subtitles.defaultLanguage")
     );
     dirty_ |= Widgets::Checkbox(
         ctx, "Prefer forced subtitles", "When a file has a forced subtitle track, select it on load.",
-        settings_.preferForced
+        model_.Bool("subtitles.preferForced")
     );
 
     ctx.Dummy({0.f, 6.f});
@@ -710,13 +743,13 @@ void SettingsMenu::RenderPageCache(UIContext& ctx)
         ctx, "Read-ahead enabled",
         "Prefetch upcoming demuxed packets to smooth playback and reduce stalls. "
         "Disable to fall back to a small fixed packet buffer.",
-        settings_.readAheadEnabled
+        model_.Bool("cache.readAheadEnabled")
     );
     dirty_ |= Widgets::SliderInt(
         ctx, "Cache size",
         "Memory budget for the read-ahead buffer in MB, shared across audio/video/subtitle. "
         "Larger values prefetch further ahead at the cost of memory (default: 64).",
-        settings_.readAheadSizeMB, 8, 512
+        model_.Int("cache.readAheadSizeMB"), 8, 512
     );
 }
 
@@ -724,10 +757,10 @@ void SettingsMenu::RenderPageUI(UIContext& ctx)
 {
     Widgets::SectionHeader(ctx, "Side panel");
     dirty_ |= Widgets::SliderFloat(
-        ctx, "Panel width", "Width of the side panel in pixels.", settings_.panelWidth, 160.f, 600.f
+        ctx, "Panel width", "Width of the side panel in pixels.", model_.Float("ui.panelWidth"), 160.f, 600.f
     );
     dirty_ |=
-        Widgets::SliderFloat(ctx, "Slide speed", "How fast the panel slides in/out.", settings_.slideSpeed, 1.f, 50.f);
+        Widgets::SliderFloat(ctx, "Slide speed", "How fast the panel slides in/out.", model_.Float("ui.slideSpeed"), 1.f, 50.f);
 }
 
 void SettingsMenu::EnsureFontsQueried()
@@ -766,16 +799,16 @@ void SettingsMenu::RenderPageTheme(UIContext& ctx)
 
     // Base preset.
     const char* const presetItems[] = {"Dark", "Light"};
-    int presetIdx = ThemeUtil::PresetIndex(settings_.preset.c_str());
+    int presetIdx = ThemeUtil::PresetIndex(model_.Str("theme.preset").c_str());
     if (Widgets::Combo(ctx, "Base style", "Built-in Dear ImGui color preset.", presetItems, 2, presetIdx))
     {
-        settings_.preset = ThemeUtil::PresetNames[presetIdx];
+        model_.Str("theme.preset") = ThemeUtil::PresetNames[presetIdx];
         dirty_ = true;
     }
 
     // Accent color.
     float rgb[3];
-    if (!ThemeUtil::ParseHexColor(settings_.accentColor.c_str(), rgb))
+    if (!ThemeUtil::ParseHexColor(model_.Str("theme.accentColor").c_str(), rgb))
     {
         ThemeUtil::ParseHexColor("#4296FA", rgb);
     }
@@ -783,7 +816,7 @@ void SettingsMenu::RenderPageTheme(UIContext& ctx)
     {
         char hex[8];
         ThemeUtil::FormatHexColor(rgb, hex);
-        settings_.accentColor = hex;
+        model_.Str("theme.accentColor") = hex;
         dirty_ = true;
     }
 
@@ -795,7 +828,7 @@ void SettingsMenu::RenderPageTheme(UIContext& ctx)
     int fontIdx = 0;
     for (std::size_t i = 0; i < fontPaths_.size(); ++i)
     {
-        if (fontPaths_[i] == settings_.fontFile)
+        if (fontPaths_[i] == model_.Str("theme.fontFile"))
         {
             fontIdx = static_cast<int>(i);
             break;
@@ -811,9 +844,9 @@ void SettingsMenu::RenderPageTheme(UIContext& ctx)
         items.push_back(n.c_str());
     }
     std::string staleName;
-    if (fontIdx == 0 && !settings_.fontFile.empty())
+    if (fontIdx == 0 && !model_.Str("theme.fontFile").empty())
     {
-        staleName = settings_.fontFile.substr(settings_.fontFile.find_last_of("/\\") + 1);
+        staleName = model_.Str("theme.fontFile").substr(model_.Str("theme.fontFile").find_last_of("/\\") + 1);
         items.push_back(staleName.c_str());
         fontIdx = static_cast<int>(items.size()) - 1;
     }
@@ -825,12 +858,12 @@ void SettingsMenu::RenderPageTheme(UIContext& ctx)
         // The stale entry (if any) is the last item and maps to no path change.
         if (fontIdx < static_cast<int>(fontPaths_.size()))
         {
-            settings_.fontFile = fontPaths_[fontIdx];
+            model_.Str("theme.fontFile") = fontPaths_[fontIdx];
             dirty_ = true;
         }
     }
 
-    dirty_ |= Widgets::SliderFloat(ctx, "Font size", "Glyph size in pixels.", settings_.fontSize, 10.f, 28.f);
+    dirty_ |= Widgets::SliderFloat(ctx, "Font size", "Glyph size in pixels.", model_.Float("theme.fontSize"), 10.f, 28.f);
 
     ctx.Dummy({0.f, 6.f});
     ctx.TextDisabled("Theme and font changes apply when you press Save.");
@@ -840,9 +873,9 @@ void SettingsMenu::RenderPageFiles(UIContext& ctx)
 {
     Widgets::SectionHeader(ctx, "File extensions");
     dirty_ |=
-        Widgets::InputText(ctx, "Video file extensions", "Semicolon-separated, no dots", settings_.videoExtensions);
+        Widgets::InputText(ctx, "Video file extensions", "Semicolon-separated, no dots", model_.Str("files.videoExtensions"));
     dirty_ |=
-        Widgets::InputText(ctx, "Image file extensions", "Semicolon-separated, no dots", settings_.imageExtensions);
+        Widgets::InputText(ctx, "Image file extensions", "Semicolon-separated, no dots", model_.Str("files.imageExtensions"));
 }
 
 void SettingsMenu::RenderPageAudio(UIContext& ctx)
@@ -852,7 +885,7 @@ void SettingsMenu::RenderPageAudio(UIContext& ctx)
         ctx, "Preferred language",
         "Auto-select an audio track in this language when loading a file (ISO 639 code, e.g. eng). "
         "Empty = use the file default.",
-        settings_.defaultAudioLanguage
+        model_.Str("audio.defaultLanguage")
     );
 
     Widgets::SectionHeader(ctx, "Output");
@@ -860,7 +893,7 @@ void SettingsMenu::RenderPageAudio(UIContext& ctx)
     std::vector<const char*> deviceItems;
     int deviceIdx = 0;
     deviceNames.emplace_back("System default");
-    if (settings_.outputDevice.empty())
+    if (model_.Str("audio.outputDevice").empty())
     {
         deviceIdx = 0;
     }
@@ -872,7 +905,7 @@ void SettingsMenu::RenderPageAudio(UIContext& ctx)
             std::string* selected;
             int* selectedIdx;
         };
-        Devices devices{&deviceNames, &settings_.outputDevice, &deviceIdx};
+        Devices devices{&deviceNames, &model_.Str("audio.outputDevice"), &deviceIdx};
         player->EnumerateAudioOutputDevices(
             [](const AudioOutputDevice* d, void* ud)
             {
@@ -891,9 +924,9 @@ void SettingsMenu::RenderPageAudio(UIContext& ctx)
         );
     }
     std::string staleDevice;
-    if (deviceIdx == 0 && !settings_.outputDevice.empty())
+    if (deviceIdx == 0 && !model_.Str("audio.outputDevice").empty())
     {
-        staleDevice = settings_.outputDevice + " (missing)";
+        staleDevice = model_.Str("audio.outputDevice") + " (missing)";
         deviceNames.push_back(staleDevice);
         deviceIdx = static_cast<int>(deviceNames.size()) - 1;
     }
@@ -907,101 +940,101 @@ void SettingsMenu::RenderPageAudio(UIContext& ctx)
             deviceItems.data(), static_cast<int>(deviceItems.size()), deviceIdx
         ))
     {
-        settings_.outputDevice = deviceIdx == 0 ? "" : deviceNames[deviceIdx];
+        model_.Str("audio.outputDevice") = deviceIdx == 0 ? "" : deviceNames[deviceIdx];
         const std::string suffix = " (missing)";
-        if (settings_.outputDevice.ends_with(suffix))
+        if (model_.Str("audio.outputDevice").ends_with(suffix))
         {
-            settings_.outputDevice.erase(settings_.outputDevice.size() - suffix.size());
+            model_.Str("audio.outputDevice").erase(model_.Str("audio.outputDevice").size() - suffix.size());
         }
         dirty_ = true;
     }
     dirty_ |= Widgets::SliderInt(ctx, "Default volume", "Playback volume applied on startup and Save.",
-                                 settings_.defaultVolume, 0, 100);
+                                 model_.Int("audio.defaultVolume"), 0, 100);
 
     Widgets::SectionHeader(ctx, "Sync");
     dirty_ |= Widgets::SliderInt(
         ctx, "Audio offset", "Audio sync offset in ms. Positive values delay audio relative to video.",
-        settings_.syncOffsetMs, -1000, 1000
+        model_.Int("audio.syncOffsetMs"), -1000, 1000
     );
 
     Widgets::SectionHeader(ctx, "Channels");
     const char* const channelItems[] = {"Auto", "Mono", "Stereo", "Surround"};
-    int channelIdx = std::clamp(settings_.channelMode, 0, 3);
+    int channelIdx = std::clamp(model_.Int("audio.channelMode"), 0, 3);
     if (Widgets::Combo(ctx, "Channel mode", "Output channel layout preference.", channelItems, 4, channelIdx))
     {
-        settings_.channelMode = channelIdx;
+        model_.Int("audio.channelMode") = channelIdx;
         dirty_ = true;
     }
 
     Widgets::SectionHeader(ctx, "Ducking");
     dirty_ |= Widgets::Checkbox(
         ctx, "Enable ducking", "Temporarily reduce playback volume while app notifications are active.",
-        settings_.duckingEnabled
+        model_.Bool("audio.duckingEnabled")
     );
     dirty_ |= Widgets::SliderInt(ctx, "Ducking level", "Playback gain while ducked, as percent of current volume.",
-                                 settings_.duckingLevel, 0, 100);
+                                 model_.Int("audio.duckingLevel"), 0, 100);
 
     Widgets::SectionHeader(ctx, "Audio normalization");
     dirty_ |= Widgets::Checkbox(
         ctx, "Enable normalization", "Apply dynamic audio normalization by default when playback starts.",
-        settings_.normalizeEnabled
+        model_.Bool("audio.normalizeEnabled")
     );
     dirty_ |= Widgets::SliderInt(
         ctx, "Frame length",
         "dynaudnorm f: analysis frame length in ms. "
         "Smaller values respond faster; larger values sound smoother (default: 100).",
-        settings_.dynaudnormFrameLen, 50, 2000
+        model_.Int("audio.dynaudnormFrameLen"), 50, 2000
     );
     dirty_ |= Widgets::SliderInt(
         ctx, "Gaussian window",
         "dynaudnorm g: size of the gaussian smoothing window in frames. "
         "Must be an odd number; even values are rounded up automatically (default: 5).",
-        settings_.dynaudnormGaussSize, 3, 31
+        model_.Int("audio.dynaudnormGaussSize"), 3, 31
     );
     dirty_ |= Widgets::SliderFloat(
         ctx, "Target peak",
         "dynaudnorm p: target peak level (0.0–1.0). "
         "Lower for more headroom; raise for louder output (default: 0.95).",
-        settings_.dynaudnormPeak, 0.1f, 1.0f
+        model_.Float("audio.dynaudnormPeak"), 0.1f, 1.0f
     );
     dirty_ |= Widgets::SliderFloat(
         ctx, "Max gain",
         "dynaudnorm m: maximum amplification factor per frame. "
         "Lower if output sounds squashed; raise for a stronger boost on quiet content (default: 5).",
-        settings_.dynaudnormMaxGain, 1.f, 50.f
+        model_.Float("audio.dynaudnormMaxGain"), 1.f, 50.f
     );
     dirty_ |= Widgets::SliderFloat(
         ctx, "Output volume",
         "Output gain multiplier applied after normalization and soft clipping. "
         "1.0 = unity gain; raise to boost overall loudness (default: 1.5).",
-        settings_.dynaudnormVolume, 0.1f, 5.f
+        model_.Float("audio.dynaudnormVolume"), 0.1f, 5.f
     );
 }
 
 void SettingsMenu::RenderPageKeybinds(UIContext& ctx)
 {
-    // ── Core keybinds (Settings struct fields) ────────────────────────────────
+    // ── Core keybinds (host "keybinds.*" fields, edited by key) ────────────────
     struct BindEntry
     {
         const char* label;
         const char* name;
-        std::string Settings::* field;
+        const char* key;
     };
 
     static const BindEntry coreEntries[] = {
-        {"Toggle pause", "togglePause", &Settings::togglePause},
-        {"Toggle fullscreen", "toggleFullscreen", &Settings::toggleFullscreen},
-        {"Quit", "quit", &Settings::quit},
-        {"Volume up", "volumeUp", &Settings::volumeUp},
-        {"Volume down", "volumeDown", &Settings::volumeDown},
-        {"Toggle mute", "toggleMute", &Settings::toggleMute},
-        {"Seek forward", "seekForward", &Settings::seekForward},
-        {"Seek back", "seekBack", &Settings::seekBack},
-        {"Seek forward (long)", "seekForwardLong", &Settings::seekForwardLong},
-        {"Seek back (long)", "seekBackLong", &Settings::seekBackLong},
-        {"Toggle normalize", "toggleNormalize", &Settings::toggleNormalize},
-        {"Toggle subtitles", "toggleSubtitles", &Settings::toggleSubtitles},
-        {"Open file dialog", "openFileDialog", &Settings::openFileDialog},
+        {"Toggle pause", "togglePause", "keybinds.togglePause"},
+        {"Toggle fullscreen", "toggleFullscreen", "keybinds.toggleFullscreen"},
+        {"Quit", "quit", "keybinds.quit"},
+        {"Volume up", "volumeUp", "keybinds.volumeUp"},
+        {"Volume down", "volumeDown", "keybinds.volumeDown"},
+        {"Toggle mute", "toggleMute", "keybinds.toggleMute"},
+        {"Seek forward", "seekForward", "keybinds.seekForward"},
+        {"Seek back", "seekBack", "keybinds.seekBack"},
+        {"Seek forward (long)", "seekForwardLong", "keybinds.seekForwardLong"},
+        {"Seek back (long)", "seekBackLong", "keybinds.seekBackLong"},
+        {"Toggle normalize", "toggleNormalize", "keybinds.toggleNormalize"},
+        {"Toggle subtitles", "toggleSubtitles", "keybinds.toggleSubtitles"},
+        {"Open file dialog", "openFileDialog", "keybinds.openFileDialog"},
     };
 
     Widgets::SectionHeader(ctx, "Player");
@@ -1009,7 +1042,7 @@ void SettingsMenu::RenderPageKeybinds(UIContext& ctx)
     {
         const bool thisCapturing = isCapturing_ && capturingName_ == e.name;
         ctx.PushID(e.name);
-        const auto action = Widgets::KeybindRow(ctx, e.label, settings_.*e.field, thisCapturing);
+        const auto action = Widgets::KeybindRow(ctx, e.label, model_.Str(e.key), thisCapturing);
         ctx.PopID();
 
         switch (action)
@@ -1017,13 +1050,13 @@ void SettingsMenu::RenderPageKeybinds(UIContext& ctx)
         case Widgets::KeybindAction::StartCapture:
             SetCapturing(true);
             capturingName_ = e.name;
-            capturingBind_ = &(settings_.*e.field);
+            capturingBind_ = &model_.Str(e.key);
             break;
         case Widgets::KeybindAction::CancelCapture:
             SetCapturing(false);
             break;
         case Widgets::KeybindAction::Clear:
-            settings_.*e.field = "";
+            model_.Str(e.key).clear();
             if (auto* hk = ctx_ ? ctx_->GetService<Hotkeys>() : nullptr)
             {
                 hk->Unbind(e.name);
@@ -1118,7 +1151,7 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
 
     PluginsCtx pc{this, &ctx};
     ctx_->EnumeratePlugins(
-        [](const char* name, const FrameLiftPluginInfo& info, bool enabled, bool loaded, bool loadFailed, void* pv)
+        [](const char* name, const FrameLiftPluginInfo& info, bool /*enabled*/, bool loaded, bool loadFailed, void* pv)
         {
             auto& [self, ctx, count] = *static_cast<PluginsCtx*>(pv);
             if (count++ > 0)
@@ -1131,21 +1164,9 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
 
             ctx->PushID(name);
 
-            // SettingsMenu cannot disable itself — that would remove this very UI.
-            const bool isSelf = strcmp(name, "framelift.settings_menu") == 0 ||
-                                (loaded && info.name && strcmp(info.name, self->ModuleName()) == 0);
-            if (isSelf)
-            {
-                ctx->TextDisabled("Enabled (required)");
-            }
-            else
-            {
-                bool en = enabled;
-                if (ctx->Checkbox("Enabled", &en))
-                {
-                    self->ctx_->SetPluginEnabled(name, en);
-                }
-            }
+            // Read-only: plugin enablement is driven by module JSON (build/ship time),
+            // so the catalogue just reports status rather than toggling it.
+            ctx->TextDisabled(loaded ? "Loaded" : "Not loaded");
 
             if (loaded)
             {
@@ -1169,7 +1190,7 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
             }
             else
             {
-                ctx->TextDisabled(enabled ? "Will load after restart." : "Disabled - enable and restart to load.");
+                ctx->TextDisabled("Not loaded - unmet dependency or unsupported platform.");
             }
 
             ctx->PopID();
@@ -1315,7 +1336,7 @@ void SettingsMenu::OnRender(UIContext& ctx)
     // The dark purple chrome is designed for dark text-on-light contrast. Under a
     // light preset it would clash with the theme's dark text, so skip the
     // background overrides and let the themed (light) colors show through.
-    const bool darkChrome = settings_.preset != "light";
+    const bool darkChrome = model_.Str("theme.preset") != "light";
 
     if (darkChrome)
     {

@@ -126,6 +126,7 @@ gtest_discover_tests(framelift_tests)
 
 add_executable(framelift_tests_vulkan_off
         VulkanModuleDisabledTests.cpp
+        "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp"
 )
 set_target_properties(framelift_tests_vulkan_off PROPERTIES
         CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)

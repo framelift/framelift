@@ -24,9 +24,11 @@ set(_FRAMELIFT_HOST_PLUGIN_RUNTIME_SOURCES
 )
 
 set(_FRAMELIFT_HOST_SETTINGS_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/settings/CoreSettings.h"
         "${CMAKE_SOURCE_DIR}/modules/host/settings/Settings.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/settings/Settings.h"
         "${CMAKE_SOURCE_DIR}/modules/host/settings/SettingsMapping.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/settings/SettingsRegistry.h"
 )
 
 set(_FRAMELIFT_HOST_SERVICES_SOURCES
@@ -47,15 +49,18 @@ set(_FRAMELIFT_HOST_FONTS_SOURCES
 )
 
 set(_FRAMELIFT_HOST_READ_AHEAD_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/read-ahead/CacheSettings.h"
         "${CMAKE_SOURCE_DIR}/modules/host/read-ahead/ReadAheadCache.h"
 )
 
 set(_FRAMELIFT_HOST_UI_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/ui/Theme.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/Theme.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeSettings.h"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeUtil.h"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/UIContextImpl.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/UIContextImpl.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/UiSettings.h"
 )
 
 set(_FRAMELIFT_HOST_WINDOW_SOURCES
@@ -74,6 +79,7 @@ set(_FRAMELIFT_HOST_WATCH_SOURCES
 )
 
 set(_FRAMELIFT_HOST_FFMPEG_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/AudioSettings.h"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioFilter.cpp"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioFilter.h"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioOptions.h"
@@ -87,10 +93,13 @@ set(_FRAMELIFT_HOST_FFMPEG_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegPacketQueue.h"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegPlayer.cpp"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegPlayer.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSettingsMapping.h"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSubtitleBlend.h"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSubtitles.cpp"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSubtitles.h"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegTrackLabel.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/PlaybackSettings.h"
+        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/SubtitleSettings.h"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/VideoDecodeMode.h"
 )
 
@@ -102,6 +111,7 @@ set(_FRAMELIFT_HOST_FFMPEG_VULKAN_SOURCES
 set(_FRAMELIFT_HOST_GRAPHICS_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/gfx/graphics-core/GraphicsApi.h"
         "${CMAKE_SOURCE_DIR}/modules/gfx/graphics-core/GraphicsBackendFactory.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/gfx/graphics-core/GraphicsSettings.h"
         "${CMAKE_SOURCE_DIR}/modules/gfx/graphics-core/IGraphicsBackend.h"
         "${CMAKE_SOURCE_DIR}/modules/gfx/graphics-core/IVideoRenderer.h"
 )

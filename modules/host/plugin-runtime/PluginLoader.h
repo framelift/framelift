@@ -5,7 +5,9 @@
 #include <string>
 #include <vector>
 
-// Loads module DLLs from a directory, filtered by an enabled package-id list.
+// Loads every module DLL present in a directory. Enablement is driven by module
+// JSON (a disabled package isn't built/shipped, so it's absent), and dependency
+// order is resolved from embedded metadata.
 // Each DLL must export the four framelift_* C symbols below.
 //
 // extern "C" {
@@ -35,11 +37,11 @@ public:
         std::string moduleFile;
     };
 
-    // Scans Modules/ for shared libraries and loads packages listed in `enabled`.
-    // Dependencies are resolved
-    // from embedded package/module metadata before any module object is created.
+    // Scans Modules/ for shared libraries and loads every ABI-compatible package.
+    // Dependencies and load order are resolved from embedded package/module metadata
+    // before any module object is created.
     // Does NOT call Install(); the caller does that via Registry().Add(p, ctx).
-    void LoadAll(const std::string& modulesDir, const std::vector<std::string>& enabled);
+    void LoadAll(const std::string& modulesDir);
 
     const std::vector<LoadedPlugin>& Plugins() const
     {

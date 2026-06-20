@@ -2,7 +2,9 @@
 #include "Cli.h"
 #include "IconData.h"
 #include "SettingsMapping.h"
+#include "CoreSettings.h"
 #include "GraphicsApi.h"
+#include "GraphicsSettings.h"
 #include "IGraphicsBackend.h"
 #include "DirWatcher.h"
 #include "FFmpegPlayer.h"
@@ -61,7 +63,8 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     // App owns the Settings instance; load it before any plugin sees it.
     settings_.Load(settingsPath);
 
-    appWindow_ = std::make_unique<SdlAppWindow>(title, width, height, GraphicsApiFromString(settings_.backend));
+    appWindow_ =
+        std::make_unique<SdlAppWindow>(title, width, height, GraphicsApiFromString(settings_.Get<GraphicsSettings>().backend));
 
     // Let the UI context create plugin-icon textures through the active backend.
     uiCtx_.SetGraphicsBackend(static_cast<IGraphicsBackend*>(appWindow_->GetGraphicsBackend()));
@@ -78,9 +81,10 @@ App::App(const char* title, const int width, const int height, const int cliArgc
 
     // Apply the persisted theme before the first frame (GL context is current,
     // NewFrame has not run yet). Seed the snapshot so later Saves can diff.
-    Theme::ApplyStyle(settings_);
-    Theme::RebuildFonts(settings_);
-    appliedTheme_ = {settings_.preset, settings_.accentColor, settings_.fontFile, settings_.fontSize};
+    Theme::ApplyStyle(settings_.Get<ThemeSettings>());
+    Theme::RebuildFonts(settings_.Get<ThemeSettings>());
+    appliedTheme_ = {settings_.Get<ThemeSettings>().preset, settings_.Get<ThemeSettings>().accentColor, settings_.Get<ThemeSettings>().fontFile,
+                     settings_.Get<ThemeSettings>().fontSize};
 
     fileDialogService_.Init(appWindow_.get());
 
@@ -95,18 +99,19 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     pluginCtx_->RegisterService<IFileDialog>(&fileDialogService_);
 
     // Playback options update when settings change.
-    player_->SetPlaybackOptions(PlaybackOptsFromSettings(settings_));
+    player_->SetPlaybackOptions(PlaybackOptsFromSettings(settings_.Get<PlaybackSettings>()));
     if (auto* ffmpeg = dynamic_cast<FFmpegPlayer*>(player_.get()))
     {
-        ffmpeg->SetVideoDecodeMode(VideoDecodeModeFromSettings(settings_));
+        ffmpeg->SetVideoDecodeMode(VideoDecodeModeFromSettings(settings_.Get<PlaybackSettings>()));
     }
-    player_->SetReadAheadCache(ReadAheadOptsFromSettings(settings_));
-    player_->SetSubtitleStyle(SubtitleStyleFromSettings(settings_));
-    player_->SetAudioPreferences(AudioPrefsFromSettings(settings_));
+    player_->SetReadAheadCache(ReadAheadOptsFromSettings(settings_.Get<CacheSettings>()));
+    player_->SetSubtitleStyle(SubtitleStyleFromSettings(settings_.Get<SubtitleSettings>()));
+    player_->SetAudioPreferences(AudioPrefsFromSettings(settings_.Get<AudioSettings>()));
     player_->SetAudioNormalize(
-        settings_.normalizeEnabled, settings_.normalizeEnabled ? ParamsFromSettings(settings_) : AudioNormalizeParams{}
+        settings_.Get<AudioSettings>().normalizeEnabled,
+        settings_.Get<AudioSettings>().normalizeEnabled ? ParamsFromSettings(settings_.Get<AudioSettings>()) : AudioNormalizeParams{}
     );
-    appWindow_->SetVSync(settings_.videoSync);
+    appWindow_->SetVSync(settings_.Get<PlaybackSettings>().videoSync);
 
     // Track idle state for TogglePauseAction (see DrainMediaEvents).
     player_->ObserveProperty(PlayerProperty::IdleActive);
@@ -122,31 +127,31 @@ App::App(const char* title, const int width, const int height, const int cliArgc
         [this]()
         {
             const Settings& s = pluginCtx_->GetSettingsDirect();
-            player_->SetPlaybackOptions(PlaybackOptsFromSettings(s));
+            player_->SetPlaybackOptions(PlaybackOptsFromSettings(s.Get<PlaybackSettings>()));
             if (auto* ffmpeg = dynamic_cast<FFmpegPlayer*>(player_.get()))
             {
-                ffmpeg->SetVideoDecodeMode(VideoDecodeModeFromSettings(s));
+                ffmpeg->SetVideoDecodeMode(VideoDecodeModeFromSettings(s.Get<PlaybackSettings>()));
             }
-            player_->SetReadAheadCache(ReadAheadOptsFromSettings(s));
-            player_->SetSubtitleStyle(SubtitleStyleFromSettings(s));
-            player_->SetAudioPreferences(AudioPrefsFromSettings(s));
-            appWindow_->SetVSync(s.videoSync);
+            player_->SetReadAheadCache(ReadAheadOptsFromSettings(s.Get<CacheSettings>()));
+            player_->SetSubtitleStyle(SubtitleStyleFromSettings(s.Get<SubtitleSettings>()));
+            player_->SetAudioPreferences(AudioPrefsFromSettings(s.Get<AudioSettings>()));
+            appWindow_->SetVSync(s.Get<PlaybackSettings>().videoSync);
             player_->SetAudioNormalize(
-                s.normalizeEnabled, s.normalizeEnabled ? ParamsFromSettings(s) : AudioNormalizeParams{}
+                s.Get<AudioSettings>().normalizeEnabled, s.Get<AudioSettings>().normalizeEnabled ? ParamsFromSettings(s.Get<AudioSettings>()) : AudioNormalizeParams{}
             );
 
             // This callback fires mid-frame (during SettingsMenu's
             // Save inside Render), so only flag what changed; the
             // actual ImGui work happens at the top of next Render().
-            if (s.preset != appliedTheme_.preset || s.accentColor != appliedTheme_.accentColor)
+            if (s.Get<ThemeSettings>().preset != appliedTheme_.preset || s.Get<ThemeSettings>().accentColor != appliedTheme_.accentColor)
             {
                 themeStyleDirty_ = true;
             }
-            if (s.fontFile != appliedTheme_.fontFile || s.fontSize != appliedTheme_.fontSize)
+            if (s.Get<ThemeSettings>().fontFile != appliedTheme_.fontFile || s.Get<ThemeSettings>().fontSize != appliedTheme_.fontSize)
             {
                 fontAtlasDirty_ = true;
             }
-            appliedTheme_ = {s.preset, s.accentColor, s.fontFile, s.fontSize};
+            appliedTheme_ = {s.Get<ThemeSettings>().preset, s.Get<ThemeSettings>().accentColor, s.Get<ThemeSettings>().fontFile, s.Get<ThemeSettings>().fontSize};
         }
     );
 
@@ -179,12 +184,14 @@ App::~App()
 
 void App::LoadPlugins()
 {
-    // Load all enabled modules from the Modules/ subdirectory.
+    // Load every module package present in the Modules/ subdirectory. Enablement is
+    // driven by module JSON (a disabled package isn't built/shipped, so it's absent
+    // here); the loader resolves dependencies and load order from embedded metadata.
     // Each plugin registers its own context menu section during Install().
     char baseBuf[512] = {};
     (void)appWindow_->GetBasePath(baseBuf, sizeof(baseBuf));
     const std::string modulesDir = std::string(baseBuf) + "Modules/";
-    pluginLoader_.LoadAll(modulesDir, settings_.enabledPlugins);
+    pluginLoader_.LoadAll(modulesDir);
 
     for (auto& p : pluginLoader_.Plugins())
     {
@@ -193,8 +200,8 @@ void App::LoadPlugins()
         Registry().Add(p.module, *pluginCtx_);
     }
 
-    // Append any plugin packages that are present but currently disabled, so the
-    // settings UI can list and re-enable them. Loaded plugins are skipped.
+    // Append any plugin packages that are present but did not load (e.g. resolver
+    // rejected an unmet dependency), so the settings UI can still list them.
     for (auto& package : PluginLoader::DiscoverAvailable(modulesDir))
     {
         const bool loaded = std::ranges::any_of(
@@ -208,8 +215,7 @@ void App::LoadPlugins()
         {
             continue;
         }
-        const bool enabled = std::ranges::find(settings_.enabledPlugins, package.packageId) != settings_.enabledPlugins.end();
-        pluginCtx_->AddPlugin(std::move(package.packageId), enabled, nullptr);
+        pluginCtx_->AddPlugin(std::move(package.packageId), /*enabled=*/false, nullptr);
     }
 
     Registry().BindHotkeys(keys_);
@@ -293,12 +299,12 @@ void App::Render()
     if (themeStyleDirty_)
     {
         themeStyleDirty_ = false;
-        Theme::ApplyStyle(settings_);
+        Theme::ApplyStyle(settings_.Get<ThemeSettings>());
     }
     if (fontAtlasDirty_)
     {
         fontAtlasDirty_ = false;
-        Theme::RebuildFonts(settings_);
+        Theme::RebuildFonts(settings_.Get<ThemeSettings>());
     }
 
     int w = 0, h = 0;
@@ -431,7 +437,7 @@ void App::RenderFrame()
 
 void App::PulseAudioDucking()
 {
-    if (!settings_.duckingEnabled)
+    if (!settings_.Get<AudioSettings>().duckingEnabled)
     {
         return;
     }
@@ -452,7 +458,7 @@ void App::RefreshAudioDucking()
     {
         return;
     }
-    if (!settings_.duckingEnabled || std::chrono::steady_clock::now() >= audioDuckUntil_)
+    if (!settings_.Get<AudioSettings>().duckingEnabled || std::chrono::steady_clock::now() >= audioDuckUntil_)
     {
         audioDucked_ = false;
         if (auto* ffmpeg = dynamic_cast<FFmpegPlayer*>(player_.get()))
@@ -488,7 +494,7 @@ void App::ResizeToVideo() const
             const Rect usable = self->appWindow_->GetDisplayUsableBounds();
             int w = static_cast<int>(size->width);
             int h = static_cast<int>(size->height);
-            const float ratio = self->settings_.maxDisplayRatio;
+            const float ratio = self->settings_.Get<GeneralSettings>().maxDisplayRatio;
             const int maxW = static_cast<int>(static_cast<float>(usable.w) * ratio);
             const int maxH = static_cast<int>(static_cast<float>(usable.h) * ratio);
 
@@ -580,51 +586,51 @@ void App::BindPlayerHotkeys()
     const Settings& cfg = settings_;
 
     host::Bind(
-        keys_, "togglePause", cfg.togglePause,
+        keys_, "togglePause", cfg.Get<KeybindSettings>().togglePause,
         [this]
         {
             TogglePauseAction();
         }
     );
     host::Bind(
-        keys_, "toggleFullscreen", cfg.toggleFullscreen,
+        keys_, "toggleFullscreen", cfg.Get<KeybindSettings>().toggleFullscreen,
         [this]
         {
             appWindow_->SetFullscreen(!appWindow_->IsFullscreen());
         }
     );
     host::Bind(
-        keys_, "quit", cfg.quit,
+        keys_, "quit", cfg.Get<KeybindSettings>().quit,
         [this]
         {
             appWindow_->PushQuitEvent();
         }
     );
     host::Bind(
-        keys_, "toggleNormalize", cfg.toggleNormalize,
+        keys_, "toggleNormalize", cfg.Get<KeybindSettings>().toggleNormalize,
         [this]
         {
             const bool on = !player_->IsNormalizeEnabled();
-            player_->SetAudioNormalize(on, on ? ParamsFromSettings(settings_) : AudioNormalizeParams{});
+            player_->SetAudioNormalize(on, on ? ParamsFromSettings(settings_.Get<AudioSettings>()) : AudioNormalizeParams{});
             pluginCtx_->Publish<NotificationEvent>({on ? "Normalize: On" : "Normalize: Off"});
         }
     );
     host::Bind(
-        keys_, "volumeUp", cfg.volumeUp,
+        keys_, "volumeUp", cfg.Get<KeybindSettings>().volumeUp,
         [this]
         {
             AdjustVolumeAndNotify(5);
         }
     );
     host::Bind(
-        keys_, "volumeDown", cfg.volumeDown,
+        keys_, "volumeDown", cfg.Get<KeybindSettings>().volumeDown,
         [this]
         {
             AdjustVolumeAndNotify(-5);
         }
     );
     host::Bind(
-        keys_, "toggleMute", cfg.toggleMute,
+        keys_, "toggleMute", cfg.Get<KeybindSettings>().toggleMute,
         [this]
         {
             player_->ToggleMute();
@@ -632,7 +638,7 @@ void App::BindPlayerHotkeys()
         }
     );
     host::Bind(
-        keys_, "toggleSubtitles", cfg.toggleSubtitles,
+        keys_, "toggleSubtitles", cfg.Get<KeybindSettings>().toggleSubtitles,
         [this]
         {
             player_->ToggleSubtitles();
@@ -642,7 +648,7 @@ void App::BindPlayerHotkeys()
         }
     );
     host::Bind(
-        keys_, "seekForward", cfg.seekForward,
+        keys_, "seekForward", cfg.Get<KeybindSettings>().seekForward,
         [this]
         {
             player_->Seek(5);
@@ -650,7 +656,7 @@ void App::BindPlayerHotkeys()
         }
     );
     host::Bind(
-        keys_, "seekBack", cfg.seekBack,
+        keys_, "seekBack", cfg.Get<KeybindSettings>().seekBack,
         [this]
         {
             player_->Seek(-5);
@@ -658,7 +664,7 @@ void App::BindPlayerHotkeys()
         }
     );
     host::Bind(
-        keys_, "seekForwardLong", cfg.seekForwardLong,
+        keys_, "seekForwardLong", cfg.Get<KeybindSettings>().seekForwardLong,
         [this]
         {
             player_->Seek(60);
@@ -666,7 +672,7 @@ void App::BindPlayerHotkeys()
         }
     );
     host::Bind(
-        keys_, "seekBackLong", cfg.seekBackLong,
+        keys_, "seekBackLong", cfg.Get<KeybindSettings>().seekBackLong,
         [this]
         {
             player_->Seek(-60);
@@ -674,7 +680,7 @@ void App::BindPlayerHotkeys()
         }
     );
     host::Bind(
-        keys_, "openFileDialog", cfg.openFileDialog,
+        keys_, "openFileDialog", cfg.Get<KeybindSettings>().openFileDialog,
         [this]
         {
             OpenFileAction();
@@ -708,7 +714,7 @@ int App::Run()
         // events with 0 timeout), vsync-off caps at ~250 fps so a static screen
         // doesn't spin. While minimized/occluded we don't paint, so block on
         // events (100 ms) to idle instead of busy-looping.
-        const int timeoutMs = !renderable ? 100 : (settings_.videoSync ? 0 : 4);
+        const int timeoutMs = !renderable ? 100 : (settings_.Get<PlaybackSettings>().videoSync ? 0 : 4);
         DrainEvents(timeoutMs);
         RefreshAudioDucking();
         if (running_ && appWindow_->IsRenderable())

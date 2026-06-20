@@ -1,4 +1,5 @@
 #include "Settings.h"
+#include "GraphicsSettings.h"
 #include "VideoDecodeMode.h"
 #include "GraphicsApi.h"
 
@@ -9,7 +10,7 @@
 TEST(VulkanModuleDisabledTests, GraphicsSettingsNormalizeToOpenGl)
 {
     Settings settings;
-    EXPECT_EQ(settings.backend, "gl");
+    EXPECT_EQ(settings.Get<GraphicsSettings>().backend, "gl");
     EXPECT_EQ(GraphicsApiFromString("vulkan"), GraphicsApi::OpenGL);
     EXPECT_EQ(GraphicsApiFromString("vk"), GraphicsApi::OpenGL);
     EXPECT_STREQ(GraphicsApiName(GraphicsApi::Vulkan), "gl");

@@ -6,6 +6,20 @@
 
 class UIContext;
 
+// POD descriptor for one registered settings field, surfaced by EnumerateSettings.
+// All pointers are valid only for the duration of the visit() call.
+//   key          — "section.name" (e.g. "audio.defaultLanguage").
+//   type         — value category: 0 bool, 1 int, 2 float, 3 string.
+//   desc         — human-readable description, or nullptr.
+//   defaultValue — the field's default, serialized as text (for "reset to default").
+struct FrameLiftSettingDesc
+{
+    const char* key;
+    int type;
+    const char* desc;
+    const char* defaultValue;
+};
+
 // Plugin dependency-injection context. Passed into IModule::Install().
 // All virtual methods use a stable C-compatible ABI — no STL types cross the boundary.
 // Use the non-virtual template helpers (GetService, RegisterService, Publish, Subscribe)
@@ -138,6 +152,15 @@ public:
     // Re-read settings.ini from disk into the live settings and re-apply them
     // (fires the settings-change callbacks). Use after the file is edited directly.
     virtual void ReloadSettings() noexcept = 0;
+
+    // ── Settings enumeration (ABI 3.2) ──────────────────────────────────────────
+    // Visit every registered settings field in declaration order. Lets a consumer
+    // (e.g. SettingsMenu) drive a generic editing model purely over the ABI, with
+    // no compile-time knowledge of the host Settings layout. The descriptor and its
+    // strings are valid only for the duration of each visit() call.
+    virtual void EnumerateSettings(
+        void (*visit)(const FrameLiftSettingDesc* desc, void* visitUd), void* visitUd
+    ) const noexcept = 0;
 
     // ── Convenience templates (non-virtual — compiled into the plugin) ──────────
 

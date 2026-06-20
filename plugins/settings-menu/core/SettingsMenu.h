@@ -3,25 +3,58 @@
 #include <framelift/core.h>
 #include <framelift/ui.h>
 
-// SettingsMenu owns the authoritative Settings struct as its internal editing
-// model and compiles the host settings module into itself. Settings is host-internal
-// (not part of the public SDK), so it is included from the module include path.
-#include <Settings.h>
-
 #include <array>
 #include <cstdint>
-#include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+// ── Key-based editing model ───────────────────────────────────────────────────
+// SettingsMenu is fully decoupled from the host Settings layout: it discovers the
+// available fields over the ABI (IPluginContext::EnumerateSettings) and edits a
+// typed value store keyed by "section.name". Accessors return references so the
+// existing widget call sites can bind directly; lookups default-insert, and
+// std::unordered_map keeps those references stable across later inserts.
+class EditModel
+{
+public:
+    void Clear()
+    {
+        bools_.clear();
+        ints_.clear();
+        floats_.clear();
+        strings_.clear();
+    }
+
+    bool& Bool(const std::string& key)
+    {
+        return bools_[key];
+    }
+    int& Int(const std::string& key)
+    {
+        return ints_[key];
+    }
+    float& Float(const std::string& key)
+    {
+        return floats_[key];
+    }
+    std::string& Str(const std::string& key)
+    {
+        return strings_[key];
+    }
+
+private:
+    std::unordered_map<std::string, bool> bools_;
+    std::unordered_map<std::string, int> ints_;
+    std::unordered_map<std::string, float> floats_;
+    std::unordered_map<std::string, std::string> strings_;
+};
 
 // ── Settings dialog ───────────────────────────────────────────────────────────
 // Centered modal-like ImGui window. Call Open() to show; renders while open.
 class SettingsMenu final : public SafeRenderable, public ModuleBase
 {
 public:
-    // Call once with the pref-dir path so the menu can load/save settings.
-    void SetStoragePath(std::string path);
-
     bool HandleKeyDownEvent(const AppEvent& e) override;
 
     // Make the settings dialog visible (acquires keyboard focus and publishes
@@ -37,15 +70,23 @@ public:
         return open_;
     }
 
-    // Return the live settings. Safe to hold a pointer for the application
-    // lifetime — the object never moves. Changes are visible immediately.
-    [[nodiscard]] const Settings& GetSettings() const
+    // Read the current edited value for a "section.name" key. Used by tests.
+    [[nodiscard]] bool SettingBool(const std::string& key)
     {
-        return settings_;
+        return model_.Bool(key);
     }
-
-    // Register a callback invoked after settings are saved to disk.
-    void RegisterChangeCallback(std::function<void(const Settings&)> cb);
+    [[nodiscard]] int SettingInt(const std::string& key)
+    {
+        return model_.Int(key);
+    }
+    [[nodiscard]] float SettingFloat(const std::string& key)
+    {
+        return model_.Float(key);
+    }
+    [[nodiscard]] std::string SettingString(const std::string& key)
+    {
+        return model_.Str(key);
+    }
 
     void OnRender(UIContext& ctx) override;
 
@@ -60,15 +101,23 @@ protected:
 
 private:
     // ── Core pages ──────────────────────────────────────────────────────────────
-    // The six built-in pages register through the same host pipeline as plugin
-    // pages. Each descriptor carries a stable address used both as the page's
-    // user-data pointer and to classify a page as "core" (see IsCorePageUd).
+    // The built-in pages register through the same host pipeline as plugin pages.
+    // Each descriptor carries a stable address used both as the page's user-data
+    // pointer and to classify a page as "core" (see IsCorePageUd).
     struct CorePage
     {
         SettingsMenu* self;
         void (SettingsMenu::*render)(UIContext&);
         const char* title;
-        const char* resetSection; // settings-struct section reset by "this page only"
+        const char* resetSection; // settings section reset by "this page only"
+    };
+
+    // One discovered settings field, from EnumerateSettings.
+    struct FieldMeta
+    {
+        std::string key;
+        int type; // 0 bool, 1 int, 2 float, 3 string (FrameLiftSettingDesc::type)
+        std::string defaultValue;
     };
 
     // Render thunk passed to RegisterSettingsPage for every core page.
@@ -96,10 +145,12 @@ private:
     void RenderPagePlugins(UIContext& ctx);
     void RenderPageConfig(UIContext& ctx);
 
-    // Seed/refresh the typed editing model (settings_) from the host via the
-    // ABI-stable per-key getters. Called once on install and again after a raw
-    // config edit is saved so the typed pages reflect the new on-disk values.
+    // Discover the settings fields over the ABI and seed the editing model with the
+    // host's current values. Called once on install and again after a raw config
+    // edit is saved so the typed pages reflect the new on-disk values.
     void SeedFromContext(IPluginContext& ctx);
+    void SeedValue(IPluginContext& ctx, const FieldMeta& f);
+    void ResetValue(const FieldMeta& f);
 
     // Read settings.ini (path resolved via the host) into configText_ for the raw
     // editor; truncates with a flag if the file exceeds the buffer.
@@ -111,13 +162,12 @@ private:
     void Save();
     void Reset();
     void ResetPage();
-    void FireChangeCallbacks() const;
     void SetCapturing(bool v);
     [[nodiscard]] const char* PageName() const;
 
     // ── State ──────────────────────────────────────────────────────────────────
     bool open_ = false;
-    bool dirty_ = false;       // true when settings_ differs from saved_
+    bool dirty_ = false;       // true when the model differs from the saved values
     bool isCapturing_ = false; // true while waiting for a key press to rebind
     int activePageIndex_ = -1; // index into EnumerateSettingsPages(), -1 = resolve on Open
 
@@ -132,10 +182,10 @@ private:
     std::vector<std::string> fontNames_;
     std::vector<std::string> fontPaths_;
 
-    Settings settings_; // live/authoritative — shared via GetSettings() pointer
-    Settings saved_;    // last snapshot written to disk
-
-    std::string storagePath_;
+    // Editing model: every host settings field discovered over the ABI, plus the
+    // live edited values keyed by "section.name".
+    std::vector<FieldMeta> fields_;
+    EditModel model_;
 
     // ── Raw config editor (Config page) ─────────────────────────────────────────
     std::string configPath_;       // absolute settings.ini path, resolved from the host
@@ -145,14 +195,12 @@ private:
 
     std::string capturingName_; // action name of the keybind being rebound
 
-    // For core keybinds: points into a settings_ string field.
+    // For core keybinds: points into the model's keybind string value.
     std::string* capturingBind_ = nullptr;
     // For plugin keybinds: fn-ptr accessors.
     const char* (*capturingGetStr_)(void*) = nullptr;
     void (*capturingSetStr_)(void*, const char*) = nullptr;
     void* capturingUd_ = nullptr;
-
-    std::vector<std::function<void(const Settings&)>> changeCallbacks_;
 };
 
 FRAMELIFT_MODULE_ENTRY(SettingsMenu, {

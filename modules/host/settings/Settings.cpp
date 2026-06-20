@@ -1,165 +1,82 @@
-﻿#include "Settings.h"
+#include "Settings.h"
 
-#include "VideoDecodeMode.h"
-#include "GraphicsApi.h"
+#include "SettingsRegistry.h"
+
+// Settings.cpp is the single place that knows the full set of settings sections.
+#include "CoreSettings.h"     // host-core: General/Files/Keybinds
+#include "AudioSettings.h"    // media/ffmpeg
+#include "PlaybackSettings.h" // media/ffmpeg
+#include "SubtitleSettings.h" // media/ffmpeg
+#include "CacheSettings.h"    // host/read-ahead
+#include "GraphicsSettings.h" // gfx/graphics-core
+#include "ThemeSettings.h"    // host/ui
+#include "UiSettings.h"       // host/ui
 
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
-#include <functional>
+#include <set>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-// ── Field registration table ──────────────────────────────────────────────────
-// Each entry: { ini-key, loader, saver }
-// To add a new setting: add ONE MakeField row — nothing else to change.
-namespace
+// ── Section registration ──────────────────────────────────────────────────────
+Settings::Settings()
 {
-struct Field
-{
-    const char* key;
-    const char* desc;
-    std::function<void(Settings&, const std::string&)> load;
-    std::function<std::string(const Settings&)> save;
-};
-
-// ── Type-dispatched factory overloads ─────────────────────────────────────
-Field MakeField(const char* key, const char* desc, float Settings::* m)
-{
-    return {
-        key,
-        desc,
-        [m](Settings& s, const std::string& v)
-        {
-            s.*m = std::stof(v);
-        },
-        [m](const Settings& s)
-        {
-            return std::to_string(s.*m);
-        }
-    };
+    Add<GeneralSettings>();
+    Add<PlaybackSettings>();
+    Add<SubtitleSettings>();
+    Add<CacheSettings>();
+    Add<GraphicsSettings>();
+    Add<UiSettings>();
+    Add<FilesSettings>();
+    Add<AudioSettings>();
+    Add<ThemeSettings>();
+    Add<KeybindSettings>();
 }
 
-Field MakeField(const char* key, const char* desc, int Settings::* m)
+void Settings::ResetToDefaults()
 {
-    return {
-        key,
-        desc,
-        [m](Settings& s, const std::string& v)
-        {
-            s.*m = std::stoi(v);
-        },
-        [m](const Settings& s)
-        {
-            return std::to_string(s.*m);
-        }
-    };
+    // Assign through the section references so the stored objects keep their
+    // addresses (a SettingsRegistry bound to this instance stays valid).
+    Get<GeneralSettings>() = {};
+    Get<PlaybackSettings>() = {};
+    Get<SubtitleSettings>() = {};
+    Get<CacheSettings>() = {};
+    Get<GraphicsSettings>() = {};
+    Get<UiSettings>() = {};
+    Get<FilesSettings>() = {};
+    Get<AudioSettings>() = {};
+    Get<ThemeSettings>() = {};
+    Get<KeybindSettings>() = {};
 }
 
-Field MakeField(const char* key, const char* desc, bool Settings::* m)
+// ── Registry assembly ─────────────────────────────────────────────────────────
+// Each module registers the fields it owns. Section order here fixes the order of
+// sections written to settings.ini, so it matches the historical layout.
+SettingsRegistry BuildSettingsRegistry(Settings& s)
 {
-    return {
-        key,
-        desc,
-        [m](Settings& s, const std::string& v)
-        {
-            s.*m = (v == "1");
-        },
-        [key, m](const Settings& s)
-        {
-            if (std::string_view(key) == "playback.hwdec")
-            {
-                const VideoDecodeMode mode = s.hwdec ? VideoDecodeModeFromString(s.hwdecMode) : VideoDecodeMode::Off;
-                return std::string(IsVideoDecodeModeEnabled(mode) ? "1" : "0");
-            }
-            return std::string(s.*m ? "1" : "0");
-        }
-    };
+    SettingsRegistry reg;
+    RegisterGeneralSettings(reg, s.Get<GeneralSettings>());
+    RegisterPlaybackSettings(reg, s.Get<PlaybackSettings>());
+    RegisterSubtitleSettings(reg, s.Get<SubtitleSettings>());
+    RegisterCacheSettings(reg, s.Get<CacheSettings>());
+    RegisterGraphicsSettings(reg, s.Get<GraphicsSettings>());
+    RegisterUiSettings(reg, s.Get<UiSettings>());
+    RegisterFilesSettings(reg, s.Get<FilesSettings>());
+    RegisterAudioSettings(reg, s.Get<AudioSettings>());
+    RegisterThemeSettings(reg, s.Get<ThemeSettings>());
+    RegisterKeybindSettings(reg, s.Get<KeybindSettings>());
+    return reg;
 }
-
-Field MakeField(const char* key, const char* desc, std::string Settings::* m)
-{
-    return {
-        key,
-        desc,
-        [m](Settings& s, const std::string& v)
-        {
-            s.*m = v;
-        },
-        [key, m](const Settings& s)
-        {
-            if (std::string_view(key) == "playback.hwdecMode")
-            {
-                const VideoDecodeMode mode = s.hwdec ? VideoDecodeModeFromString(s.*m) : VideoDecodeMode::Off;
-                return std::string(VideoDecodeModeName(mode));
-            }
-            if (std::string_view(key) == "graphics.backend")
-            {
-                return std::string(GraphicsApiName(GraphicsApiFromString(s.*m)));
-            }
-            return s.*m;
-        }
-    };
-}
-
-// ── Registration table ────────────────────────────────────────────────────
-// Keys are generated automatically from SETTINGS_FIELDS as "section.name".
-// To add a setting: add a row to the macro in Settings.h — nothing here changes.
-const std::vector<Field>& Fields()
-{
-    static const std::vector<Field> table = {
-#define X(section, name, type, def, desc) MakeField(#section "." #name, desc, &Settings::name),
-        SETTINGS_FIELDS(X)
-#undef X
-    };
-    return table;
-}
-
-// Built once per process; used by Load() for O(1) key lookup.
-const std::unordered_map<std::string, const Field*>& FieldMap()
-{
-    static const auto map = []
-    {
-        std::unordered_map<std::string, const Field*> m;
-        for (const auto& f : Fields())
-        {
-            m.emplace(f.key, &f);
-        }
-        return m;
-    }();
-    return map;
-}
-} // namespace
 
 // ── Settings::Load ────────────────────────────────────────────────────────────
-
-static std::vector<std::string> SplitSemicolon(const std::string& s)
-{
-    std::vector<std::string> parts;
-    std::string::size_type start = 0;
-    while (true)
-    {
-        const auto sep = s.find(';', start);
-        const auto token = s.substr(start, sep == std::string::npos ? std::string::npos : sep - start);
-        if (!token.empty())
-        {
-            parts.push_back(token);
-        }
-        if (sep == std::string::npos)
-        {
-            break;
-        }
-        start = sep + 1;
-    }
-    return parts;
-}
-
 void Settings::Load(const std::string& path)
 {
+    const SettingsRegistry reg = BuildSettingsRegistry(*this);
+
     std::ifstream file(path);
     if (!file)
     {
@@ -177,11 +94,9 @@ void Settings::Load(const std::string& path)
         return;
     }
 
-    const auto& map = FieldMap();
+    std::set<std::string> seen;
     std::string section;
     std::string line;
-    bool sawPlaybackHwdecMode = false;
-    bool sawPlaybackHwdec = false;
     while (std::getline(file, line))
     {
         if (line.empty() || line.front() == '#')
@@ -208,60 +123,34 @@ void Settings::Load(const std::string& path)
         const std::string key = section + '.' + line.substr(0, eq);
         const std::string val = line.substr(eq + 1);
 
-        if (key == "playback.hwdecMode")
-        {
-            sawPlaybackHwdecMode = true;
-        }
-        else if (key == "playback.hwdec")
-        {
-            sawPlaybackHwdec = true;
-        }
+        seen.insert(key);
 
-        // Handle enabledPlugins separately — not in the X-macro field table.
-        if (key == "plugins.enabled")
-        {
-            enabledPlugins = SplitSemicolon(val);
-            continue;
-        }
-
-        const auto it = map.find(key);
-        if (it == map.end())
+        const SettingField* f = reg.Find(key);
+        if (!f)
         {
             continue;
         }
-
         try
         {
-            it->second->load(*this, val);
+            f->load(val);
         }
         catch (...)
         {
         }
     }
 
-    if (sawPlaybackHwdecMode)
-    {
-        hwdecMode = VideoDecodeModeName(VideoDecodeModeFromString(hwdecMode));
-        hwdec = IsVideoDecodeModeEnabled(VideoDecodeModeFromString(hwdecMode));
-    }
-    else if (sawPlaybackHwdec && !hwdec)
-    {
-        hwdecMode = VideoDecodeModeName(VideoDecodeMode::Off);
-    }
-    else
-    {
-        hwdecMode = VideoDecodeModeName(VideoDecodeMode::Auto);
-        hwdec = true;
-    }
-    backend = GraphicsApiName(GraphicsApiFromString(backend));
+    // Modules reconcile cross-field defaults now that every key has been parsed.
+    reg.RunPostLoad(seen);
 }
 
 // ── Settings::Save ────────────────────────────────────────────────────────────
 // Synchronous section-aware merge-save: owned sections are replaced in place;
 // unknown sections (e.g. plugin data) are preserved unchanged. The merge keeps
 // keys written by PluginSettings::Save() intact.
-void Settings::Save(const std::string& path) const
+void Settings::Save(const std::string& path)
 {
+    const SettingsRegistry reg = BuildSettingsRegistry(*this);
+
     std::error_code ec;
     std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
 
@@ -271,9 +160,9 @@ void Settings::Save(const std::string& path) const
     std::unordered_map<std::string, std::vector<std::string>> ownedLines;
     std::unordered_map<std::string, std::string> descForKey;
 
-    for (const auto& field : Fields())
+    for (const auto& field : reg.Fields())
     {
-        const std::string key(field.key);
+        const std::string& key = field.key;
         const auto dot = key.find('.');
         const std::string section = key.substr(0, dot);
         const std::string name = key.substr(dot + 1);
@@ -281,27 +170,11 @@ void Settings::Save(const std::string& path) const
         {
             sectionOrder.push_back(section);
         }
-        ownedLines[section].push_back(name + "=" + field.save(*this));
-        if (field.desc && field.desc[0] != '\0')
+        ownedLines[section].push_back(name + "=" + field.save());
+        if (!field.desc.empty())
         {
             descForKey[key] = field.desc;
         }
-    }
-
-    // [plugins] section
-    sectionOrder.push_back("plugins");
-    descForKey["plugins.enabled"] = "Plugin package ids to load, in order (semicolon-separated).";
-    {
-        std::string line = "enabled=";
-        for (std::size_t i = 0; i < enabledPlugins.size(); ++i)
-        {
-            if (i > 0)
-            {
-                line += ';';
-            }
-            line += enabledPlugins[i];
-        }
-        ownedLines["plugins"].push_back(std::move(line));
     }
 
     // Emit an owned key line into `block`, prefixed by its "# ..." comment when one exists.

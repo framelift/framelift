@@ -1,6 +1,15 @@
 #include "Settings.h"
 #include "TempIni.h"
 
+#include "AudioSettings.h"
+#include "CacheSettings.h"
+#include "CoreSettings.h"
+#include "GraphicsSettings.h"
+#include "PlaybackSettings.h"
+#include "SubtitleSettings.h"
+#include "ThemeSettings.h"
+#include "UiSettings.h"
+
 #include <gtest/gtest.h>
 #include <cstddef>
 #include <iterator>
@@ -12,22 +21,21 @@
 TEST(SettingsTest, DefaultsAreSane)
 {
     const Settings s;
-    EXPECT_FLOAT_EQ(s.maxDisplayRatio, 0.8f);
-    EXPECT_TRUE(s.hwdec);
-    EXPECT_EQ(s.hwdecMode, "auto");
-    EXPECT_FLOAT_EQ(s.panelWidth, 320.f);
-    EXPECT_EQ(s.dynaudnormFrameLen, 100);
-    EXPECT_EQ(s.videoExtensions.rfind("mp4", 0), 0u); // starts with "mp4"
-    EXPECT_EQ(s.enabledPlugins.size(), 9u);
+    EXPECT_FLOAT_EQ(s.Get<GeneralSettings>().maxDisplayRatio, 0.8f);
+    EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec);
+    EXPECT_EQ(s.Get<PlaybackSettings>().hwdecMode, "auto");
+    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f);
+    EXPECT_EQ(s.Get<AudioSettings>().dynaudnormFrameLen, 100);
+    EXPECT_EQ(s.Get<FilesSettings>().videoExtensions.rfind("mp4", 0), 0u); // starts with "mp4"
 }
 
 TEST(SettingsTest, ThemeDefaults)
 {
     const Settings s;
-    EXPECT_EQ(s.preset, "dark");
-    EXPECT_EQ(s.accentColor, "#4296FA");
-    EXPECT_TRUE(s.fontFile.empty());
-    EXPECT_FLOAT_EQ(s.fontSize, 16.0f);
+    EXPECT_EQ(s.Get<ThemeSettings>().preset, "dark");
+    EXPECT_EQ(s.Get<ThemeSettings>().accentColor, "#4296FA");
+    EXPECT_TRUE(s.Get<ThemeSettings>().fontFile.empty());
+    EXPECT_FLOAT_EQ(s.Get<ThemeSettings>().fontSize, 16.0f);
 }
 
 TEST(SettingsTest, ThemeLoadSaveRoundTrip)
@@ -42,20 +50,20 @@ fontSize=18
 
     Settings s;
     s.Load(f.str());
-    EXPECT_EQ(s.preset, "light");
-    EXPECT_EQ(s.accentColor, "#AABBCC");
-    EXPECT_EQ(s.fontFile, "/fonts/Roboto.ttf");
-    EXPECT_FLOAT_EQ(s.fontSize, 18.f);
+    EXPECT_EQ(s.Get<ThemeSettings>().preset, "light");
+    EXPECT_EQ(s.Get<ThemeSettings>().accentColor, "#AABBCC");
+    EXPECT_EQ(s.Get<ThemeSettings>().fontFile, "/fonts/Roboto.ttf");
+    EXPECT_FLOAT_EQ(s.Get<ThemeSettings>().fontSize, 18.f);
 
     // Round-trip: Save then Load into a fresh Settings.
     const TempFile out;
     s.Save(out.str());
     Settings s2;
     s2.Load(out.str());
-    EXPECT_EQ(s2.preset, "light");
-    EXPECT_EQ(s2.accentColor, "#AABBCC");
-    EXPECT_EQ(s2.fontFile, "/fonts/Roboto.ttf");
-    EXPECT_FLOAT_EQ(s2.fontSize, 18.f);
+    EXPECT_EQ(s2.Get<ThemeSettings>().preset, "light");
+    EXPECT_EQ(s2.Get<ThemeSettings>().accentColor, "#AABBCC");
+    EXPECT_EQ(s2.Get<ThemeSettings>().fontFile, "/fonts/Roboto.ttf");
+    EXPECT_FLOAT_EQ(s2.Get<ThemeSettings>().fontSize, 18.f);
 }
 
 TEST(SettingsTest, LoadOverridesFields)
@@ -76,19 +84,19 @@ dynaudnormFrameLen=250
     Settings s;
     s.Load(f.str());
 
-    EXPECT_FLOAT_EQ(s.maxDisplayRatio, 0.5f);
-    EXPECT_FALSE(s.hwdec);
-    EXPECT_EQ(s.hwdecMode, "off");
-    EXPECT_FLOAT_EQ(s.panelWidth, 500.f);
-    EXPECT_EQ(s.videoExtensions, "avi;mov");
-    EXPECT_EQ(s.dynaudnormFrameLen, 250);
+    EXPECT_FLOAT_EQ(s.Get<GeneralSettings>().maxDisplayRatio, 0.5f);
+    EXPECT_FALSE(s.Get<PlaybackSettings>().hwdec);
+    EXPECT_EQ(s.Get<PlaybackSettings>().hwdecMode, "off");
+    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 500.f);
+    EXPECT_EQ(s.Get<FilesSettings>().videoExtensions, "avi;mov");
+    EXPECT_EQ(s.Get<AudioSettings>().dynaudnormFrameLen, 250);
 }
 
 TEST(SettingsTest, ReadAheadCacheDefaults)
 {
     const Settings s;
-    EXPECT_TRUE(s.readAheadEnabled);
-    EXPECT_EQ(s.readAheadSizeMB, 64);
+    EXPECT_TRUE(s.Get<CacheSettings>().readAheadEnabled);
+    EXPECT_EQ(s.Get<CacheSettings>().readAheadSizeMB, 64);
 }
 
 TEST(SettingsTest, ReadAheadCacheLoadAndRoundTrip)
@@ -97,45 +105,45 @@ TEST(SettingsTest, ReadAheadCacheLoadAndRoundTrip)
 
     Settings s;
     s.Load(f.str());
-    EXPECT_FALSE(s.readAheadEnabled);
-    EXPECT_EQ(s.readAheadSizeMB, 256);
+    EXPECT_FALSE(s.Get<CacheSettings>().readAheadEnabled);
+    EXPECT_EQ(s.Get<CacheSettings>().readAheadSizeMB, 256);
 
     const TempFile out;
     s.Save(out.str());
     Settings s2;
     s2.Load(out.str());
-    EXPECT_FALSE(s2.readAheadEnabled);
-    EXPECT_EQ(s2.readAheadSizeMB, 256);
+    EXPECT_FALSE(s2.Get<CacheSettings>().readAheadEnabled);
+    EXPECT_EQ(s2.Get<CacheSettings>().readAheadSizeMB, 256);
 }
 
 TEST(SettingsTest, AudioPreferencesLoadAndRoundTrip)
 {
-    const TempFile f("[audio]\ndefaultAudioLanguage=jpn\noutputDevice=Headphones\ndefaultVolume=72\nsyncOffsetMs=-125\n"
+    const TempFile f("[audio]\ndefaultLanguage=jpn\noutputDevice=Headphones\ndefaultVolume=72\nsyncOffsetMs=-125\n"
                      "channelMode=2\nduckingEnabled=1\nduckingLevel=35\nnormalizeEnabled=1\n");
 
     Settings s;
     s.Load(f.str());
-    EXPECT_EQ(s.defaultAudioLanguage, "jpn");
-    EXPECT_EQ(s.outputDevice, "Headphones");
-    EXPECT_EQ(s.defaultVolume, 72);
-    EXPECT_EQ(s.syncOffsetMs, -125);
-    EXPECT_EQ(s.channelMode, 2);
-    EXPECT_TRUE(s.duckingEnabled);
-    EXPECT_EQ(s.duckingLevel, 35);
-    EXPECT_TRUE(s.normalizeEnabled);
+    EXPECT_EQ(s.Get<AudioSettings>().defaultLanguage, "jpn");
+    EXPECT_EQ(s.Get<AudioSettings>().outputDevice, "Headphones");
+    EXPECT_EQ(s.Get<AudioSettings>().defaultVolume, 72);
+    EXPECT_EQ(s.Get<AudioSettings>().syncOffsetMs, -125);
+    EXPECT_EQ(s.Get<AudioSettings>().channelMode, 2);
+    EXPECT_TRUE(s.Get<AudioSettings>().duckingEnabled);
+    EXPECT_EQ(s.Get<AudioSettings>().duckingLevel, 35);
+    EXPECT_TRUE(s.Get<AudioSettings>().normalizeEnabled);
 
     const TempFile out;
     s.Save(out.str());
     Settings s2;
     s2.Load(out.str());
-    EXPECT_EQ(s2.defaultAudioLanguage, "jpn");
-    EXPECT_EQ(s2.outputDevice, "Headphones");
-    EXPECT_EQ(s2.defaultVolume, 72);
-    EXPECT_EQ(s2.syncOffsetMs, -125);
-    EXPECT_EQ(s2.channelMode, 2);
-    EXPECT_TRUE(s2.duckingEnabled);
-    EXPECT_EQ(s2.duckingLevel, 35);
-    EXPECT_TRUE(s2.normalizeEnabled);
+    EXPECT_EQ(s2.Get<AudioSettings>().defaultLanguage, "jpn");
+    EXPECT_EQ(s2.Get<AudioSettings>().outputDevice, "Headphones");
+    EXPECT_EQ(s2.Get<AudioSettings>().defaultVolume, 72);
+    EXPECT_EQ(s2.Get<AudioSettings>().syncOffsetMs, -125);
+    EXPECT_EQ(s2.Get<AudioSettings>().channelMode, 2);
+    EXPECT_TRUE(s2.Get<AudioSettings>().duckingEnabled);
+    EXPECT_EQ(s2.Get<AudioSettings>().duckingLevel, 35);
+    EXPECT_TRUE(s2.Get<AudioSettings>().normalizeEnabled);
 }
 
 TEST(SettingsTest, MissingKeysKeepDefaults)
@@ -145,9 +153,9 @@ TEST(SettingsTest, MissingKeysKeepDefaults)
     Settings s;
     s.Load(f.str());
 
-    EXPECT_FLOAT_EQ(s.panelWidth, 400.f); // overridden
-    EXPECT_TRUE(s.hwdec); // untouched default
-    EXPECT_FLOAT_EQ(s.maxDisplayRatio, 0.8f); // untouched default
+    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 400.f); // overridden
+    EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec); // untouched default
+    EXPECT_FLOAT_EQ(s.Get<GeneralSettings>().maxDisplayRatio, 0.8f); // untouched default
 }
 
 TEST(SettingsTest, UnknownKeysAndSectionsIgnored)
@@ -157,9 +165,9 @@ TEST(SettingsTest, UnknownKeysAndSectionsIgnored)
     Settings s;
     s.Load(f.str());
 
-    EXPECT_FLOAT_EQ(s.panelWidth, 350.f);
+    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 350.f);
     // No crash, other fields unaffected.
-    EXPECT_TRUE(s.hwdec);
+    EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec);
 }
 
 TEST(SettingsTest, MalformedNumericValueIsIgnored)
@@ -170,7 +178,7 @@ TEST(SettingsTest, MalformedNumericValueIsIgnored)
     s.Load(f.str());
 
     // std::stof throws → caught → field keeps its default.
-    EXPECT_FLOAT_EQ(s.panelWidth, 320.f);
+    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f);
 }
 
 // ── Incorrect setting type handling (issue #2) ──────────────────────────────────
@@ -186,7 +194,7 @@ TEST(SettingsTest, IntFieldRejectsNonNumeric)
     s.Load(f.str());
 
     // std::stoi throws std::invalid_argument → caught → field keeps its default.
-    EXPECT_EQ(s.readAheadSizeMB, 64);
+    EXPECT_EQ(s.Get<CacheSettings>().readAheadSizeMB, 64);
 }
 
 TEST(SettingsTest, IntFieldOutOfRangeKeepsDefault)
@@ -197,7 +205,7 @@ TEST(SettingsTest, IntFieldOutOfRangeKeepsDefault)
     s.Load(f.str());
 
     // std::stoi throws std::out_of_range → caught → field keeps its default.
-    EXPECT_EQ(s.readAheadSizeMB, 64);
+    EXPECT_EQ(s.Get<CacheSettings>().readAheadSizeMB, 64);
 }
 
 TEST(SettingsTest, IntFieldFromFloatStringTruncates)
@@ -209,27 +217,27 @@ TEST(SettingsTest, IntFieldFromFloatStringTruncates)
 
     // std::stoi parses the leading integer prefix ("3") and stops — no crash,
     // consistent: a float written to an int field truncates rather than throwing.
-    EXPECT_EQ(s.readAheadSizeMB, 3);
+    EXPECT_EQ(s.Get<CacheSettings>().readAheadSizeMB, 3);
 }
 
 TEST(SettingsTest, BoolFieldOnlyOneIsTrue)
 {
     // Bool fields parse via (v == "1"); every other token is false, none throw.
     const Settings def;
-    EXPECT_TRUE(def.hwdec); // default is true, so "not 1" must flip it to false
+    EXPECT_TRUE(def.Get<PlaybackSettings>().hwdec); // default is true, so "not 1" must flip it to false
 
     for (const char* token : {"true", "2", "yes"})
     {
         const TempFile f(std::string("[playback]\nhwdec=") + token + "\n");
         Settings s;
         s.Load(f.str());
-        EXPECT_FALSE(s.hwdec) << "token=" << token;
+        EXPECT_FALSE(s.Get<PlaybackSettings>().hwdec) << "token=" << token;
     }
 
     const TempFile one("[playback]\nhwdec=1\n");
     Settings s;
     s.Load(one.str());
-    EXPECT_TRUE(s.hwdec);
+    EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec);
 }
 
 TEST(SettingsTest, HwdecModeOverridesLegacyBool)
@@ -239,8 +247,8 @@ TEST(SettingsTest, HwdecModeOverridesLegacyBool)
     Settings s;
     s.Load(f.str());
 
-    EXPECT_TRUE(s.hwdec);
-    EXPECT_EQ(s.hwdecMode, "cuda");
+    EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec);
+    EXPECT_EQ(s.Get<PlaybackSettings>().hwdecMode, "cuda");
 }
 
 TEST(SettingsTest, InvalidHwdecModeNormalizesToAuto)
@@ -250,23 +258,23 @@ TEST(SettingsTest, InvalidHwdecModeNormalizesToAuto)
     Settings s;
     s.Load(f.str());
 
-    EXPECT_TRUE(s.hwdec);
-    EXPECT_EQ(s.hwdecMode, "auto");
+    EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec);
+    EXPECT_EQ(s.Get<PlaybackSettings>().hwdecMode, "auto");
 }
 
 TEST(SettingsTest, SaveSynchronizesLegacyHwdecFromMode)
 {
     const TempFile f;
     Settings s;
-    s.hwdec = true;
-    s.hwdecMode = "off";
+    s.Get<PlaybackSettings>().hwdec = true;
+    s.Get<PlaybackSettings>().hwdecMode = "off";
     s.Save(f.str());
 
     Settings loaded;
     loaded.Load(f.str());
 
-    EXPECT_FALSE(loaded.hwdec);
-    EXPECT_EQ(loaded.hwdecMode, "off");
+    EXPECT_FALSE(loaded.Get<PlaybackSettings>().hwdec);
+    EXPECT_EQ(loaded.Get<PlaybackSettings>().hwdecMode, "off");
 }
 
 TEST(SettingsTest, EmptyValueKeepsDefault)
@@ -277,20 +285,7 @@ TEST(SettingsTest, EmptyValueKeepsDefault)
     s.Load(f.str());
 
     // std::stof("") throws → caught → field keeps its default.
-    EXPECT_FLOAT_EQ(s.panelWidth, 320.f);
-}
-
-TEST(SettingsTest, ParsesEnabledPluginsList)
-{
-    const TempFile f("[plugins]\nenabled=framelift.playlist;framelift.history;framelift.updater\n");
-
-    Settings s;
-    s.Load(f.str());
-
-    ASSERT_EQ(s.enabledPlugins.size(), 3u);
-    EXPECT_EQ(s.enabledPlugins[0], "framelift.playlist");
-    EXPECT_EQ(s.enabledPlugins[1], "framelift.history");
-    EXPECT_EQ(s.enabledPlugins[2], "framelift.updater");
+    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f);
 }
 
 TEST(SettingsTest, MissingFileLeavesDefaults)
@@ -300,7 +295,7 @@ TEST(SettingsTest, MissingFileLeavesDefaults)
     Settings s;
     const auto missing = UniqueTempPath();
     s.Load(missing.string());
-    EXPECT_FLOAT_EQ(s.panelWidth, 320.f);
+    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f);
     EXPECT_TRUE(std::filesystem::exists(missing)); // Save() is synchronous now
     std::error_code ec;
     std::filesystem::remove(missing, ec);
@@ -317,14 +312,13 @@ TEST(SettingsTest, EmptyFileSeedsDefaults)
     Settings s;
     s.Load(f.str());
 
-    EXPECT_FLOAT_EQ(s.panelWidth, 320.f); // in-memory defaults intact
+    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f); // in-memory defaults intact
     EXPECT_GT(std::filesystem::file_size(f.path), 0u); // defaults written back to disk
 
     // Re-loading the now-populated file yields the same defaults.
     Settings reloaded;
     reloaded.Load(f.str());
-    EXPECT_FLOAT_EQ(reloaded.panelWidth, 320.f);
-    EXPECT_EQ(reloaded.enabledPlugins.size(), 9u);
+    EXPECT_FLOAT_EQ(reloaded.Get<UiSettings>().panelWidth, 320.f);
 }
 
 TEST(SettingsTest, SaveLoadRoundTrip)
@@ -332,29 +326,25 @@ TEST(SettingsTest, SaveLoadRoundTrip)
     const TempFile f;
 
     Settings s;
-    s.maxDisplayRatio = 0.65f;
-    s.hwdec = false;
-    s.hwdecMode = "off";
-    s.panelWidth = 444.f;
-    s.videoExtensions = "mkv;webm";
-    s.dynaudnormFrameLen = 321;
-    s.togglePause = "P";
-    s.enabledPlugins = {"framelift.playlist", "framelift.overlay"};
+    s.Get<GeneralSettings>().maxDisplayRatio = 0.65f;
+    s.Get<PlaybackSettings>().hwdec = false;
+    s.Get<PlaybackSettings>().hwdecMode = "off";
+    s.Get<UiSettings>().panelWidth = 444.f;
+    s.Get<FilesSettings>().videoExtensions = "mkv;webm";
+    s.Get<AudioSettings>().dynaudnormFrameLen = 321;
+    s.Get<KeybindSettings>().togglePause = "P";
     s.Save(f.str());
 
     Settings loaded;
     loaded.Load(f.str());
 
-    EXPECT_FLOAT_EQ(loaded.maxDisplayRatio, 0.65f);
-    EXPECT_FALSE(loaded.hwdec);
-    EXPECT_EQ(loaded.hwdecMode, "off");
-    EXPECT_FLOAT_EQ(loaded.panelWidth, 444.f);
-    EXPECT_EQ(loaded.videoExtensions, "mkv;webm");
-    EXPECT_EQ(loaded.dynaudnormFrameLen, 321);
-    EXPECT_EQ(loaded.togglePause, "P");
-    ASSERT_EQ(loaded.enabledPlugins.size(), 2u);
-    EXPECT_EQ(loaded.enabledPlugins[0], "framelift.playlist");
-    EXPECT_EQ(loaded.enabledPlugins[1], "framelift.overlay");
+    EXPECT_FLOAT_EQ(loaded.Get<GeneralSettings>().maxDisplayRatio, 0.65f);
+    EXPECT_FALSE(loaded.Get<PlaybackSettings>().hwdec);
+    EXPECT_EQ(loaded.Get<PlaybackSettings>().hwdecMode, "off");
+    EXPECT_FLOAT_EQ(loaded.Get<UiSettings>().panelWidth, 444.f);
+    EXPECT_EQ(loaded.Get<FilesSettings>().videoExtensions, "mkv;webm");
+    EXPECT_EQ(loaded.Get<AudioSettings>().dynaudnormFrameLen, 321);
+    EXPECT_EQ(loaded.Get<KeybindSettings>().togglePause, "P");
 }
 
 TEST(SettingsTest, SavePreservesUnknownSectionsAndKeys)
@@ -364,7 +354,7 @@ TEST(SettingsTest, SavePreservesUnknownSectionsAndKeys)
     const TempFile f("[Playlist]\nscanSubdirs=1\n\n[keybinds]\ntogglePause=Space\nhandAddedKey=Ctrl+J\n");
 
     Settings s;
-    s.togglePause = "P";
+    s.Get<KeybindSettings>().togglePause = "P";
     s.Save(f.str());
 
     std::ifstream in(f.str());
@@ -407,8 +397,6 @@ TEST(SettingsTest, CommentsWrittenForKnownSettings)
 
     // A documentation comment is emitted immediately above its key.
     EXPECT_NE(text.find("# Enable hardware video decoding.\nhwdec="), std::string::npos);
-    // The [plugins] enabled list is documented too.
-    EXPECT_NE(text.find("# Plugin package ids to load, in order (semicolon-separated).\nenabled="), std::string::npos);
 }
 
 TEST(SettingsTest, CommentsAreIdempotent)

@@ -16,7 +16,9 @@
   },
   "optional": {
     "modules": [],
-    "features": []
+    "features": [
+      "ui.context_menu"
+    ]
   },
   "platforms": []
 }

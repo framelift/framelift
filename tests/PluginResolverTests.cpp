@@ -133,3 +133,34 @@ TEST(PluginResolverTest, OptionalFeaturesDoNotGateLoading)
     ASSERT_EQ(decisions.size(), 1u);
     EXPECT_TRUE(decisions[0].accepted);
 }
+
+TEST(PluginResolverTest, OrdersProviderBeforeOptionalConsumer)
+{
+    static constexpr const char* const provides[] = {"ui.context_menu"};
+    static constexpr const char* const optional[] = {"ui.context_menu"};
+    PackageFixture provider{
+        "framelift.context_menu", "framelift.context_menu.core", List(provides), EmptyList(), EmptyList(), EmptyList(),
+        EmptyList()};
+    PackageFixture consumer{
+        "framelift.playlist", "framelift.playlist.core", EmptyList(), EmptyList(), EmptyList(), List(optional),
+        EmptyList()};
+
+    // Consumer listed first in the input; ordering must still load the provider first.
+    const auto order = OrderPluginPackages({{&consumer.info}, {&provider.info}});
+    ASSERT_EQ(order.size(), 2u);
+    EXPECT_EQ(order[0], 1u); // provider (input index 1)
+    EXPECT_EQ(order[1], 0u); // consumer (input index 0)
+}
+
+TEST(PluginResolverTest, OrdersIndependentPackagesByPackageId)
+{
+    PackageFixture zzz{
+        "framelift.zzz", "framelift.zzz.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
+    PackageFixture aaa{
+        "framelift.aaa", "framelift.aaa.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
+
+    const auto order = OrderPluginPackages({{&zzz.info}, {&aaa.info}});
+    ASSERT_EQ(order.size(), 2u);
+    EXPECT_EQ(order[0], 1u); // framelift.aaa sorts first
+    EXPECT_EQ(order[1], 0u);
+}

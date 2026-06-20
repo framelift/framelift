@@ -1,5 +1,6 @@
 #include "PluginContext.h"
 #include "Settings.h"
+#include "UiSettings.h"
 
 #include <cstring>
 #include <filesystem>
@@ -86,7 +87,7 @@ TEST(PluginContextTest, CommitRoundTripsPerType)
     EXPECT_EQ(c.ctx.GetSettingInt("audio.dynaudnormFrameLen"), 250);
     EXPECT_EQ(GetStr(c.ctx, "files.videoExtensions"), "avi;mov");
     // The commit also reflects in the underlying Settings object.
-    EXPECT_FLOAT_EQ(c.settings.panelWidth, 500.f);
+    EXPECT_FLOAT_EQ(c.settings.Get<UiSettings>().panelWidth, 500.f);
 }
 
 TEST(PluginContextTest, GetSettingStringReportsFullLength)
@@ -343,30 +344,27 @@ TEST(PluginContextTest, EnumeratePluginsEmptyByDefault)
     EXPECT_TRUE(Enumerate(c.ctx).empty());
 }
 
-TEST(PluginContextTest, SetPluginEnabledUpdatesListAndCatalogue)
+TEST(PluginContextTest, SetPluginEnabledIsNonPersistentNoOp)
 {
+    // Enablement is driven by module JSON, so SetPluginEnabled neither mutates the
+    // catalogue nor writes anything to disk (kept only for ABI stability).
     Settings settings;
-    settings.enabledPlugins = {"framelift.playlist"};
     const std::string ini = (std::filesystem::temp_directory_path() / "framelift_test_setenabled.ini").string();
+    std::filesystem::remove(ini);
     PluginContext ctx{"pref/", &settings, ini};
 
     ctx.AddPlugin("framelift.playlist", true, nullptr);
     ctx.AddPlugin("framelift.history", false, nullptr);
 
-    ctx.SetPluginEnabled("framelift.history", true); // enable a disabled one
-    EXPECT_NE(std::ranges::find(settings.enabledPlugins, "framelift.history"), settings.enabledPlugins.end());
+    ctx.SetPluginEnabled("framelift.history", true);
+    ctx.SetPluginEnabled("framelift.playlist", false);
+    ctx.SetPluginEnabled("Unknown", true);
 
-    ctx.SetPluginEnabled("framelift.playlist", false); // disable an enabled one
-    EXPECT_EQ(std::ranges::find(settings.enabledPlugins, "framelift.playlist"), settings.enabledPlugins.end());
-
-    ctx.SetPluginEnabled("Unknown", true); // no-op for unknown names
-    EXPECT_EQ(std::ranges::find(settings.enabledPlugins, "Unknown"), settings.enabledPlugins.end());
-
-    // Catalogue reflects the toggles immediately (drives the live checkbox state).
+    // Catalogue is unchanged — it still reflects the values passed to AddPlugin.
     const auto got = Enumerate(ctx);
     ASSERT_EQ(got.size(), 2u);
-    EXPECT_FALSE(got[0].enabled); // framelift.playlist
-    EXPECT_TRUE(got[1].enabled); // framelift.history
+    EXPECT_TRUE(got[0].enabled);  // framelift.playlist
+    EXPECT_FALSE(got[1].enabled); // framelift.history
 
-    std::filesystem::remove(ini);
+    EXPECT_FALSE(std::filesystem::exists(ini)); // nothing persisted
 }
