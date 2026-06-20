@@ -33,9 +33,7 @@ TEST(ModuleEntryTest, InfoCarriesAbiAndIdentity)
 {
     const FrameLiftPackageInfo* info = framelift_module_info();
     ASSERT_NE(info, nullptr);
-    EXPECT_EQ(info->abiMajor, FRAMELIFT_MODULE_ABI_MAJOR);
-    EXPECT_EQ(info->abiMinor, FRAMELIFT_MODULE_ABI_MINOR);
-    EXPECT_EQ(info->abiPatch, FRAMELIFT_MODULE_ABI_PATCH);
+    EXPECT_EQ(info->abiVersion, FRAMELIFT_ABI_VERSION);
     EXPECT_STREQ(info->packageId, "test.rendering");
     EXPECT_STREQ(info->moduleFile, "Acme.RenderingDummy.Core");
     EXPECT_STREQ(info->name, "RenderingDummy");

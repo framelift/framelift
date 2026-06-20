@@ -26,9 +26,7 @@ struct PackageFixture
         FrameLiftStringList reqFeatures, FrameLiftStringList optional, FrameLiftStringList platformList
     )
         : module{moduleId, "Module", nullptr, provides, reqModules, reqFeatures, EmptyList(), optional, platformList},
-          info{FRAMELIFT_MODULE_ABI_MAJOR,
-               FRAMELIFT_MODULE_ABI_MINOR,
-               FRAMELIFT_MODULE_ABI_PATCH,
+          info{FRAMELIFT_ABI_VERSION,
                packageId,
                packageId,
                packageId,

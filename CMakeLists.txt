@@ -228,18 +228,16 @@ endif ()
 # Stage a standalone, dependency-free SDK that external authors build plugins
 # against. Inert during a normal build; materialised via `cmake --install ...
 # --component sdk` + `cpack` (see .github/workflows/ci.yml). The package version tracks the
-# ABI version so find_package(FrameLiftSdk) can gate on SameMajorVersion.
-# ABI version is parsed from the SDK header — single source of truth.
+# ABI version so find_package(FrameLiftSdk) can gate on ExactVersion.
+# The version is parsed from the SDK header — single source of truth.
 set(_FrameLift_abi_header "${CMAKE_SOURCE_DIR}/sdk/include/framelift/ModuleABI.h")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_FrameLift_abi_header}")
-foreach (_part MAJOR MINOR PATCH)
-    file(STRINGS "${_FrameLift_abi_header}" _FrameLift_abi_line
-            REGEX "^#define FRAMELIFT_MODULE_ABI_${_part} +[0-9]+")
-    if (NOT _FrameLift_abi_line MATCHES "FRAMELIFT_MODULE_ABI_${_part} +([0-9]+)")
-        message(FATAL_ERROR "Could not parse FRAMELIFT_MODULE_ABI_${_part} from ${_FrameLift_abi_header}")
-    endif ()
-    set(FRAMELIFT_SDK_ABI_${_part} "${CMAKE_MATCH_1}")
-endforeach ()
+file(STRINGS "${_FrameLift_abi_header}" _FrameLift_abi_line
+        REGEX "^#define FRAMELIFT_ABI_VERSION +[0-9]+")
+if (NOT _FrameLift_abi_line MATCHES "FRAMELIFT_ABI_VERSION +([0-9]+)")
+    message(FATAL_ERROR "Could not parse FRAMELIFT_ABI_VERSION from ${_FrameLift_abi_header}")
+endif ()
+set(FRAMELIFT_SDK_ABI_VERSION "${CMAKE_MATCH_1}")
 unset(_FrameLift_abi_line)
 unset(_FrameLift_abi_header)
 
@@ -250,8 +248,8 @@ configure_package_config_file(
         INSTALL_DESTINATION "cmake")
 write_basic_package_version_file(
         "${CMAKE_CURRENT_BINARY_DIR}/sdk-pkg/FrameLiftSdkConfigVersion.cmake"
-        VERSION "${FRAMELIFT_SDK_ABI_MAJOR}.${FRAMELIFT_SDK_ABI_MINOR}.${FRAMELIFT_SDK_ABI_PATCH}"
-        COMPATIBILITY SameMajorVersion)
+        VERSION "${FRAMELIFT_SDK_ABI_VERSION}"
+        COMPATIBILITY ExactVersion)
 
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/sdk/include/"
         DESTINATION include COMPONENT sdk)

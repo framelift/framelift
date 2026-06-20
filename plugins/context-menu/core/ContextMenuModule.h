@@ -90,8 +90,12 @@ private:
     std::vector<Section> sections_;
     Hotkeys* keys_ = nullptr;
 
-    IMediaPlayer* player_ = nullptr;
+    IMediaPlayback* playback_ = nullptr;     // transport (pause)
+    IMediaProperties* props_ = nullptr;      // idle-state observation
+    IAudioControl* audio_ = nullptr;         // mute / normalize / device / track
+    ISubtitleControl* subtitles_ = nullptr;  // subtitle toggle / track
     IAppWindow* appWindow_ = nullptr;
+    IEventPump* events_ = nullptr;
     IFileDialog* fileDialog_ = nullptr;
 
     bool assembled_ = false;

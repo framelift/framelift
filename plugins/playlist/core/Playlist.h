@@ -152,7 +152,7 @@ private:
     struct WatchCbCtx
     {
         Playlist* self;
-        IAppWindow* win;
+        IEventPump* events;
     } watchCbCtx_{};
 
     void RenderSettingsContent(UIContext& ctx);

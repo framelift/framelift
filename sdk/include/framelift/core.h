@@ -19,3 +19,4 @@
 #include <framelift/ModuleEntry.h>
 #include <framelift/ModuleFields.h>
 #include <framelift/UrlUtils.h>
+#include <framelift/services.h>

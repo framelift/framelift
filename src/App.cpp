@@ -26,7 +26,7 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     : cliArgc_(cliArgc), cliArgv_(cliArgv), player_(std::make_unique<FFmpegPlayer>()),
       dirWatcher_(CreateDirWatcher())
 {
-    ffmpeg_ = static_cast<FFmpegPlayer*>(player_.get());
+    ffmpeg_ = player_.get();
 
     // Resolve the pref dir up front: the graphics backend — and thus the SDL window
     // flag (SDL_WINDOW_OPENGL vs SDL_WINDOW_VULKAN) — is fixed at window-creation
@@ -95,15 +95,25 @@ void App::InitPlatform(const char* title, const int width, const int height, con
     // NewFrame has not run yet) and seed the controller's snapshot.
     themeController_.ApplyInitial(settings_.Get<ThemeSettings>());
 
-    fileDialogService_.Init(appWindow_.get());
+    fileDialogService_.Init(appWindow_.get(), appWindow_.get());
 }
 
 void App::InitServices(const std::string& prefDir, const std::string& settingsPath)
 {
     moduleCtx_ = std::make_unique<ModuleContext>(prefDir, &settings_, settingsPath, &packageConfig_, packagesPath_);
 
-    moduleCtx_->RegisterService<IMediaPlayer>(player_.get());
+    // The one FFmpegPlayer is registered under each capability interface it implements.
+    // Register each separately: the variadic RegisterService can't sibling-cast a
+    // concrete pointer across unrelated bases. Plugins fetch only the facets they use.
+    moduleCtx_->RegisterService<IMediaPlayback>(player_.get());
+    moduleCtx_->RegisterService<IMediaProperties>(player_.get());
+    moduleCtx_->RegisterService<IVideoOutput>(player_.get());
+    moduleCtx_->RegisterService<IAudioControl>(player_.get());
+    moduleCtx_->RegisterService<ISubtitleControl>(player_.get());
+    // The one SdlAppWindow is registered under each window facet it implements.
     moduleCtx_->RegisterService<IAppWindow>(appWindow_.get());
+    moduleCtx_->RegisterService<IGraphicsSurface>(appWindow_.get());
+    moduleCtx_->RegisterService<IEventPump>(appWindow_.get());
     moduleCtx_->RegisterService<IDirWatcher>(dirWatcher_.get());
     moduleCtx_->RegisterService<Hotkeys>(&keys_);
     moduleCtx_->RegisterService<FocusManager>(&focus_);
@@ -112,7 +122,9 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
     // Controllers own their own event-bus wiring (settings re-apply, audio ducking,
     // theme reaction) so App holds no subscriptions.
     playbackControls_ =
-        std::make_unique<PlaybackControls>(keys_, settings_, *ffmpeg_, *appWindow_, fileDialogService_, *moduleCtx_);
+        std::make_unique<PlaybackControls>(
+            keys_, settings_, *ffmpeg_, *appWindow_, *appWindow_, *appWindow_, fileDialogService_, *moduleCtx_
+        );
     playbackControls_->Connect();
     themeController_.Connect(*moduleCtx_, settings_);
 }

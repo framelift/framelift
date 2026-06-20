@@ -23,7 +23,7 @@ struct Payload
 {
     void (*cb)(const char* path, bool ok, void* ud) = nullptr;
     void* ud = nullptr;
-    IAppWindow* win = nullptr;
+    IEventPump* events = nullptr;
     uint32_t eventType = 0;
     std::string path;
     std::vector<SDL_DialogFileFilter> sdlFilters; // kept alive until the callback fires
@@ -38,16 +38,17 @@ void SDLCALL SdlCallback(void* userdata, const char* const* fileList, int /*filt
     {
         p->path = fileList[0];
     }
-    p->win->PushCustomEvent(p->eventType, p);
+    p->events->PushCustomEvent(p->eventType, p);
 }
 } // namespace
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-void FileDialogServiceImpl::Init(IAppWindow* appWindow) noexcept
+void FileDialogServiceImpl::Init(IAppWindow* appWindow, IEventPump* events) noexcept
 {
     appWindow_ = appWindow;
-    eventType_ = appWindow->RegisterCustomEventType();
+    events_ = events;
+    eventType_ = events->RegisterCustomEventType();
 }
 
 void FileDialogServiceImpl::OpenFile(void (*cb)(const char* path, bool ok, void* ud), void* ud) noexcept
@@ -57,7 +58,7 @@ void FileDialogServiceImpl::OpenFile(void (*cb)(const char* path, bool ok, void*
         return;
     }
 
-    auto* p = new Payload{cb, ud, appWindow_, eventType_, {}, {}};
+    auto* p = new Payload{cb, ud, events_, eventType_, {}, {}};
     if (settings_)
     {
         const FilesSettings& files = settings_->Get<FilesSettings>();

@@ -4,6 +4,8 @@ class HotkeysImpl;
 class Settings;
 class FFmpegPlayer;
 class IAppWindow;
+class IGraphicsSurface;
+class IEventPump;
 class IFileDialog;
 class IModuleContext;
 
@@ -19,7 +21,7 @@ class PlaybackControls
 public:
     PlaybackControls(
         HotkeysImpl& keys, const Settings& settings, FFmpegPlayer& player, IAppWindow& window,
-        IFileDialog& fileDialog, IModuleContext& ctx
+        IGraphicsSurface& gfx, IEventPump& events, IFileDialog& fileDialog, IModuleContext& ctx
     );
 
     // Apply the player+window settings now, then keep them in sync: subscribe to
@@ -46,6 +48,8 @@ private:
     const Settings& settings_;
     FFmpegPlayer& player_;
     IAppWindow& window_;
+    IGraphicsSurface& gfx_;
+    IEventPump& events_;
     IFileDialog& fileDialog_;
     IModuleContext& ctx_;
     bool playerIdle_ = true;

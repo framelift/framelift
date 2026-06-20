@@ -76,8 +76,9 @@ next to the executable. You can build your own against the **dependency-free plu
 - **Small surface.** Plugins include only the umbrella headers `<framelift/core.h>`, `<framelift/ui.h>`,
   `<framelift/services.h>`, and `<framelift/platform.h>` — never host internals.
 - **Cross-plugin communication.** Plugins never link against each other; they interact through the
-  plugin context via pub/sub events, synchronous service interfaces (e.g. `IHistory`, and platform
-  services `IMediaPlayer`/`IAppWindow`/`IDirWatcher`/`IFileDialog`), and a shared settings registry.
+  module context via pub/sub events and capability services discovered with `ctx.GetService<T>()` —
+  `IHistory`, the settings split (`ISettingsStore`/`ISettingsRegistry`), and platform interface
+  families (`IMediaPlayback`/`IAudioControl`/…, `IAppWindow`/`IGraphicsSurface`/`IEventPump`, …).
 
 See [sdk/](sdk/) and the worked example in [sdk/examples/hello-plugin/](sdk/examples/hello-plugin) for
 the API and a minimal plugin to copy from.
@@ -91,7 +92,7 @@ FrameLift/
 │   │   ├── core.h          # Umbrella: module lifecycle, context, ABI, events, hotkeys
 │   │   ├── ui.h            # Umbrella: IRenderable, Panel, UIContext, widgets
 │   │   ├── services.h      # Umbrella: cross-plugin service interfaces
-│   │   ├── platform.h      # Umbrella: IMediaPlayer, IAppWindow, IDirWatcher, IFileDialog
+│   │   ├── platform.h      # Umbrella: media playback + window interface families, IDirWatcher, IFileDialog
 │   │   ├── services/       # Per-plugin service interfaces (IHistory, …)
 │   │   ├── platform/       # Platform service interfaces
 │   │   └── ui/             # UI helper headers (Panel, UIContext, Widgets, …)

@@ -85,7 +85,7 @@ void RemoteStream::OpenUrl(const std::string& url) noexcept
         return;
     }
 
-    auto* player = ctx_->GetService<IMediaPlayer>();
+    auto* player = ctx_->GetService<IMediaPlayback>();
     if (!player)
     {
         return;

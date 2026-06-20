@@ -71,8 +71,8 @@ constexpr DecodeModeItem kDecodeModes[] = {
 
 bool HasNvidiaAdapter(const IModuleContext* ctx)
 {
-    auto* window = ctx ? ctx->GetService<IAppWindow>() : nullptr;
-    auto* backend = window ? static_cast<IGraphicsBackend*>(window->GetGraphicsBackend()) : nullptr;
+    auto* surface = ctx ? ctx->GetService<IGraphicsSurface>() : nullptr;
+    auto* backend = surface ? static_cast<IGraphicsBackend*>(surface->GetGraphicsBackend()) : nullptr;
     return backend && backend->HasNvidiaAdapter();
 }
 } // namespace
@@ -91,25 +91,30 @@ std::vector<framelift::Keybind> SettingsMenu::Keybinds()
 
 void SettingsMenu::SeedValue(IModuleContext& ctx, const FieldMeta& f)
 {
+    auto* store = ctx.GetService<ISettingsStore>();
+    if (!store)
+    {
+        return;
+    }
     // Pull one field's current host value into the editing model, by type tag.
     switch (f.type)
     {
     case 0: // bool
-        model_.Bool(f.key) = ctx.GetSettingBool(f.key.c_str());
+        model_.Bool(f.key) = store->GetSettingBool(f.key.c_str());
         break;
     case 1: // int
-        model_.Int(f.key) = ctx.GetSettingInt(f.key.c_str());
+        model_.Int(f.key) = store->GetSettingInt(f.key.c_str());
         break;
     case 2: // float
-        model_.Float(f.key) = ctx.GetSettingFloat(f.key.c_str());
+        model_.Float(f.key) = store->GetSettingFloat(f.key.c_str());
         break;
     case 3: // string
     {
-        const int n = ctx.GetSettingString(f.key.c_str(), nullptr, 0);
+        const int n = store->GetSettingString(f.key.c_str(), nullptr, 0);
         std::string s(static_cast<std::size_t>(n), '\0');
         if (n > 0)
         {
-            ctx.GetSettingString(f.key.c_str(), s.data(), n + 1);
+            store->GetSettingString(f.key.c_str(), s.data(), n + 1);
         }
         model_.Str(f.key) = std::move(s);
         break;
@@ -131,8 +136,13 @@ void SettingsMenu::SeedFromContext(IModuleContext& ctx)
         SettingsMenu* self;
         IModuleContext* ctx;
     };
+    auto* registry = ctx.GetService<ISettingsRegistry>();
+    if (!registry)
+    {
+        return;
+    }
     SeedCtx sc{this, &ctx};
-    ctx.EnumerateSettings(
+    registry->EnumerateSettings(
         [](const FrameLiftSettingDesc* d, void* ud)
         {
             auto& sc = *static_cast<SeedCtx*>(ud);
@@ -203,9 +213,14 @@ void SettingsMenu::RegisterCorePages(IModuleContext& ctx)
 
     // applyFn is null: core fields are committed wholesale in Save() by iterating
     // the ABI-discovered field list, so no per-page apply is needed.
+    auto* registry = ctx.GetService<ISettingsRegistry>();
+    if (!registry)
+    {
+        return;
+    }
     for (auto& page : corePages_)
     {
-        ctx.RegisterSettingsPage(page.title, &CoreRenderThunk, nullptr, &page, true, nullptr);
+        registry->RegisterSettingsPage(page.title, &CoreRenderThunk, nullptr, &page, true, nullptr);
     }
 }
 
@@ -307,7 +322,7 @@ void SettingsMenu::Save()
     }
 
     // Call all plugin applyFns first so plugin settings are written before SaveSettings().
-    ctx_->EnumerateSettingsPages(
+    SettingsReg()->EnumerateSettingsPages(
         [](const char*, void (*)(void*, UIContext&), void (*applyFn)(void*), void* ud, bool, void*)
         {
             if (applyFn)
@@ -324,22 +339,22 @@ void SettingsMenu::Save()
         switch (f.type)
         {
         case 0:
-            ctx_->CommitSettingBool(f.key.c_str(), model_.Bool(f.key));
+            SettingsStore()->CommitSettingBool(f.key.c_str(), model_.Bool(f.key));
             break;
         case 1:
-            ctx_->CommitSettingInt(f.key.c_str(), model_.Int(f.key));
+            SettingsStore()->CommitSettingInt(f.key.c_str(), model_.Int(f.key));
             break;
         case 2:
-            ctx_->CommitSettingFloat(f.key.c_str(), model_.Float(f.key));
+            SettingsStore()->CommitSettingFloat(f.key.c_str(), model_.Float(f.key));
             break;
         case 3:
-            ctx_->CommitSettingString(f.key.c_str(), model_.Str(f.key).c_str());
+            SettingsStore()->CommitSettingString(f.key.c_str(), model_.Str(f.key).c_str());
             break;
         default:
             break;
         }
     }
-    ctx_->SaveSettings();
+    SettingsStore()->SaveSettings();
 }
 
 void SettingsMenu::ResetValue(const FieldMeta& f)
@@ -402,7 +417,7 @@ const char* SettingsMenu::PageName() const
     };
 
     S s{activePageIndex_};
-    ctx_->EnumerateSettingsPages(
+    SettingsReg()->EnumerateSettingsPages(
         [](const char* title, void (*)(void*, UIContext&), void (*)(void*), void*, bool, void* pv)
         {
             auto& s = *static_cast<S*>(pv);
@@ -433,7 +448,7 @@ void SettingsMenu::ResetPage()
     };
 
     S s{activePageIndex_};
-    ctx_->EnumerateSettingsPages(
+    SettingsReg()->EnumerateSettingsPages(
         [](const char*, void (*)(void*, UIContext&), void (*)(void*), void* ud, bool, void* pv)
         {
             auto& s = *static_cast<S*>(pv);
@@ -513,10 +528,10 @@ void SettingsMenu::RenderSidebar(UIContext& ctx)
     };
 
     Pass corePass{this, &ctx, true, false};
-    ctx_->EnumerateSettingsPages(visit, &corePass);
+    SettingsReg()->EnumerateSettingsPages(visit, &corePass);
 
     Pass pluginPass{this, &ctx, false, corePass.rendered};
-    ctx_->EnumerateSettingsPages(visit, &pluginPass);
+    SettingsReg()->EnumerateSettingsPages(visit, &pluginPass);
 }
 
 // ── Pages ─────────────────────────────────────────────────────────────────────
@@ -782,7 +797,7 @@ void SettingsMenu::EnsureFontsQueried()
     };
 
     Lists lists{&fontNames_, &fontPaths_};
-    ctx_->EnumerateSystemFonts(
+    FontCatalog()->EnumerateSystemFonts(
         [](const char* name, const char* path, void* ud)
         {
             auto& l = *static_cast<Lists*>(ud);
@@ -897,7 +912,7 @@ void SettingsMenu::RenderPageAudio(UIContext& ctx)
     {
         deviceIdx = 0;
     }
-    if (auto* player = ctx_ ? ctx_->GetService<IMediaPlayer>() : nullptr)
+    if (auto* player = ctx_ ? ctx_->GetService<IAudioControl>() : nullptr)
     {
         struct Devices
         {
@@ -1080,7 +1095,7 @@ void SettingsMenu::RenderPageKeybinds(UIContext& ctx)
 
         KbCtx kc{this, &ctx};
 
-        ctx_->EnumerateKeybindEntries(
+        SettingsReg()->EnumerateKeybindEntries(
             [](const char* label, const char* actionName, const char* (*getStr)(void*),
                void (*setStr)(void*, const char*), void* ud, void* pv)
             {
@@ -1150,7 +1165,7 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
     };
 
     PluginsCtx pc{this, &ctx};
-    ctx_->EnumeratePackages(
+    PackageCatalog()->EnumeratePackages(
         [](const char* name, const FrameLiftPackageInfo& info, bool enabled, bool loaded, bool loadFailed, void* pv)
         {
             auto& [self, ctx, count] = *static_cast<PluginsCtx*>(pv);
@@ -1176,7 +1191,7 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
                 bool en = enabled;
                 if (ctx->Checkbox("Enabled", &en))
                 {
-                    self->ctx_->SetPackageEnabled(name, en);
+                    self->PackageCatalog()->SetPackageEnabled(name, en);
                 }
             }
 
@@ -1228,11 +1243,11 @@ void SettingsMenu::LoadConfigText()
     }
 
     // Resolve the path the host actually persists to (settings.ini).
-    const int n = ctx_->GetSettingsFilePath(nullptr, 0);
+    const int n = SettingsStore()->GetSettingsFilePath(nullptr, 0);
     std::string path(static_cast<std::size_t>(n), '\0');
     if (n > 0)
     {
-        ctx_->GetSettingsFilePath(path.data(), n + 1);
+        SettingsStore()->GetSettingsFilePath(path.data(), n + 1);
     }
     configPath_ = std::move(path);
 
@@ -1293,7 +1308,7 @@ void SettingsMenu::RenderPageConfig(UIContext& ctx)
                 out.close();
                 if (ctx_)
                 {
-                    ctx_->ReloadSettings(); // host re-reads the file and re-applies live
+                    SettingsStore()->ReloadSettings(); // host re-reads the file and re-applies live
                     SeedFromContext(*ctx_); // refresh the typed pages from the new values
                 }
                 LoadConfigText(); // normalize the buffer to exactly what was persisted
@@ -1327,7 +1342,7 @@ void SettingsMenu::OnRender(UIContext& ctx)
         };
 
         F f{&corePages_[0]};
-        ctx_->EnumerateSettingsPages(
+        SettingsReg()->EnumerateSettingsPages(
             [](const char*, void (*)(void*, UIContext&), void (*)(void*), void* ud, bool, void* pv)
             {
                 auto& [target, cur, found] = *static_cast<F*>(pv);
@@ -1397,7 +1412,7 @@ void SettingsMenu::OnRender(UIContext& ctx)
                 };
 
                 RC rc{&ctx, activePageIndex_};
-                ctx_->EnumerateSettingsPages(
+                SettingsReg()->EnumerateSettingsPages(
                     [](const char*, void (*renderFn)(void*, UIContext&), void (*)(void*), void* ud, bool, void* pv)
                     {
                         auto& rc = *static_cast<RC*>(pv);

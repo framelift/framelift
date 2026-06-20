@@ -1,33 +1,25 @@
 #pragma once
 
-// Plugin ABI version (major.minor.patch).
+// Plugin ABI version — a single integer
 //
-// The host loads a plugin iff:
-//     plugin.abiMajor == host.abiMajor && plugin.abiMinor <= host.abiMinor
-// Patch never affects the decision. The check runs before any vtable is touched.
+// FrameLift ships the host and every plugin from one source tree, in lockstep, so
+// the ABI gate only needs to catch a stale binary accidentally left behind. The
+// host loads a plugin iff:
+//     plugin.abiVersion == host.abiVersion
+// The check runs before any vtable is touched.
 //
-// MAJOR: bump on any breaking change: removing/reordering virtual methods,
-// changing a signature, appending to a host-called plugin interface
-// (IModule, IRenderable), changing a framelift_* export signature, or changing
-// FrameLiftPackageInfo layout. Reset MINOR and PATCH to 0.
-// MINOR: bump on backward-compatible additions to host-provided surface:
-// appending a method to IModuleContext, adding a new service interface, or adding
-// a new optional export. Reset PATCH to 0.
-// PATCH: ABI-neutral fixes. Carried and logged but not gated.
+// Bump the version ONLY on a break to the core load-bearing handshake (Tier 1):
+//   - a framelift_* export signature,
+//   - the FrameLiftPackageInfo / FrameLiftModuleInfo POD layout,
+//   - a host-CALLED interface (IModule, IRenderable),
+//   - the bootstrap surface of IModuleContext (GetServiceRaw/RegisterServiceRaw/
+//     SubscribeRaw/PublishRaw).
 //
-// MAJOR 2: generalized the host/player/window render hand-off for Vulkan.
-// MINOR 1: appended IMediaPlayer::SetSubtitleStyle.
-// MINOR 2: appended audio output enumeration and preferences.
-// MAJOR 3: plugin identity moved to JSON-authored embedded package/module metadata.
-// MINOR 1: appended IMediaPlayer::GetAudioPreferences.
-// MINOR 2: appended IModuleContext::EnumerateSettings.
-// MAJOR 4: package/module vocabulary rename — framelift_plugin_info →
-//          framelift_module_info, FrameLiftPluginInfo → FrameLiftPackageInfo,
-//          IPluginContext → IModuleContext, IPluginSettings → IModuleSettings,
-//          FRAMELIFT_PLUGIN_ABI_* → FRAMELIFT_MODULE_ABI_*.
-#define FRAMELIFT_MODULE_ABI_MAJOR 4
-#define FRAMELIFT_MODULE_ABI_MINOR 0
-#define FRAMELIFT_MODULE_ABI_PATCH 0
+// Everything else is a capability surface (Tier 2): host functionality is exposed
+// as small, independently-discovered service interfaces. Adding, changing, or
+// removing a Tier-2 interface NEVER bumps the version — consumers discover it with
+// ctx.GetService<T>() and degrade when it returns nullptr.
+#define FRAMELIFT_ABI_VERSION 1
 
 struct FrameLiftStringList
 {
@@ -49,14 +41,12 @@ struct FrameLiftModuleInfo
 };
 
 // POD identity + ABI descriptor exported by framelift_module_info(). The host
-// reads it before constructing the plugin. The ABI fields come from the
-// JSON-authored abi value and appear first so the loader can read them before
-// any later major-gated additions.
+// reads it before constructing the plugin. The version comes from the JSON-authored
+// abi value and appears first so the loader can read it before touching any later
+// field — the only layout guarantee the host relies on across a version break.
 struct FrameLiftPackageInfo
 {
-    int abiMajor;
-    int abiMinor;
-    int abiPatch;
+    int abiVersion;
     const char* packageId;   // Stable dotted package id, e.g. "framelift.playlist".
     const char* moduleFile;  // Shipped module binary basename, e.g. "FrameLift.Playlist.Core".
     const char* name;        // Human-readable package name.
@@ -68,9 +58,10 @@ struct FrameLiftPackageInfo
 };
 
 // Load-time compatibility predicate. Header-only and POD so both the host loader
-// and the unit tests share one source of truth. Patch is intentionally absent:
-// a patch bump is non-breaking by definition and never changes the decision.
-inline bool FrameLiftAbiCompatible(int pluginMajor, int pluginMinor, int hostMajor, int hostMinor) noexcept
+// and the unit tests share one source of truth. The rule is exact equality: host
+// and plugins are built together, so any mismatch means a stale binary that must be
+// rebuilt rather than loaded.
+inline bool FrameLiftAbiCompatible(int pluginVersion, int hostVersion) noexcept
 {
-    return pluginMajor == hostMajor && pluginMinor <= hostMinor;
+    return pluginVersion == hostVersion;
 }

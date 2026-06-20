@@ -32,7 +32,8 @@ class FFmpegPacketQueue;
 class FFmpegHwDecode;
 class Settings;
 
-// Concrete FFmpeg + libass implementation of IMediaPlayer (issue #8).
+// Concrete FFmpeg + libass implementation of the media playback interface family
+// (IMediaPlayback / IMediaProperties / IVideoOutput / IAudioControl / ISubtitleControl).
 //
 // This and FFmpeg* siblings are the ONLY files that may #include <libav*/...> or
 // <ass/...> headers.
@@ -44,7 +45,11 @@ class Settings;
 // worker spawns, holds the last frame on EOF (still seekable), and handles still
 // images / slideshows. Pause, volume/mute and the full host-consumed property set
 // are live. Subtitles (libass) and hardware decoding arrive in later phases.
-class FFmpegPlayer final : public IMediaPlayer
+class FFmpegPlayer final : public IMediaPlayback,
+                           public IMediaProperties,
+                           public IVideoOutput,
+                           public IAudioControl,
+                           public ISubtitleControl
 {
 public:
     FFmpegPlayer();
@@ -71,7 +76,7 @@ public:
 
     // Apply every player-side option from the host Settings in one call (playback,
     // decode mode, read-ahead cache, subtitle style, audio preferences + normalize).
-    // Concrete-only: Settings can't cross the IMediaPlayer ABI.
+    // Concrete-only: Settings can't cross the playback-interface ABI.
     void ApplySettings(const Settings& s);
 
     // Briefly duck audio (used on UI notifications); auto-restores after a short

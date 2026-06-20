@@ -3,6 +3,11 @@
 #include "ModuleSettingsImpl.h"
 #include "SettingsRegistry.h"
 #include <framelift/IModuleContext.h>
+#include <framelift/services/IAppPaths.h>
+#include <framelift/services/IFontCatalog.h>
+#include <framelift/services/IPackageCatalog.h>
+#include <framelift/services/ISettingsRegistry.h>
+#include <framelift/services/ISettingsStore.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -47,8 +52,16 @@ struct ChangeCallbackRec
     void (*cleanup)(void*) = nullptr;
 };
 
-// Concrete IModuleContext implementation owned by App.
-class ModuleContext final : public IModuleContext
+// Concrete host context. Implements the bootstrap IModuleContext plus every host
+// capability service, and registers itself under each service id at construction so
+// plugins can ctx.GetService<ISettingsStore>() etc. Host code holding a ModuleContext
+// directly can still call any method without going through the registry.
+class ModuleContext final : public IModuleContext,
+                            public ISettingsStore,
+                            public ISettingsRegistry,
+                            public IPackageCatalog,
+                            public IFontCatalog,
+                            public IAppPaths
 {
 public:
     ModuleContext(

@@ -102,7 +102,7 @@ TEST(PlaylistTest, LoadFileDrivesPlayerAndPublishesEvent)
     ModuleContext ctx("pref/", &settings, ini.str());
 
     FakeMediaPlayer player;
-    ctx.RegisterService<IMediaPlayer>(&player);
+    ctx.RegisterService<IMediaPlayback>(&player);
 
     std::string opened;
     framelift::Subscribe<FileOpenedEvent>(ctx,
@@ -158,7 +158,7 @@ TEST(PlaylistTest, OpenFileRequestRespectsRebuildFlag)
     const TempFile ini;
     ModuleContext ctx("pref/", &settings, ini.str());
     FakeMediaPlayer player;
-    ctx.RegisterService<IMediaPlayer>(&player);
+    ctx.RegisterService<IMediaPlayback>(&player);
 
     Playlist pl;
     pl.Install(ctx);

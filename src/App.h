@@ -66,10 +66,11 @@ private:
     const char* const* cliArgv_ = nullptr;
 
     std::unique_ptr<SdlAppWindow> appWindow_;
-    std::unique_ptr<IMediaPlayer> player_;
-    // Same object as player_, typed for the FFmpeg-only entry points (ApplySettings,
-    // decode mode, ducking) that aren't on IMediaPlayer. App always builds an FFmpegPlayer.
-    FFmpegPlayer* ffmpeg_ = nullptr;
+    // App always builds the concrete FFmpegPlayer: it needs the FFmpeg-only entry
+    // points (ApplySettings, decode mode, ducking) that aren't on any of the split
+    // playback interfaces, and it registers each of those interfaces as a service.
+    std::unique_ptr<FFmpegPlayer> player_;
+    FFmpegPlayer* ffmpeg_ = nullptr; // alias of player_.get(), kept for readability at call sites
     std::unique_ptr<IDirWatcher> dirWatcher_;
 
     bool pendingResize_ = false;

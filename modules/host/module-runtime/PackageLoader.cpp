@@ -120,8 +120,7 @@ const FrameLiftPackageInfo* ReadPackageInfo(void* handle)
 
 bool AbiCompatible(const FrameLiftPackageInfo* info)
 {
-    return info &&
-           FrameLiftAbiCompatible(info->abiMajor, info->abiMinor, FRAMELIFT_MODULE_ABI_MAJOR, FRAMELIFT_MODULE_ABI_MINOR);
+    return info && FrameLiftAbiCompatible(info->abiVersion, FRAMELIFT_ABI_VERSION);
 }
 
 std::string PackageId(const FrameLiftPackageInfo* info)
@@ -157,9 +156,8 @@ void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_
         if (!AbiCompatible(info))
         {
             Log::Warn(
-                "Plugin package '{}' v{}.{}.{}: ABI {}.{}.{} incompatible with host {}.{}.{} - skipped",
-                PackageId(info), info->version[0], info->version[1], info->version[2], info->abiMajor, info->abiMinor,
-                info->abiPatch, FRAMELIFT_MODULE_ABI_MAJOR, FRAMELIFT_MODULE_ABI_MINOR, FRAMELIFT_MODULE_ABI_PATCH
+                "Plugin package '{}' v{}.{}.{}: ABI version {} incompatible with host version {} - rebuild against current SDK",
+                PackageId(info), info->version[0], info->version[1], info->version[2], info->abiVersion, FRAMELIFT_ABI_VERSION
             );
             CloseLib(handle);
             continue;
@@ -259,9 +257,9 @@ void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_
         const std::string by = info->publisher ? std::string(" by ") + info->publisher : std::string();
         const double pluginMs = std::chrono::duration<double, std::milli>(Clock::now() - pluginStart).count();
         Log::Info(
-            "Plugin package '{}' v{}.{}.{}{} loaded (abi {}.{}.{}, modules {}, render order {}, {:.1f} ms)",
-            PackageId(info), info->version[0], info->version[1], info->version[2], by, info->abiMajor, info->abiMinor,
-            info->abiPatch, info->moduleCount, order, pluginMs
+            "Plugin package '{}' v{}.{}.{}{} loaded (abi version {}, modules {}, render order {}, {:.1f} ms)",
+            PackageId(info), info->version[0], info->version[1], info->version[2], by, info->abiVersion, info->moduleCount,
+            order, pluginMs
         );
     }
 

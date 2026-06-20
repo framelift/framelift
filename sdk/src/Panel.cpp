@@ -5,6 +5,7 @@
 #include <framelift/Guard.h>
 #include <framelift/IModuleContext.h>
 #include <framelift/platform/IAppWindow.h>
+#include <framelift/services/ISettingsStore.h>
 #include <framelift/ui/Panel.h>
 #include <framelift/ui/UIContext.h>
 
@@ -55,12 +56,14 @@ void Panel::SetOpen(const bool v)
 
 float Panel::GetWidth() const
 {
-    return panelCtx_ ? panelCtx_->GetSettingFloat("ui.panelWidth") : defaultWidth_;
+    auto* store = panelCtx_ ? panelCtx_->GetService<ISettingsStore>() : nullptr;
+    return store ? store->GetSettingFloat("ui.panelWidth") : defaultWidth_;
 }
 
 float Panel::GetSlideSpeed() const
 {
-    return panelCtx_ ? panelCtx_->GetSettingFloat("ui.slideSpeed") : 18.f;
+    auto* store = panelCtx_ ? panelCtx_->GetService<ISettingsStore>() : nullptr;
+    return store ? store->GetSettingFloat("ui.slideSpeed") : 18.f;
 }
 
 float Panel::PanelWidth() const

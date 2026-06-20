@@ -29,10 +29,11 @@ struct VolCell
 } // namespace
 
 PlaybackControls::PlaybackControls(
-    HotkeysImpl& keys, const Settings& settings, FFmpegPlayer& player, IAppWindow& window, IFileDialog& fileDialog,
-    IModuleContext& ctx
+    HotkeysImpl& keys, const Settings& settings, FFmpegPlayer& player, IAppWindow& window, IGraphicsSurface& gfx,
+    IEventPump& events, IFileDialog& fileDialog, IModuleContext& ctx
 )
-    : keys_(keys), settings_(settings), player_(player), window_(window), fileDialog_(fileDialog), ctx_(ctx)
+    : keys_(keys), settings_(settings), player_(player), window_(window), gfx_(gfx), events_(events),
+      fileDialog_(fileDialog), ctx_(ctx)
 {
 }
 
@@ -42,7 +43,7 @@ void PlaybackControls::Connect()
     const auto apply = [this]
     {
         player_.ApplySettings(settings_);
-        window_.SetVSync(settings_.Get<PlaybackSettings>().videoSync);
+        gfx_.SetVSync(settings_.Get<PlaybackSettings>().videoSync);
     };
     apply();
     framelift::RegisterSettingsChangeCallback(ctx_, apply);
@@ -60,7 +61,7 @@ void PlaybackControls::Bind()
 
     host::Bind(keys_, "togglePause", kb.togglePause, [this] { TogglePause(); });
     host::Bind(keys_, "toggleFullscreen", kb.toggleFullscreen, [this] { window_.SetFullscreen(!window_.IsFullscreen()); });
-    host::Bind(keys_, "quit", kb.quit, [this] { window_.PushQuitEvent(); });
+    host::Bind(keys_, "quit", kb.quit, [this] { events_.PushQuitEvent(); });
     host::Bind(
         keys_, "toggleNormalize", kb.toggleNormalize,
         [this]

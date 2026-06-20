@@ -2,31 +2,15 @@
 
 #include <gtest/gtest.h>
 
-TEST(PluginAbiTest, SameMajorMinorLoads)
+TEST(PluginAbiTest, MatchingEpochLoads)
 {
-    EXPECT_TRUE(FrameLiftAbiCompatible(3, 0, 3, 0));
+    EXPECT_TRUE(FrameLiftAbiCompatible(FRAMELIFT_ABI_VERSION, FRAMELIFT_ABI_VERSION));
 }
 
-TEST(PluginAbiTest, OlderPluginMinorLoads)
+TEST(PluginAbiTest, MismatchedEpochRejectedEitherDirection)
 {
-    EXPECT_TRUE(FrameLiftAbiCompatible(3, 0, 3, 2));
-}
-
-TEST(PluginAbiTest, NewerPluginMinorRejected)
-{
-    EXPECT_FALSE(FrameLiftAbiCompatible(3, 2, 3, 1));
-}
-
-TEST(PluginAbiTest, DifferentMajorRejectedEitherDirection)
-{
-    EXPECT_FALSE(FrameLiftAbiCompatible(2, 2, 3, 0));
-    EXPECT_FALSE(FrameLiftAbiCompatible(3, 0, 2, 9));
-}
-
-TEST(PluginAbiTest, PackageMetadataIsAbiThree)
-{
-    EXPECT_EQ(FRAMELIFT_MODULE_ABI_MAJOR, 3);
-    EXPECT_EQ(FRAMELIFT_MODULE_ABI_MINOR, 1);
+    EXPECT_FALSE(FrameLiftAbiCompatible(FRAMELIFT_ABI_VERSION - 1, FRAMELIFT_ABI_VERSION));
+    EXPECT_FALSE(FrameLiftAbiCompatible(FRAMELIFT_ABI_VERSION + 1, FRAMELIFT_ABI_VERSION));
 }
 
 TEST(PluginAbiTest, MetadataCarriesPackageAndModules)
@@ -43,9 +27,7 @@ TEST(PluginAbiTest, MetadataCarriesPackageAndModules)
          {nullptr, 0},
          {nullptr, 0}},
     };
-    static constexpr FrameLiftPackageInfo info{FRAMELIFT_MODULE_ABI_MAJOR,
-                                              FRAMELIFT_MODULE_ABI_MINOR,
-                                              FRAMELIFT_MODULE_ABI_PATCH,
+    static constexpr FrameLiftPackageInfo info{FRAMELIFT_ABI_VERSION,
                                               "framelift.playlist",
                                               "FrameLift.Playlist.Core",
                                               "Playlist",

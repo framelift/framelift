@@ -2,6 +2,8 @@
 #include <framelift/Guard.h>
 #include <framelift/HotkeyHelpers.h>
 #include <framelift/ModuleBase.h>
+#include <framelift/services/ISettingsRegistry.h>
+#include <framelift/services/ISettingsStore.h>
 #include <framelift/ui/UIContext.h>
 #include <cstring>
 
@@ -19,23 +21,26 @@ void ModuleBase::Install(IModuleContext& ctx) noexcept
             fields_ = SettingsFields();
             keybinds_ = Keybinds();
 
-            // Load module-specific settings; write defaults to disk on first run.
-            IModuleSettings& ps = ctx.GetModuleSettings(SettingsSection().c_str());
-            LoadSettings(ps);
-            if (!ps.WasLoaded())
+            if (auto* store = ctx.GetService<ISettingsStore>())
             {
-                SaveSettings(ps);
-                ps.Save();
-            }
+                // Load module-specific settings; write defaults to disk on first run.
+                IModuleSettings& ps = store->GetModuleSettings(SettingsSection().c_str());
+                LoadSettings(ps);
+                if (!ps.WasLoaded())
+                {
+                    SaveSettings(ps);
+                    ps.Save();
+                }
 
-            // Load module keybinds from this module's own [<Module>.keybinds] section.
-            IModuleSettings& kps = ctx.GetModuleSettings(KeybindsSection().c_str());
-            LoadKeybinds(kps);
-            const int keysBefore = kps.KeyCount();
-            SaveKeybinds(kps);
-            if (kps.KeyCount() > keysBefore)
-            {
-                kps.Save();
+                // Load module keybinds from this module's own [<Module>.keybinds] section.
+                IModuleSettings& kps = store->GetModuleSettings(KeybindsSection().c_str());
+                LoadKeybinds(kps);
+                const int keysBefore = kps.KeyCount();
+                SaveKeybinds(kps);
+                if (kps.KeyCount() > keysBefore)
+                {
+                    kps.Save();
+                }
             }
 
             RegisterKeybinds(ctx);
@@ -185,7 +190,12 @@ void ModuleBase::OnBindHotkeys(Hotkeys& keys)
 
 void ModuleBase::SetupSettingsPage(IModuleContext& ctx, const bool visible)
 {
-    ctx.RegisterSettingsPage(
+    auto* registry = ctx.GetService<ISettingsRegistry>();
+    if (!registry)
+    {
+        return;
+    }
+    registry->RegisterSettingsPage(
         ModuleName(),
         [](void* ud, UIContext& uiCtx)
         {
@@ -204,13 +214,14 @@ void ModuleBase::SetupSettingsPage(IModuleContext& ctx, const bool visible)
                 [&]
                 {
                     auto* fp = static_cast<ModuleBase*>(ud);
-                    if (!fp->ctx_)
+                    auto* store = fp->ctx_ ? fp->ctx_->GetService<ISettingsStore>() : nullptr;
+                    if (!store)
                     {
                         return;
                     }
-                    IModuleSettings& ps = fp->ctx_->GetModuleSettings(fp->SettingsSection().c_str());
+                    IModuleSettings& ps = store->GetModuleSettings(fp->SettingsSection().c_str());
                     fp->SaveSettings(ps);
-                    IModuleSettings& kps = fp->ctx_->GetModuleSettings(fp->KeybindsSection().c_str());
+                    IModuleSettings& kps = store->GetModuleSettings(fp->KeybindsSection().c_str());
                     fp->SaveKeybinds(kps);
                 }
             );

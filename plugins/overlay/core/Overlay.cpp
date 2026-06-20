@@ -20,13 +20,14 @@ void Overlay::OnInstall(IModuleContext& ctx)
 {
     Instance = this;
 
-    player_ = ctx.GetService<IMediaPlayer>();
-    if (player_)
+    playback_ = ctx.GetService<IMediaPlayback>();
+    props_ = ctx.GetService<IMediaProperties>();
+    if (props_)
     {
-        player_->ObserveProperty(PlayerProperty::IdleActive);
-        player_->ObserveProperty(PlayerProperty::TimePos);
-        player_->ObserveProperty(PlayerProperty::Duration);
-        player_->ObserveProperty(PlayerProperty::Pause);
+        props_->ObserveProperty(PlayerProperty::IdleActive);
+        props_->ObserveProperty(PlayerProperty::TimePos);
+        props_->ObserveProperty(PlayerProperty::Duration);
+        props_->ObserveProperty(PlayerProperty::Pause);
     }
 
     framelift::Subscribe<NotificationEvent>(
@@ -233,7 +234,10 @@ void Overlay::RenderControlsBar(const float w, const float h, UIContext& ctx)
     // Play / pause click
     if (lclicked && mouse.y >= barTop && mouse.y <= h && mouse.x >= iconX - 6.f && mouse.x <= iconX + kIconW + 6.f)
     {
-        player_->TogglePause();
+        if (playback_)
+        {
+            playback_->TogglePause();
+        }
     }
 
     // Seek bar: begin drag on click, continue while held
@@ -244,10 +248,10 @@ void Overlay::RenderControlsBar(const float w, const float h, UIContext& ctx)
         isDraggingSeek_ = true;
     }
 
-    if (isDraggingSeek_ && ldown && duration_ > 0.0)
+    if (isDraggingSeek_ && ldown && duration_ > 0.0 && playback_)
     {
         const float newFrac = std::clamp((mouse.x - trackLeft) / trackW, 0.f, 1.f);
-        player_->SeekAbsolute(static_cast<double>(newFrac) * duration_);
+        playback_->SeekAbsolute(static_cast<double>(newFrac) * duration_);
     }
 }
 

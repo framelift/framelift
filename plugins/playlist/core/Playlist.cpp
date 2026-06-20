@@ -19,15 +19,16 @@
 // Falls back to the supplied default if no context is available.
 static std::string ReadStringSetting(IModuleContext* ctx, const char* key, const char* fallback)
 {
-    if (!ctx)
+    auto* store = ctx ? ctx->GetService<ISettingsStore>() : nullptr;
+    if (!store)
     {
         return fallback;
     }
-    const int n = ctx->GetSettingString(key, nullptr, 0);
+    const int n = store->GetSettingString(key, nullptr, 0);
     std::string s(static_cast<std::size_t>(n), '\0');
     if (n > 0)
     {
-        ctx->GetSettingString(key, s.data(), n + 1);
+        store->GetSettingString(key, s.data(), n + 1);
     }
     return s;
 }
@@ -137,9 +138,9 @@ std::vector<framelift::Keybind> Playlist::Keybinds()
 
 void Playlist::OnInstall(IModuleContext& ctx)
 {
-    if (auto* w = ctx.GetService<IAppWindow>())
+    if (auto* events = ctx.GetService<IEventPump>())
     {
-        dirChangedEventType_ = w->RegisterCustomEventType();
+        dirChangedEventType_ = events->RegisterCustomEventType();
     }
 
     SetContext(&ctx);
@@ -309,7 +310,7 @@ void Playlist::LoadFile(const char* path) noexcept
     currentFile_ = pathStr;
     currentTimePos_ = 0.0;
 
-    auto* player = ctx_ ? ctx_->GetService<IMediaPlayer>() : nullptr;
+    auto* player = ctx_ ? ctx_->GetService<IMediaPlayback>() : nullptr;
     if (player)
     {
         const std::string imageExt = ReadStringSetting(ctx_, "files.imageExtensions", "png;jpg;jpeg;gif;bmp;webp");
@@ -389,13 +390,13 @@ void Playlist::OpenFile(const char* path) noexcept
     // Start watching the directory for new/removed files.
     watchedDir_ = dir.string();
     auto* dw = ctx_ ? ctx_->GetService<IDirWatcher>() : nullptr;
-    auto* appWin = ctx_ ? ctx_->GetService<IAppWindow>() : nullptr;
-    if (dw && appWin)
+    auto* events = ctx_ ? ctx_->GetService<IEventPump>() : nullptr;
+    if (dw && events)
     {
         struct Ctx
         {
             Playlist* self;
-            IAppWindow* win;
+            IEventPump* events;
         };
 
         static const auto cb = [](void* ud)
@@ -403,10 +404,10 @@ void Playlist::OpenFile(const char* path) noexcept
             auto* c = static_cast<Ctx*>(ud);
             if (c->self->autoReload_)
             {
-                c->win->PushCustomEvent(c->self->dirChangedEventType_);
+                c->events->PushCustomEvent(c->self->dirChangedEventType_);
             }
         };
-        watchCbCtx_ = {this, appWin};
+        watchCbCtx_ = {this, events};
         dw->Watch(watchedDir_.c_str(), cb, &watchCbCtx_, maxDepth);
     }
 

@@ -74,7 +74,7 @@ void DebugOverlay::HandleMediaEvent(const MediaEvent& event)
 
 void DebugOverlay::RequestRefresh()
 {
-    auto* player = ctx_ ? ctx_->GetService<IMediaPlayer>() : nullptr;
+    auto* player = ctx_ ? ctx_->GetService<IMediaProperties>() : nullptr;
     if (!player)
     {
         return;
@@ -221,9 +221,9 @@ void DebugOverlay::OnRender(UIContext& ctx)
         // the requested setting. Constant for the session, so query lazily once.
         if (gfxBackend_.empty())
         {
-            if (auto* win = ctx_ ? ctx_->GetService<IAppWindow>() : nullptr)
+            if (auto* surface = ctx_ ? ctx_->GetService<IGraphicsSurface>() : nullptr)
             {
-                gfxBackend_ = win->GetGraphicsBackendName();
+                gfxBackend_ = surface->GetGraphicsBackendName();
             }
         }
         if (!gfxBackend_.empty())

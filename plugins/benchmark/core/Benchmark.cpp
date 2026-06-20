@@ -33,9 +33,9 @@ void Benchmark::OnInstall(IModuleContext& ctx)
 {
     // Observe playback position so the duration limit fires even when the
     // Overlay plugin (the usual TimePos observer) is disabled. Idempotent.
-    if (auto* player = ctx.GetService<IMediaPlayer>())
+    if (auto* props = ctx.GetService<IMediaProperties>())
     {
-        player->ObserveProperty(PlayerProperty::TimePos);
+        props->ObserveProperty(PlayerProperty::TimePos);
     }
     SetupSettingsPage(ctx, true);
 }
@@ -65,7 +65,7 @@ void Benchmark::ResetStats()
 
 void Benchmark::StartRun(const char* path)
 {
-    auto* player = ctx_ ? ctx_->GetService<IMediaPlayer>() : nullptr;
+    auto* player = ctx_ ? ctx_->GetService<IMediaPlayback>() : nullptr;
     if (!player || !path || !path[0])
     {
         return;
@@ -107,7 +107,7 @@ void Benchmark::HandleMediaEvent(const MediaEvent& event)
         timePos_ = value.dbl >= 0.0 ? value.dbl : 0.0;
         if (accumulating_ && !complete_ && limitDuration_ && timePos_ >= static_cast<double>(benchmarkDuration_))
         {
-            if (auto* player = ctx_ ? ctx_->GetService<IMediaPlayer>() : nullptr)
+            if (auto* player = ctx_ ? ctx_->GetService<IMediaPlayback>() : nullptr)
             {
                 player->SetPause(true);
             }
@@ -121,7 +121,7 @@ void Benchmark::HandleMediaEvent(const MediaEvent& event)
 
 void Benchmark::RequestRefresh()
 {
-    auto* player = ctx_ ? ctx_->GetService<IMediaPlayer>() : nullptr;
+    auto* player = ctx_ ? ctx_->GetService<IMediaProperties>() : nullptr;
     if (!player)
     {
         return;

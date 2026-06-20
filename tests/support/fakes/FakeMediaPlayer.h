@@ -4,10 +4,15 @@
 
 #include <string>
 
-// Minimal hand-written IMediaPlayer fake. Records the calls the tests assert on
-// (LoadFile / SetPause / SetImageDisplayDuration); everything else is a no-op.
-// A hand fake (vs gmock) keeps the ~30-method interface trivially compilable.
-class FakeMediaPlayer final : public IMediaPlayer
+// Minimal hand-written fake implementing the whole media playback interface family.
+// Records the calls the tests assert on (LoadFile / SetPause / SetImageDisplayDuration);
+// everything else is a no-op. Register it under whichever facet a test exercises, e.g.
+// ctx.RegisterService<IMediaPlayback>(&fake).
+class FakeMediaPlayer final : public IMediaPlayback,
+                              public IMediaProperties,
+                              public IVideoOutput,
+                              public IAudioControl,
+                              public ISubtitleControl
 {
 public:
     // ── Recorded state the tests inspect ──────────────────────────────────────

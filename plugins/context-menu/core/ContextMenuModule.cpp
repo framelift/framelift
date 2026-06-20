@@ -144,14 +144,18 @@ void ContextMenuModule::OnRender(UIContext& ctx)
 
 void ContextMenuModule::OnInstall(IModuleContext& ctx)
 {
-    player_ = ctx.GetService<IMediaPlayer>();
+    playback_ = ctx.GetService<IMediaPlayback>();
+    props_ = ctx.GetService<IMediaProperties>();
+    audio_ = ctx.GetService<IAudioControl>();
+    subtitles_ = ctx.GetService<ISubtitleControl>();
     appWindow_ = ctx.GetService<IAppWindow>();
+    events_ = ctx.GetService<IEventPump>();
     fileDialog_ = ctx.GetService<IFileDialog>();
     SetKeys(ctx.GetService<Hotkeys>());
 
-    if (player_)
+    if (props_)
     {
-        player_->ObserveProperty(PlayerProperty::IdleActive);
+        props_->ObserveProperty(PlayerProperty::IdleActive);
     }
 
     // Register the menu so peer plugins can extend it via AddSection() during their
@@ -191,9 +195,9 @@ void ContextMenuModule::Assemble()
         *this, "Quit", "quit",
         [this]
         {
-            if (appWindow_)
+            if (events_)
             {
-                appWindow_->PushQuitEvent();
+                events_->PushQuitEvent();
             }
         }
     );
@@ -243,22 +247,22 @@ void ContextMenuModule::BuildCoreItems()
         *this, "Audio",
         [this](UIContext& ctx)
         {
-            if (!player_)
+            if (!audio_)
             {
                 return;
             }
-            if (ctx.MenuItem("Toggle Mute", "toggleMute", player_->IsMuted()))
+            if (ctx.MenuItem("Toggle Mute", "toggleMute", audio_->IsMuted()))
             {
-                player_->ToggleMute();
+                audio_->ToggleMute();
                 if (ctx_)
                 {
-                    ctx_->Publish<NotificationEvent>({player_->IsMuted() ? "Mute: On" : "Mute: Off"});
+                    ctx_->Publish<NotificationEvent>({audio_->IsMuted() ? "Mute: On" : "Mute: Off"});
                 }
             }
-            if (ctx.MenuItem("Normalize", "toggleNormalize", player_->IsNormalizeEnabled()))
+            if (ctx.MenuItem("Normalize", "toggleNormalize", audio_->IsNormalizeEnabled()))
             {
-                const bool on = !player_->IsNormalizeEnabled();
-                player_->SetAudioNormalize(on, on ? NormalizeParams() : AudioNormalizeParams{});
+                const bool on = !audio_->IsNormalizeEnabled();
+                audio_->SetAudioNormalize(on, on ? NormalizeParams() : AudioNormalizeParams{});
                 if (ctx_)
                 {
                     ctx_->Publish<NotificationEvent>({on ? "Normalize: On" : "Normalize: Off"});
@@ -271,11 +275,11 @@ void ContextMenuModule::BuildCoreItems()
                 struct DeviceCtx
                 {
                     UIContext* ctx;
-                    IMediaPlayer* player;
+                    IAudioControl* player;
                     bool empty = true;
                 };
-                DeviceCtx dc{&ctx, player_};
-                player_->EnumerateAudioOutputDevices(
+                DeviceCtx dc{&ctx, audio_};
+                audio_->EnumerateAudioOutputDevices(
                     [](const AudioOutputDevice* d, void* ud)
                     {
                         auto* state = static_cast<DeviceCtx*>(ud);
@@ -300,27 +304,27 @@ void ContextMenuModule::BuildCoreItems()
 
             if (ctx.BeginMenu("Sync offset"))
             {
-                const AudioPreferences prefs = player_->GetAudioPreferences();
+                const AudioPreferences prefs = audio_->GetAudioPreferences();
                 char current[64];
                 std::snprintf(current, sizeof(current), "Current: %+d ms", prefs.syncOffsetMs);
                 ctx.TextDisabled(current);
                 if (ctx.MenuItem("-50 ms"))
                 {
-                    AudioPreferences p = player_->GetAudioPreferences();
+                    AudioPreferences p = audio_->GetAudioPreferences();
                     p.syncOffsetMs -= 50;
-                    player_->SetAudioPreferences(p);
+                    audio_->SetAudioPreferences(p);
                 }
                 if (ctx.MenuItem("+50 ms"))
                 {
-                    AudioPreferences p = player_->GetAudioPreferences();
+                    AudioPreferences p = audio_->GetAudioPreferences();
                     p.syncOffsetMs += 50;
-                    player_->SetAudioPreferences(p);
+                    audio_->SetAudioPreferences(p);
                 }
                 if (ctx.MenuItem("Reset"))
                 {
-                    AudioPreferences p = player_->GetAudioPreferences();
+                    AudioPreferences p = audio_->GetAudioPreferences();
                     p.syncOffsetMs = 0;
-                    player_->SetAudioPreferences(p);
+                    audio_->SetAudioPreferences(p);
                 }
                 ctx.EndMenu();
             }
@@ -329,11 +333,11 @@ void ContextMenuModule::BuildCoreItems()
             struct AudioCtx
             {
                 UIContext* ctx;
-                IMediaPlayer* player;
+                IAudioControl* player;
                 bool empty = true;
             };
-            AudioCtx ac{&ctx, player_};
-            player_->EnumerateAudioTracks(
+            AudioCtx ac{&ctx, audio_};
+            audio_->EnumerateAudioTracks(
                 [](const AudioTrack* t, void* ud)
                 {
                     auto* a = static_cast<AudioCtx*>(ud);
@@ -355,16 +359,17 @@ void ContextMenuModule::BuildCoreItems()
         *this, "Subtitles",
         [this](UIContext& ctx)
         {
-            if (!player_)
+            if (!subtitles_)
             {
                 return;
             }
-            if (ctx.MenuItem("Toggle", "toggleSubtitles", player_->IsSubtitlesEnabled()))
+            if (ctx.MenuItem("Toggle", "toggleSubtitles", subtitles_->IsSubtitlesEnabled()))
             {
-                player_->ToggleSubtitles();
+                subtitles_->ToggleSubtitles();
                 if (ctx_)
                 {
-                    ctx_->Publish<NotificationEvent>({player_->IsSubtitlesEnabled() ? "Subtitles: On" : "Subtitles: Off"}
+                    ctx_->Publish<NotificationEvent>(
+                        {subtitles_->IsSubtitlesEnabled() ? "Subtitles: On" : "Subtitles: Off"}
                     );
                 }
             }
@@ -373,11 +378,11 @@ void ContextMenuModule::BuildCoreItems()
             struct SubCtx
             {
                 UIContext* ctx;
-                IMediaPlayer* player;
+                ISubtitleControl* player;
                 bool empty = true;
             };
-            SubCtx sc{&ctx, player_};
-            player_->EnumerateSubtitleTracks(
+            SubCtx sc{&ctx, subtitles_};
+            subtitles_->EnumerateSubtitleTracks(
                 [](const SubtitleTrack* t, void* ud)
                 {
                     auto* s = static_cast<SubCtx*>(ud);
@@ -419,13 +424,13 @@ void ContextMenuModule::OpenFileAction()
 
 void ContextMenuModule::TogglePauseAction()
 {
-    if (!player_)
+    if (!playback_)
     {
         return;
     }
     if (!playerIdle_)
     {
-        player_->TogglePause();
+        playback_->TogglePause();
         return;
     }
 
@@ -463,13 +468,13 @@ void ContextMenuModule::TogglePauseAction()
 AudioNormalizeParams ContextMenuModule::NormalizeParams() const
 {
     AudioNormalizeParams p;
-    if (ctx_)
+    if (auto* s = ctx_ ? ctx_->GetService<ISettingsStore>() : nullptr)
     {
-        p.frameLen = ctx_->GetSettingInt("audio.dynaudnormFrameLen");
-        p.gaussSize = ctx_->GetSettingInt("audio.dynaudnormGaussSize");
-        p.peak = ctx_->GetSettingFloat("audio.dynaudnormPeak");
-        p.maxGain = ctx_->GetSettingFloat("audio.dynaudnormMaxGain");
-        p.volume = ctx_->GetSettingFloat("audio.dynaudnormVolume");
+        p.frameLen = s->GetSettingInt("audio.dynaudnormFrameLen");
+        p.gaussSize = s->GetSettingInt("audio.dynaudnormGaussSize");
+        p.peak = s->GetSettingFloat("audio.dynaudnormPeak");
+        p.maxGain = s->GetSettingFloat("audio.dynaudnormMaxGain");
+        p.volume = s->GetSettingFloat("audio.dynaudnormVolume");
     }
     return p;
 }

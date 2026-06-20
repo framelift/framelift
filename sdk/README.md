@@ -119,8 +119,8 @@ add_framelift_plugin(MyPlugin
 |--------|----------|
 | `<framelift/core.h>`     | module entry macro, module lifecycle, `ModuleBase`, context, ABI, events, hotkeys, `Log` |
 | `<framelift/ui.h>`       | `IRenderable`, `Panel`, `UIContext`, widgets |
-| `<framelift/services.h>` | cross-plugin service interfaces (currently `IHistory`; communication is events-first) |
-| `<framelift/platform.h>` | `IMediaPlayer`, `IAppWindow`, `IDirWatcher` |
+| `<framelift/services.h>` | host + cross-plugin service interfaces (`IHistory`, `ISettingsStore`, `ISettingsRegistry`, `IPackageCatalog`, `IFontCatalog`, `IAppPaths`) |
+| `<framelift/platform.h>` | media playback family (`IMediaPlayback`, `IMediaProperties`, `IVideoOutput`, `IAudioControl`, `ISubtitleControl`), window family (`IAppWindow`, `IGraphicsSurface`, `IEventPump`), `IDirWatcher`, `IFileDialog` |
 
 ### Module Entry
 
@@ -229,23 +229,23 @@ no longer exposed to plugins; the host owns all video/UI rendering.)
 
 ## ABI compatibility
 
-The ABI is versioned `major.minor.patch` (`FRAMELIFT_PLUGIN_ABI_*` in
-`<framelift/ModuleABI.h>`). Each plugin package declares its load-time ABI contract with
-`"abi": "MAJOR.MINOR"` in `[Plugin].Plugin.json`; CMake validates that value against the SDK headers
-and embeds it into `framelift_module_info()`. Before touching a vtable the host loads a plugin only when
-`plugin.major == host.major && plugin.minor <= host.minor`:
+The ABI is a single integer, `FRAMELIFT_ABI_VERSION` in `<framelift/ModuleABI.h>` — not a
+`major.minor.patch` tuple. Each plugin package declares its load-time contract with
+`"abi": N` in `[Plugin].Plugin.json`; CMake validates that value against the SDK headers and
+embeds it into `framelift_module_info()`. Before touching a vtable the host loads a plugin only
+when `plugin.abiVersion == host.abiVersion` — an exact match, because host and plugins are built
+in lockstep, so a mismatch means a stale binary to rebuild rather than a version to negotiate.
 
-- **major** bumps on breaking changes (and any addition to a host-*called* plugin
-  interface) — old plugins are rejected;
-- **minor** bumps on backward-compatible additions to host-*provided* surface
-  (a new context method or service) — old plugins keep loading;
-- **patch** is ABI-neutral; carried and logged but never gates the load.
+Bump the version only on a break to the core handshake: a `framelift_*` export, the
+`FrameLiftPackageInfo`/`FrameLiftModuleInfo` layout, a host-*called* interface (`IModule`,
+`IRenderable`), or the bootstrap surface of `IModuleContext`. New host capabilities are **not**
+breaks — they ship as new service interfaces a plugin discovers with `ctx.GetService<T>()`, so
+they never bump the version.
 
-`find_package(FrameLiftSdk)` is gated on the ABI major version (`SameMajorVersion`), so
-a mismatched-major SDK fails at configure time; the minor rule is enforced by the
-runtime loader. Settings, logging, and all cross-plugin data are exchanged through
-the context's typed getters and POD interfaces — never by sharing C++
-standard-library types across the DLL boundary.
+`find_package(FrameLiftSdk)` is gated on the ABI version (`ExactVersion`), so a mismatched SDK
+fails at configure time. Settings, logging, and all cross-plugin data are exchanged through the
+discoverable service interfaces and POD types — never by sharing C++ standard-library types
+across the DLL boundary.
 
 ## License
 

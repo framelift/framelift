@@ -299,9 +299,7 @@ std::vector<CollectedPlugin> Enumerate(ModuleContext& ctx)
 TEST(PluginContextTest, EnumeratePluginsReportsLoadedAndDisabledEntries)
 {
     Ctx c;
-    const FrameLiftPackageInfo alpha{FRAMELIFT_MODULE_ABI_MAJOR,
-                                    FRAMELIFT_MODULE_ABI_MINOR,
-                                    FRAMELIFT_MODULE_ABI_PATCH,
+    const FrameLiftPackageInfo alpha{FRAMELIFT_ABI_VERSION,
                                     "framelift.alpha",
                                     "FrameLift.Alpha",
                                     "Alpha",

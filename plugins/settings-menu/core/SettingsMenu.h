@@ -1,6 +1,7 @@
 #pragma once
 
 #include <framelift/core.h>
+#include <framelift/services.h>
 #include <framelift/ui.h>
 
 #include <array>
@@ -127,6 +128,25 @@ private:
     {
         const auto* base = corePages_.data();
         return ud >= base && ud < base + corePages_.size();
+    }
+
+    // Host capability services, fetched from ctx_ on demand. The host registers all
+    // of them, so these return non-null once the module is installed.
+    [[nodiscard]] ISettingsStore* SettingsStore() const
+    {
+        return ctx_ ? ctx_->GetService<ISettingsStore>() : nullptr;
+    }
+    [[nodiscard]] ISettingsRegistry* SettingsReg() const
+    {
+        return ctx_ ? ctx_->GetService<ISettingsRegistry>() : nullptr;
+    }
+    [[nodiscard]] IPackageCatalog* PackageCatalog() const
+    {
+        return ctx_ ? ctx_->GetService<IPackageCatalog>() : nullptr;
+    }
+    [[nodiscard]] IFontCatalog* FontCatalog() const
+    {
+        return ctx_ ? ctx_->GetService<IFontCatalog>() : nullptr;
     }
 
     void RegisterCorePages(IModuleContext& ctx);

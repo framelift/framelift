@@ -16,9 +16,7 @@ inline constexpr FrameLiftModuleInfo kPackageModules[] = {
      {kOptionalFeatures, 1},
      {nullptr, 0}},
 };
-inline constexpr FrameLiftPackageInfo kPackageInfo{FRAMELIFT_MODULE_ABI_MAJOR,
-                                                 FRAMELIFT_MODULE_ABI_MINOR,
-                                                 FRAMELIFT_MODULE_ABI_PATCH,
+inline constexpr FrameLiftPackageInfo kPackageInfo{FRAMELIFT_ABI_VERSION,
                                                  "test.rendering",
                                                  "Acme.RenderingDummy.Core",
                                                  "RenderingDummy",

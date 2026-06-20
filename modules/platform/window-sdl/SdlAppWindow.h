@@ -7,13 +7,15 @@
 
 #include "IGraphicsBackend.h"
 
-// Concrete IAppWindow backed by SDL3 + Dear ImGui. Owns the SDL window and event
-// loop and delegates the rendering surface (GL/Vulkan context, present, vsync, and
-// the imgui_impl_* lifecycle) to an IGraphicsBackend.
+// Concrete window backed by SDL3 + Dear ImGui. Implements the window/graphics/event
+// interface family (IAppWindow / IGraphicsSurface / IEventPump) and, host-only,
+// the ImGui lifecycle and pref/base path resolution (not on any ABI interface — only
+// the host, which owns this object, calls those). Owns the SDL window and event loop
+// and delegates the rendering surface to an IGraphicsBackend.
 //
 // This file and the gfx backends (e.g. GlGraphicsBackend) are the only files that
 // may #include <SDL3/SDL.h> or imgui_impl_*.h.
-class SdlAppWindow final : public IAppWindow
+class SdlAppWindow final : public IAppWindow, public IGraphicsSurface, public IEventPump
 {
 public:
     SdlAppWindow(const char* title, int width, int height, GraphicsApi api = GraphicsApi::OpenGL);
@@ -53,16 +55,18 @@ public:
     void PushPlayerWakeup() noexcept override;
     void PushQuitEvent() noexcept override;
 
-    int GetPrefPath(const char* org, const char* app, char* buf, int cap) const noexcept override;
-    int GetBasePath(char* buf, int cap) const noexcept override;
+    // Host-only surface (not on any ABI interface) — only the host, holding the
+    // concrete window, calls these.
+    int GetPrefPath(const char* org, const char* app, char* buf, int cap) const noexcept;
+    int GetBasePath(char* buf, int cap) const noexcept;
 
-    void SetImGuiIniPath(const char* path) noexcept override;
-    void ImGuiInit() noexcept override;
-    void ImGuiShutdown() noexcept override;
-    void UIBeginFrame() noexcept override;
-    void UIEndFrame() noexcept override;
+    void SetImGuiIniPath(const char* path) noexcept;
+    void ImGuiInit() noexcept;
+    void ImGuiShutdown() noexcept;
+    void UIBeginFrame() noexcept;
+    void UIEndFrame() noexcept;
     void ImGuiRenderPlatformWindows() noexcept;
-    void ImGuiProcessEvent(const AppEvent& event) noexcept override;
+    void ImGuiProcessEvent(const AppEvent& event) noexcept;
 
 private:
     [[nodiscard]] AppEvent TranslateEvent(SDL_Event e) const;

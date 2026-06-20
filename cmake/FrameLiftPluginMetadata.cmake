@@ -1,6 +1,6 @@
 # JSON-authored plugin/module metadata -> embedded C++ metadata.
 
-if (NOT DEFINED FRAMELIFT_SDK_ABI_MAJOR OR NOT DEFINED FRAMELIFT_SDK_ABI_MINOR OR NOT DEFINED FRAMELIFT_SDK_ABI_PATCH)
+if (NOT DEFINED FRAMELIFT_SDK_ABI_VERSION)
     set(_framelift_abi_header_candidates
             "${CMAKE_CURRENT_LIST_DIR}/../sdk/include/framelift/ModuleABI.h"
             "${CMAKE_CURRENT_LIST_DIR}/../include/framelift/ModuleABI.h")
@@ -15,13 +15,11 @@ if (NOT DEFINED FRAMELIFT_SDK_ABI_MAJOR OR NOT DEFINED FRAMELIFT_SDK_ABI_MINOR O
         message(FATAL_ERROR "Unable to find ModuleABI.h for plugin metadata generation")
     endif ()
     file(READ "${_framelift_abi_header}" _framelift_plugin_abi_h)
-    foreach (_part MAJOR MINOR PATCH)
-        if (_framelift_plugin_abi_h MATCHES "#define[ \t]+FRAMELIFT_MODULE_ABI_${_part}[ \t]+([0-9]+)")
-            set(FRAMELIFT_SDK_ABI_${_part} "${CMAKE_MATCH_1}")
-        else ()
-            message(FATAL_ERROR "Unable to parse FRAMELIFT_MODULE_ABI_${_part} from ModuleABI.h")
-        endif ()
-    endforeach ()
+    if (_framelift_plugin_abi_h MATCHES "#define[ \t]+FRAMELIFT_ABI_VERSION[ \t]+([0-9]+)")
+        set(FRAMELIFT_SDK_ABI_VERSION "${CMAKE_MATCH_1}")
+    else ()
+        message(FATAL_ERROR "Unable to parse FRAMELIFT_ABI_VERSION from ModuleABI.h")
+    endif ()
 endif ()
 
 function(_framelift_json_required_string out json path label)
@@ -144,31 +142,17 @@ function(_framelift_parse_version prefix version label)
     set(${prefix}_PATCH "${CMAKE_MATCH_3}" PARENT_SCOPE)
 endfunction()
 
-function(_framelift_parse_abi prefix version label)
-    if (NOT "${version}" MATCHES "^([0-9]+)\\.([0-9]+)(\\.([0-9]+))?$")
-        message(FATAL_ERROR "${label}: abi must be a version string X.Y or X.Y.Z")
+function(_framelift_parse_abi out version label)
+    if (NOT "${version}" MATCHES "^[0-9]+$")
+        message(FATAL_ERROR "${label}: abi must be a single integer version")
     endif ()
 
-    set(_major "${CMAKE_MATCH_1}")
-    set(_minor "${CMAKE_MATCH_2}")
-    if (CMAKE_MATCH_4)
-        set(_patch "${CMAKE_MATCH_4}")
-    else ()
-        set(_patch 0)
-    endif ()
-
-    if (NOT _major EQUAL FRAMELIFT_SDK_ABI_MAJOR)
+    if (NOT version EQUAL FRAMELIFT_SDK_ABI_VERSION)
         message(FATAL_ERROR
-                "${label}: abi major ${_major} does not match SDK ABI major ${FRAMELIFT_SDK_ABI_MAJOR}")
-    endif ()
-    if (_minor GREATER FRAMELIFT_SDK_ABI_MINOR)
-        message(FATAL_ERROR
-                "${label}: abi ${_major}.${_minor} is newer than SDK ABI ${FRAMELIFT_SDK_ABI_MAJOR}.${FRAMELIFT_SDK_ABI_MINOR}")
+                "${label}: abi version ${version} does not match SDK ABI version ${FRAMELIFT_SDK_ABI_VERSION}")
     endif ()
 
-    set(${prefix}_MAJOR "${_major}" PARENT_SCOPE)
-    set(${prefix}_MINOR "${_minor}" PARENT_SCOPE)
-    set(${prefix}_PATCH "${_patch}" PARENT_SCOPE)
+    set(${out} "${version}" PARENT_SCOPE)
 endfunction()
 
 function(_framelift_pascal_from_id_tail out id)
@@ -390,9 +374,7 @@ function(framelift_generate_plugin_metadata target plugin_json out_header out_en
     _framelift_cpp_optional_string(_package_description_cpp "${_package_description}")
     string(APPEND _code
             "inline constexpr FrameLiftPackageInfo kPackageInfo{\n"
-            "    ${_abi_MAJOR},\n"
-            "    ${_abi_MINOR},\n"
-            "    ${_abi_PATCH},\n"
+            "    ${_abi},\n"
             "    ${_package_id_cpp},\n"
             "    ${_module_file_cpp},\n"
             "    ${_package_name_cpp},\n"

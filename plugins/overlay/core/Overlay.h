@@ -48,7 +48,8 @@ private:
     // Draw the seek bar and playback controls centred at the bottom of the window.
     void RenderControlsBar(float w, float h, UIContext& ctx);
 
-    IMediaPlayer* player_ = nullptr; // obtained from ctx_ in OnInstall()
+    IMediaPlayback* playback_ = nullptr;     // transport (pause/seek), from ctx_ in OnInstall()
+    IMediaProperties* props_ = nullptr;      // property observation, from ctx_ in OnInstall()
     uintptr_t iconTex_ = 0;          // GPU handle for the icon texture (0 = not loaded)
     bool iconLoadAttempted_ = false; // prevents repeated load attempts after failure
 

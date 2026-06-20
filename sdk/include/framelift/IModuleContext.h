@@ -1,29 +1,19 @@
 #pragma once
 #include <framelift/Abi.h>
-#include <framelift/IModuleSettings.h>
-#include <framelift/ModuleABI.h>
 #include <type_traits>
 
-class UIContext;
-
-// POD descriptor for one registered settings field, surfaced by EnumerateSettings.
-// All pointers are valid only for the duration of the visit() call.
-//   key          — "section.name" (e.g. "audio.defaultLanguage").
-//   type         — value category: 0 bool, 1 int, 2 float, 3 string.
-//   desc         — human-readable description, or nullptr.
-//   defaultValue — the field's default, serialized as text (for "reset to default").
-struct FrameLiftSettingDesc
-{
-    const char* key;
-    int type;
-    const char* desc;
-    const char* defaultValue;
-};
-
-// Plugin dependency-injection context. Passed into IModule::Install().
-// All virtual methods use a stable C-compatible ABI — no STL types cross the boundary.
-// Use the non-virtual template helpers (GetService, RegisterService, Publish, Subscribe)
-// for ergonomic access; they compile into the plugin and call the raw virtuals below.
+// Module bootstrap context. Passed into IModule::Install(). Deliberately tiny: it
+// only carries the service registry and the pub/sub bus — the two things every
+// module needs before it can discover anything else. All host functionality
+// (settings, keybind/page registration, the package catalogue, fonts, paths, media
+// playback, the window) is reached through capability services fetched with
+// GetService<T>(); see <framelift/services.h> and <framelift/platform.h>.
+//
+// This is a Tier-1 interface: changing its vtable bumps FRAMELIFT_ABI_VERSION. It is
+// frozen precisely so new host capabilities can ship as new services without ever
+// touching it. All virtuals use a stable C-compatible ABI — no STL types cross the
+// boundary. Use the non-virtual template helpers (GetService, RegisterService,
+// Publish, Subscribe) for ergonomic access; they compile into the module.
 class IModuleContext
 {
 public:
@@ -37,132 +27,13 @@ public:
 
     // ── Pub/sub ────────────────────────────────────────────────────────────────
     // Events are keyed by EventId (e.g. TEvent::EventId).
-    // cleanup(ud) is called when subscriptions are cleared (plugin unload).
+    // cleanup(ud) is called when subscriptions are cleared (module unload).
     virtual void SubscribeRaw(
         const char* eventId, void (*cb)(const void* event, void* ud), void* ud, void (*cleanup)(void* ud) = nullptr
     ) noexcept = 0;
     virtual void PublishRaw(const char* eventId, const void* payload) noexcept = 0;
 
-    // ── Settings (per-key typed getters) ─────────────────────────────────────
-    // Keys are "section.name" (e.g. "playback.hwdec", "ui.panelWidth").
-    virtual float GetSettingFloat(const char* key) const noexcept = 0;
-    virtual bool GetSettingBool(const char* key) const noexcept = 0;
-    virtual int GetSettingInt(const char* key) const noexcept = 0;
-    // Writes up to cap-1 chars + NUL into buf; returns full length excl. NUL.
-    // Pass buf=nullptr to query the required length.
-    virtual int GetSettingString(const char* key, char* buf, int cap) const noexcept = 0;
-
-    // ── Commit settings (SettingsMenu only) ───────────────────────────────────
-    virtual void CommitSettingFloat(const char* key, float value) noexcept = 0;
-    virtual void CommitSettingBool(const char* key, bool value) noexcept = 0;
-    virtual void CommitSettingInt(const char* key, int value) noexcept = 0;
-    virtual void CommitSettingString(const char* key, const char* value) noexcept = 0;
-    // Persist all committed settings to disk and notify change subscribers.
-    virtual void SaveSettings() noexcept = 0;
-
-    // Register a callback invoked after settings are committed.
-    // cleanup(ud) is called on plugin unload.
-    virtual void RegisterSettingsChangeCallback(
-        void (*cb)(void* ud), void* ud, void (*cleanup)(void* ud) = nullptr
-    ) noexcept = 0;
-
-    // ── Per-plugin settings (INI section) ──────────────────────────────────────
-    virtual IModuleSettings& GetModuleSettings(const char* sectionName) noexcept = 0;
-
-    // ── Settings page registration ─────────────────────────────────────────────
-    // renderFn(ud, ctx): called each frame while the page is visible.
-    // applyFn(ud):       called when the user presses Save.
-    // cleanup(ud):       called on plugin unload (may be nullptr).
-    // visible=false:     applyFn still runs on Save but the page is not shown.
-    virtual void RegisterSettingsPage(
-        const char* title, void (*renderFn)(void* ud, UIContext& ctx), void (*applyFn)(void* ud), void* ud,
-        bool visible = true, void (*cleanup)(void* ud) = nullptr
-    ) noexcept = 0;
-
-    // Enumerate all registered settings pages. visit() receives page metadata.
-    virtual void EnumerateSettingsPages(
-        void (*visit)(
-            const char* title, void (*renderFn)(void*, UIContext&), void (*applyFn)(void*), void* ud, bool visible,
-            void* visitUd
-        ),
-        void* visitUd
-    ) const noexcept = 0;
-
-    // ── Keybind entry registration ──────────────────────────────────────────────
-    // getStr(ud): returns a const char* to the current binding string (plugin-owned).
-    // setStr(ud, val): updates the binding string in the plugin.
-    virtual void RegisterKeybindEntry(
-        const char* label, const char* actionName, const char* (*getStr)(void* ud),
-        void (*setStr)(void* ud, const char* val), void* ud
-    ) noexcept = 0;
-
-    // Enumerate all registered keybind entries.
-    virtual void EnumerateKeybindEntries(
-        void (*visit)(
-            const char* label, const char* actionName, const char* (*getStr)(void* ud),
-            void (*setStr)(void* ud, const char* val), void* ud, void* visitUd
-        ),
-        void* visitUd
-    ) const noexcept = 0;
-
-    // ── Pref path ──────────────────────────────────────────────────────────────
-    // Trailing-separator user config dir (e.g. "C:/Users/foo/AppData/Roaming/FrameLift/").
-    // Returns full length excl. NUL; pass buf=nullptr to query required size.
-    virtual int GetPrefPath(char* buf, int cap) const noexcept = 0;
-
-    // ── Plugin catalogue ────────────────────────────────────────────────────────
-    // Enumerate every plugin discovered in the Modules/ directory - both the
-    // loaded ones and any present-but-disabled DLLs.
-    //   name    — the load key (package id / [plugins] enabled entry); use it for
-    //             SetPackageEnabled. Stable identity even when info is synthesized.
-    //   info    — full descriptor when loaded == true; when loaded == false only
-    //             info.name is meaningful (equals name), the rest is zero/null.
-    //   enabled    — whether the plugin is in the persisted enabled list (live:
-    //                 reflects SetPackageEnabled toggles made this session).
-    //   loaded     — whether the plugin is currently loaded this session.
-    //   loadFailed — true iff it was enabled at startup but did not load (a real
-    //                error); false for a plugin merely toggled on this session,
-    //                which is pending a restart rather than failed.
-    // All pointers are valid only for the duration of the call.
-    virtual void EnumeratePackages(
-        void (*visit)(
-            const char* name, const FrameLiftPackageInfo& info, bool enabled, bool loaded, bool loadFailed, void* visitUd
-        ),
-        void* visitUd
-    ) const noexcept = 0;
-
-    // Add/remove a plugin from the persisted enabled list and save. Unknown names
-    // are ignored. The change takes effect on the next application start.
-    virtual void SetPackageEnabled(const char* name, bool enabled) noexcept = 0;
-
-    // ── System fonts (ABI 1.1) ──────────────────────────────────────────────────
-    // Enumerate installed .ttf/.otf fonts found in the OS font directories. The
-    // scan runs lazily on the first call and is cached for the session.
-    //   name — display name derived from the filename.
-    //   path — absolute font file path.
-    // Both pointers are valid only for the duration of each visit() call.
-    virtual void EnumerateSystemFonts(
-        void (*visit)(const char* name, const char* path, void* visitUd), void* visitUd
-    ) const noexcept = 0;
-
-    // ── Settings file (ABI 1.1) ─────────────────────────────────────────────────
-    // Absolute path of the on-disk settings.ini. Returns full length excl. NUL;
-    // pass buf=nullptr to query the required size.
-    virtual int GetSettingsFilePath(char* buf, int cap) const noexcept = 0;
-    // Re-read settings.ini from disk into the live settings and re-apply them
-    // (fires the settings-change callbacks). Use after the file is edited directly.
-    virtual void ReloadSettings() noexcept = 0;
-
-    // ── Settings enumeration (ABI 3.2) ──────────────────────────────────────────
-    // Visit every registered settings field in declaration order. Lets a consumer
-    // (e.g. SettingsMenu) drive a generic editing model purely over the ABI, with
-    // no compile-time knowledge of the host Settings layout. The descriptor and its
-    // strings are valid only for the duration of each visit() call.
-    virtual void EnumerateSettings(
-        void (*visit)(const FrameLiftSettingDesc* desc, void* visitUd), void* visitUd
-    ) const noexcept = 0;
-
-    // ── Convenience templates (non-virtual — compiled into the plugin) ──────────
+    // ── Convenience templates (non-virtual — compiled into the module) ──────────
 
     template <typename T>
     T* GetService() const noexcept

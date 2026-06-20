@@ -5,7 +5,7 @@
   "publisher": "FrameLift",
   "description": "On-screen media overlay",
   "version": "project",
-  "abi": "4.0",
+  "abi": 1,
   "modules": [
     "core/Core.Module.json"
   ]

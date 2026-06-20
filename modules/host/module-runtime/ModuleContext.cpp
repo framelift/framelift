@@ -27,6 +27,15 @@ ModuleContext::ModuleContext(
     {
         settingDefaults_.emplace(f.key, f.save());
     }
+
+    // Register every host capability the context itself implements so plugins reach
+    // them via ctx.GetService<T>(). The vtable of IModuleContext stays at the four
+    // bootstrap methods; these are the discoverable Tier-2 services.
+    RegisterServiceRaw(ISettingsStore::InterfaceId, static_cast<ISettingsStore*>(this));
+    RegisterServiceRaw(ISettingsRegistry::InterfaceId, static_cast<ISettingsRegistry*>(this));
+    RegisterServiceRaw(IPackageCatalog::InterfaceId, static_cast<IPackageCatalog*>(this));
+    RegisterServiceRaw(IFontCatalog::InterfaceId, static_cast<IFontCatalog*>(this));
+    RegisterServiceRaw(IAppPaths::InterfaceId, static_cast<IAppPaths*>(this));
 }
 
 // ── Pref path ─────────────────────────────────────────────────────────────────
@@ -72,7 +81,7 @@ void ModuleContext::EnumeratePackages(
         {
             // Synthesize a name-only descriptor for a present-but-disabled DLL.
             const FrameLiftPackageInfo synth{
-                0, 0, 0, rec.name.c_str(), rec.name.c_str(), rec.name.c_str(), {0, 0, 0}, nullptr, nullptr, nullptr, 0};
+                0, rec.name.c_str(), rec.name.c_str(), rec.name.c_str(), {0, 0, 0}, nullptr, nullptr, nullptr, 0};
             visit(rec.name.c_str(), synth, rec.enabled, false, rec.loadFailed, visitUd);
         }
     }
