@@ -37,9 +37,6 @@ set(FRAMELIFT_GRAPHICS_INCLUDE_DIRS
         "${CMAKE_SOURCE_DIR}/modules/gfx/opengl"
         "${CMAKE_SOURCE_DIR}/modules/gfx/vulkan"
 )
-set(FRAMELIFT_MEDIA_INCLUDE_DIRS
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg"
-)
 set(FRAMELIFT_HOST_MODULE_INCLUDE_DIRS
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime"
         "${CMAKE_SOURCE_DIR}/modules/host/settings"
@@ -47,6 +44,7 @@ set(FRAMELIFT_HOST_MODULE_INCLUDE_DIRS
         "${CMAKE_SOURCE_DIR}/modules/host/controls"
         "${CMAKE_SOURCE_DIR}/modules/host/logging"
         "${CMAKE_SOURCE_DIR}/modules/host/audio"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback"
         "${CMAKE_SOURCE_DIR}/modules/host/fonts"
         "${CMAKE_SOURCE_DIR}/modules/host/read-ahead"
         "${CMAKE_SOURCE_DIR}/modules/host/ui"
@@ -119,7 +117,6 @@ set_target_properties(FrameLift PROPERTIES
 target_include_directories(FrameLift PRIVATE "${CMAKE_SOURCE_DIR}/src" "${stb_SOURCE_DIR}")
 target_include_directories(FrameLift PRIVATE
         ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS}
-        ${FRAMELIFT_MEDIA_INCLUDE_DIRS}
         ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS})
 target_link_libraries(FrameLift PRIVATE
         FrameLiftSdk SDL3::SDL3 OpenGL::GL
@@ -193,7 +190,6 @@ foreach (_plugin IN LISTS FRAMELIFT_PLUGIN_TARGETS)
         framelift_apply_builtin_module_definitions(${_plugin})
         target_include_directories(${_plugin} PRIVATE
                 ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS}
-                ${FRAMELIFT_MEDIA_INCLUDE_DIRS}
                 ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS})
         FrameLift_apply_release_opts(${_plugin})
     endif ()

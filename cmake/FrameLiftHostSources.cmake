@@ -96,28 +96,28 @@ set(_FRAMELIFT_HOST_WATCH_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/Win32DirWatcher.h"
 )
 
-set(_FRAMELIFT_HOST_FFMPEG_SOURCES
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegClock.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegFilters.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegHwDecode.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegHwDecode.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegLetterbox.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegPacketQueue.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegPlayer.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegPlayer.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSettingsMapping.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSubtitleBlend.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSubtitles.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegSubtitles.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegTrackLabel.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/PlaybackSettings.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/SubtitleSettings.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/VideoDecodeMode.h"
+set(_FRAMELIFT_HOST_PLAYBACK_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegClock.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegFilters.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegHwDecode.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegHwDecode.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegLetterbox.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegPacketQueue.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegPlayer.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegPlayer.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegSettingsMapping.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegSubtitleBlend.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegSubtitles.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegSubtitles.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegTrackLabel.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/PlaybackSettings.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/SubtitleSettings.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/VideoDecodeMode.h"
 )
 
-set(_FRAMELIFT_HOST_FFMPEG_VULKAN_SOURCES
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegVulkanDevice.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegVulkanDevice.h"
+set(_FRAMELIFT_HOST_PLAYBACK_VULKAN_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegVulkanDevice.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegVulkanDevice.h"
 )
 
 set(_FRAMELIFT_HOST_GRAPHICS_SOURCES
@@ -157,14 +157,14 @@ set(FRAMELIFT_HOST_SOURCES
         ${_FRAMELIFT_HOST_UI_SOURCES}
         ${_FRAMELIFT_HOST_WINDOW_SOURCES}
         ${_FRAMELIFT_HOST_WATCH_SOURCES}
-        ${_FRAMELIFT_HOST_FFMPEG_SOURCES}
+        ${_FRAMELIFT_HOST_PLAYBACK_SOURCES}
         ${_FRAMELIFT_HOST_GRAPHICS_SOURCES}
         ${_FRAMELIFT_HOST_GRAPHICS_OPENGL_SOURCES}
 )
 
 if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
     list(APPEND FRAMELIFT_HOST_SOURCES
-            ${_FRAMELIFT_HOST_FFMPEG_VULKAN_SOURCES}
+            ${_FRAMELIFT_HOST_PLAYBACK_VULKAN_SOURCES}
             ${_FRAMELIFT_HOST_GRAPHICS_VULKAN_SOURCES}
     )
 endif ()

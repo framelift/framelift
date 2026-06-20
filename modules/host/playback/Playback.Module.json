@@ -1,7 +1,7 @@
 {
   "fileVersion": 1,
-  "id": "framelift.host.ffmpeg",
-  "name": "FFmpeg",
+  "id": "framelift.host.playback",
+  "name": "Media Playback",
   "description": "FFmpeg-backed media playback, subtitles, and hardware decode helpers.",
   "enabled": true,
   "required": true,

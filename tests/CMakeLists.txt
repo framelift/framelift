@@ -44,15 +44,13 @@ set(FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/gfx/opengl"
         "${FRAMELIFT_ROOT}/modules/gfx/vulkan"
 )
-set(FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS
-        "${FRAMELIFT_ROOT}/modules/media/ffmpeg"
-)
 set(FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/host/module-runtime"
         "${FRAMELIFT_ROOT}/modules/host/settings"
         "${FRAMELIFT_ROOT}/modules/host/services"
         "${FRAMELIFT_ROOT}/modules/host/logging"
         "${FRAMELIFT_ROOT}/modules/host/audio"
+        "${FRAMELIFT_ROOT}/modules/host/playback"
         "${FRAMELIFT_ROOT}/modules/host/fonts"
         "${FRAMELIFT_ROOT}/modules/host/read-ahead"
         "${FRAMELIFT_ROOT}/modules/host/ui"
@@ -118,7 +116,6 @@ target_include_directories(framelift_tests PRIVATE
         "${FRAMELIFT_ROOT}/sdk/include"
         "${FRAMELIFT_ROOT}/src"
         ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
-        ${FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS}
         ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
         "${FRAMELIFT_ROOT}/tests/support"  # TempIni.h for PackageConfig/PluginSettings tests
         "${FRAMELIFT_ROOT}/plugins/updater/core"
@@ -139,7 +136,6 @@ target_include_directories(framelift_tests_vulkan_off PRIVATE
         "${FRAMELIFT_ROOT}/sdk/include"
         "${FRAMELIFT_ROOT}/src"
         ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
-        ${FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS}
         ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
 )
 target_link_libraries(framelift_tests_vulkan_off PRIVATE GTest::gtest_main Threads::Threads)
@@ -166,8 +162,7 @@ function(add_framelift_plugin_test name)
             "${FRAMELIFT_ROOT}/sdk/include"
             "${FRAMELIFT_ROOT}/src"
             ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
-            ${FRAMELIFT_MEDIA_TEST_INCLUDE_DIRS}
-            ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
+                ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
             "${FRAMELIFT_ROOT}/tests/support"
             "${FRAMELIFT_ROOT}/tests/support/stubs"  # stub IconData.h / Version.h for plugins that need generated headers
             "${FRAMELIFT_ROOT}/plugins/playlist/core"

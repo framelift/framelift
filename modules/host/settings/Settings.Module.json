@@ -14,7 +14,7 @@
   "requires": {
     "modules": [
       "framelift.host.graphics_core",
-      "framelift.host.ffmpeg",
+      "framelift.host.playback",
       "framelift.host.read_ahead",
       "framelift.host.ui"
     ],
