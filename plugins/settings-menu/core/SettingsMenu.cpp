@@ -1151,7 +1151,7 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
 
     PluginsCtx pc{this, &ctx};
     ctx_->EnumeratePlugins(
-        [](const char* name, const FrameLiftPluginInfo& info, bool /*enabled*/, bool loaded, bool loadFailed, void* pv)
+        [](const char* name, const FrameLiftPluginInfo& info, bool enabled, bool loaded, bool loadFailed, void* pv)
         {
             auto& [self, ctx, count] = *static_cast<PluginsCtx*>(pv);
             if (count++ > 0)
@@ -1164,9 +1164,21 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
 
             ctx->PushID(name);
 
-            // Read-only: plugin enablement is driven by module JSON (build/ship time),
-            // so the catalogue just reports status rather than toggling it.
-            ctx->TextDisabled(loaded ? "Loaded" : "Not loaded");
+            // SettingsMenu cannot disable itself — that would remove this very UI.
+            const bool isSelf = strcmp(name, "framelift.settings_menu") == 0 ||
+                                (loaded && info.name && strcmp(info.name, self->ModuleName()) == 0);
+            if (isSelf)
+            {
+                ctx->TextDisabled("Enabled (required)");
+            }
+            else
+            {
+                bool en = enabled;
+                if (ctx->Checkbox("Enabled", &en))
+                {
+                    self->ctx_->SetPluginEnabled(name, en);
+                }
+            }
 
             if (loaded)
             {
@@ -1190,7 +1202,7 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
             }
             else
             {
-                ctx->TextDisabled("Not loaded - unmet dependency or unsupported platform.");
+                ctx->TextDisabled(enabled ? "Will load after restart." : "Disabled - enable and restart to load.");
             }
 
             ctx->PopID();

@@ -1,3 +1,4 @@
+#include "PluginConfig.h"
 #include "PluginContext.h"
 #include "Settings.h"
 #include "UiSettings.h"
@@ -344,27 +345,33 @@ TEST(PluginContextTest, EnumeratePluginsEmptyByDefault)
     EXPECT_TRUE(Enumerate(c.ctx).empty());
 }
 
-TEST(PluginContextTest, SetPluginEnabledIsNonPersistentNoOp)
+TEST(PluginContextTest, SetPluginEnabledUpdatesCatalogueAndPersists)
 {
-    // Enablement is driven by module JSON, so SetPluginEnabled neither mutates the
-    // catalogue nor writes anything to disk (kept only for ABI stability).
     Settings settings;
-    const std::string ini = (std::filesystem::temp_directory_path() / "framelift_test_setenabled.ini").string();
-    std::filesystem::remove(ini);
-    PluginContext ctx{"pref/", &settings, ini};
+    PluginConfig pluginConfig;
+    const std::string pluginsIni =
+        (std::filesystem::temp_directory_path() / "framelift_test_pluginsini.ini").string();
+    std::filesystem::remove(pluginsIni);
+    PluginContext ctx{"pref/", &settings, "unused.ini", &pluginConfig, pluginsIni};
 
     ctx.AddPlugin("framelift.playlist", true, nullptr);
-    ctx.AddPlugin("framelift.history", false, nullptr);
+    ctx.AddPlugin("framelift.history", true, nullptr);
 
-    ctx.SetPluginEnabled("framelift.history", true);
-    ctx.SetPluginEnabled("framelift.playlist", false);
-    ctx.SetPluginEnabled("Unknown", true);
+    ctx.SetPluginEnabled("framelift.history", false); // disable one
+    ctx.SetPluginEnabled("Unknown", false);           // no-op for unknown names
 
-    // Catalogue is unchanged — it still reflects the values passed to AddPlugin.
+    // Catalogue reflects the toggle immediately (drives the live checkbox state).
     const auto got = Enumerate(ctx);
     ASSERT_EQ(got.size(), 2u);
     EXPECT_TRUE(got[0].enabled);  // framelift.playlist
     EXPECT_FALSE(got[1].enabled); // framelift.history
 
-    EXPECT_FALSE(std::filesystem::exists(ini)); // nothing persisted
+    // The opt-out manifest persisted the disable and nothing else.
+    PluginConfig reloaded;
+    reloaded.Load(pluginsIni);
+    EXPECT_FALSE(reloaded.IsEnabled("framelift.history"));
+    EXPECT_TRUE(reloaded.IsEnabled("framelift.playlist"));
+    EXPECT_TRUE(reloaded.IsEnabled("Unknown")); // never written
+
+    std::filesystem::remove(pluginsIni);
 }

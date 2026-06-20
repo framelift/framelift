@@ -130,7 +130,7 @@ std::string PackageId(const FrameLiftPluginInfo* info)
 }
 } // namespace
 
-void PluginLoader::LoadAll(const std::string& modulesDir)
+void PluginLoader::LoadAll(const std::string& modulesDir, const std::unordered_set<std::string>& disabled)
 {
     using Clock = std::chrono::steady_clock;
     const auto loadStart = Clock::now();
@@ -161,6 +161,12 @@ void PluginLoader::LoadAll(const std::string& modulesDir)
                 PackageId(info), info->version[0], info->version[1], info->version[2], info->abiMajor, info->abiMinor,
                 info->abiPatch, FRAMELIFT_PLUGIN_ABI_MAJOR, FRAMELIFT_PLUGIN_ABI_MINOR, FRAMELIFT_PLUGIN_ABI_PATCH
             );
+            CloseLib(handle);
+            continue;
+        }
+        if (disabled.contains(PackageId(info)))
+        {
+            Log::Info("Plugin package '{}': disabled by user - skipped", PackageId(info));
             CloseLib(handle);
             continue;
         }

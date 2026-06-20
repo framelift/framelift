@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FileDialogServiceImpl.h"
+#include "PluginConfig.h"
 #include "FocusManagerImpl.h"
 #include "HotkeysImpl.h"
 #include "PluginContext.h"
@@ -93,6 +94,8 @@ private:
     } appliedTheme_;
 
     Settings settings_;
+    PluginConfig pluginConfig_;
+    std::string pluginsPath_;
     FileDialogServiceImpl fileDialogService_{&settings_};
     FocusManagerImpl focus_;
     HotkeysImpl keys_;

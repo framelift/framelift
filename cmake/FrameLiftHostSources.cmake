@@ -12,6 +12,8 @@ set(_FRAMELIFT_HOST_CORE_SOURCES
 )
 
 set(_FRAMELIFT_HOST_PLUGIN_RUNTIME_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginConfig.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginConfig.h"
         "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginContext.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginContext.h"
         "${CMAKE_SOURCE_DIR}/modules/host/plugin-runtime/PluginLoader.cpp"

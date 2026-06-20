@@ -82,6 +82,7 @@ add_executable(framelift_tests
         CliTests.cpp
         SettingsTests.cpp
         PluginContextTests.cpp
+        PluginConfigTests.cpp
         PluginSettingsTests.cpp
         FocusManagerTests.cpp
         KeyNamesTests.cpp
@@ -104,6 +105,7 @@ add_executable(framelift_tests
         FFmpegTrackLabelTests.cpp
         VulkanQueueLockTests.cpp
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
         "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginResolver.cpp"
         "${FRAMELIFT_ROOT}/modules/host/fonts/FontScan.cpp"
@@ -203,6 +205,7 @@ add_framelift_plugin_test(framelift_test_history
 add_framelift_plugin_test(framelift_test_playlist
         PlaylistTests.cpp
         "${FRAMELIFT_ROOT}/plugins/playlist/core/Playlist.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
         "${FRAMELIFT_ROOT}/modules/host/fonts/FontScan.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
@@ -210,6 +213,7 @@ add_framelift_plugin_test(framelift_test_playlist
 add_framelift_plugin_test(framelift_test_settingsmenu
         SettingsMenuTests.cpp
         "${FRAMELIFT_ROOT}/plugins/settings-menu/core/SettingsMenu.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/plugin-runtime/PluginContext.cpp"
         "${FRAMELIFT_ROOT}/modules/host/fonts/FontScan.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")

@@ -63,6 +63,10 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     // App owns the Settings instance; load it before any plugin sees it.
     settings_.Load(settingsPath);
 
+    // User plugin enablement manifest (opt-out): load before plugins are scanned.
+    pluginsPath_ = prefDir.empty() ? "plugins.ini" : prefDir + "plugins.ini";
+    pluginConfig_.Load(pluginsPath_);
+
     appWindow_ =
         std::make_unique<SdlAppWindow>(title, width, height, GraphicsApiFromString(settings_.Get<GraphicsSettings>().backend));
 
@@ -89,7 +93,7 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     fileDialogService_.Init(appWindow_.get());
 
     // ── Phase 2: Build PluginContext and register services ────────────────────
-    pluginCtx_ = std::make_unique<PluginContext>(prefDir, &settings_, settingsPath);
+    pluginCtx_ = std::make_unique<PluginContext>(prefDir, &settings_, settingsPath, &pluginConfig_, pluginsPath_);
 
     pluginCtx_->RegisterService<IMediaPlayer>(player_.get());
     pluginCtx_->RegisterService<IAppWindow>(appWindow_.get());
@@ -191,7 +195,7 @@ void App::LoadPlugins()
     char baseBuf[512] = {};
     (void)appWindow_->GetBasePath(baseBuf, sizeof(baseBuf));
     const std::string modulesDir = std::string(baseBuf) + "Modules/";
-    pluginLoader_.LoadAll(modulesDir);
+    pluginLoader_.LoadAll(modulesDir, pluginConfig_.DisabledIds());
 
     for (auto& p : pluginLoader_.Plugins())
     {
@@ -200,10 +204,12 @@ void App::LoadPlugins()
         Registry().Add(p.module, *pluginCtx_);
     }
 
-    // Append any plugin packages that are present but did not load (e.g. resolver
-    // rejected an unmet dependency), so the settings UI can still list them.
+    // Append any plugin packages that are present but not loaded — either disabled
+    // by the user or rejected by the resolver — so the settings UI can list them.
+    std::vector<std::string> discoveredIds;
     for (auto& package : PluginLoader::DiscoverAvailable(modulesDir))
     {
+        discoveredIds.push_back(package.packageId);
         const bool loaded = std::ranges::any_of(
             pluginLoader_.Plugins(),
             [&](const auto& p)
@@ -215,8 +221,16 @@ void App::LoadPlugins()
         {
             continue;
         }
-        pluginCtx_->AddPlugin(std::move(package.packageId), /*enabled=*/false, nullptr);
+        // enabled=false ⇒ user-disabled (unchecked in the UI); enabled=true but not
+        // loaded ⇒ resolver-rejected (surfaces as a load failure).
+        const bool enabled = pluginConfig_.IsEnabled(package.packageId);
+        pluginCtx_->AddPlugin(std::move(package.packageId), enabled, nullptr);
     }
+
+    // Refresh the manifest so it lists every discovered plugin (new ones default to
+    // enabled), keeping plugins.ini a complete, hand-editable record.
+    pluginConfig_.EnsureKnown(discoveredIds);
+    pluginConfig_.Save(pluginsPath_);
 
     Registry().BindHotkeys(keys_);
     BindPlayerHotkeys();

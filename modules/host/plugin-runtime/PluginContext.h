@@ -9,6 +9,7 @@
 #include <vector>
 
 class Settings;
+class PluginConfig;
 class UIContext;
 
 // Host-side settings page and keybind entry (STL types OK — host-internal only).
@@ -50,7 +51,10 @@ struct ChangeCallbackRec
 class PluginContext final : public IPluginContext
 {
 public:
-    PluginContext(std::string prefPath, Settings* settings, const std::string& settingsPath);
+    PluginContext(
+        std::string prefPath, Settings* settings, const std::string& settingsPath,
+        PluginConfig* pluginConfig = nullptr, std::string pluginsPath = {}
+    );
 
     int GetPrefPath(char* buf, int cap) const noexcept override;
 
@@ -131,6 +135,11 @@ private:
     std::string prefPath_;
     std::string settingsPath_;
     Settings* settings_;
+
+    // User plugin enablement manifest (plugins.ini) and its path. Null in contexts
+    // that don't manage plugin enablement (e.g. unit tests).
+    PluginConfig* pluginConfig_ = nullptr;
+    std::string pluginsPath_;
 
     // Field registry bound to *settings_, plus the serialized defaults (for
     // EnumerateSettings' defaultValue). Built once in the constructor.

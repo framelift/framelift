@@ -1,4 +1,5 @@
 #include "PluginContext.h"
+#include "PluginConfig.h"
 #include "Settings.h"
 #include "PlaybackSettings.h"
 #include "VideoDecodeMode.h"
@@ -10,8 +11,12 @@
 #include <string>
 #include <utility>
 
-PluginContext::PluginContext(std::string prefPath, Settings* settings, const std::string& settingsPath)
-    : prefPath_(std::move(prefPath)), settingsPath_(settingsPath), settings_(settings)
+PluginContext::PluginContext(
+    std::string prefPath, Settings* settings, const std::string& settingsPath, PluginConfig* pluginConfig,
+    std::string pluginsPath
+)
+    : prefPath_(std::move(prefPath)), settingsPath_(settingsPath), settings_(settings), pluginConfig_(pluginConfig),
+      pluginsPath_(std::move(pluginsPath))
 {
     // Bind the field registry to the live settings, and snapshot the serialized
     // defaults from a fresh Settings so EnumerateSettings can report them.
@@ -73,11 +78,27 @@ void PluginContext::EnumeratePlugins(
     }
 }
 
-void PluginContext::SetPluginEnabled(const char* /*name*/, bool /*enabled*/) noexcept
+void PluginContext::SetPluginEnabled(const char* name, bool enabled) noexcept
 {
-    // Plugin enablement is driven entirely by module JSON (a disabled package isn't
-    // built/shipped, so it's absent from Modules/). There is no runtime enabled list
-    // to persist, so this is a non-persistent no-op kept only for ABI stability.
+    if (!name)
+    {
+        return;
+    }
+
+    const auto rec = std::ranges::find_if(pluginCatalog_, [&](const PluginRec& r) { return r.name == name; });
+    if (rec == pluginCatalog_.end())
+    {
+        return; // unknown plugin
+    }
+    rec->enabled = enabled; // reflect immediately so the UI checkbox updates
+
+    // Persist to the opt-out manifest; the change takes effect on the next launch,
+    // so there is no live state to notify (skip the change-callback fan-out).
+    if (pluginConfig_)
+    {
+        pluginConfig_->Set(rec->name, enabled);
+        pluginConfig_->Save(pluginsPath_);
+    }
 }
 
 void PluginContext::EnumerateSystemFonts(void (*visit)(const char*, const char*, void*), void* visitUd) const noexcept

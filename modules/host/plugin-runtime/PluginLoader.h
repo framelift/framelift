@@ -3,6 +3,7 @@
 #include <framelift/IRenderable.h>
 #include <framelift/PluginABI.h>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 // Loads every module DLL present in a directory. Enablement is driven by module
@@ -37,11 +38,11 @@ public:
         std::string moduleFile;
     };
 
-    // Scans Modules/ for shared libraries and loads every ABI-compatible package.
-    // Dependencies and load order are resolved from embedded package/module metadata
-    // before any module object is created.
+    // Scans Modules/ for shared libraries and loads every ABI-compatible package
+    // whose id is not in `disabled`. Dependencies and load order are resolved from
+    // embedded package/module metadata before any module object is created.
     // Does NOT call Install(); the caller does that via Registry().Add(p, ctx).
-    void LoadAll(const std::string& modulesDir);
+    void LoadAll(const std::string& modulesDir, const std::unordered_set<std::string>& disabled = {});
 
     const std::vector<LoadedPlugin>& Plugins() const
     {
