@@ -13,7 +13,6 @@
 #include <framelift/Events.h>
 #include <framelift/IModule.h>
 #include <framelift/services/IHistory.h>
-#include <framelift/ui/ContextMenuHelpers.h>
 #include <memory>
 #include <string>
 #include <utility>
@@ -93,11 +92,9 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     pluginCtx_->RegisterService<IDirWatcher>(dirWatcher_.get());
     pluginCtx_->RegisterService<Hotkeys>(&keys_);
     pluginCtx_->RegisterService<FocusManager>(&focus_);
-    pluginCtx_->RegisterService<ContextMenu>(&contextMenu_);
     pluginCtx_->RegisterService<IFileDialog>(&fileDialogService_);
 
     // Playback options update when settings change.
-    runtimeAudioPrefs_ = AudioPrefsFromSettings(settings_);
     player_->SetPlaybackOptions(PlaybackOptsFromSettings(settings_));
     if (auto* ffmpeg = dynamic_cast<FFmpegPlayer*>(player_.get()))
     {
@@ -105,7 +102,7 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     }
     player_->SetReadAheadCache(ReadAheadOptsFromSettings(settings_));
     player_->SetSubtitleStyle(SubtitleStyleFromSettings(settings_));
-    player_->SetAudioPreferences(runtimeAudioPrefs_);
+    player_->SetAudioPreferences(AudioPrefsFromSettings(settings_));
     player_->SetAudioNormalize(
         settings_.normalizeEnabled, settings_.normalizeEnabled ? ParamsFromSettings(settings_) : AudioNormalizeParams{}
     );
@@ -132,8 +129,7 @@ App::App(const char* title, const int width, const int height, const int cliArgc
             }
             player_->SetReadAheadCache(ReadAheadOptsFromSettings(s));
             player_->SetSubtitleStyle(SubtitleStyleFromSettings(s));
-            runtimeAudioPrefs_ = AudioPrefsFromSettings(s);
-            player_->SetAudioPreferences(runtimeAudioPrefs_);
+            player_->SetAudioPreferences(AudioPrefsFromSettings(s));
             appWindow_->SetVSync(s.videoSync);
             player_->SetAudioNormalize(
                 s.normalizeEnabled, s.normalizeEnabled ? ParamsFromSettings(s) : AudioNormalizeParams{}
@@ -154,12 +150,11 @@ App::App(const char* title, const int width, const int height, const int cliArgc
         }
     );
 
-    // ── Phase 3: Plugins, then context menu ───────────────────────────────────
-    // Plugins register their menu sections during LoadPlugins(); BuildContextMenu()
-    // then assembles the menu, replaying those sections between the core items and
-    // Quit, so the final order is host core items → plugin items → Quit.
+    // ── Phase 3: Plugins ──────────────────────────────────────────────────────
+    // The ContextMenu plugin owns the right-click menu: it registers the
+    // ContextMenu service that other plugins extend, and assembles its core items
+    // plus their sections on its first frame.
     LoadPlugins();
-    BuildContextMenu();
 
     BuildRenderables();
 }
@@ -175,7 +170,6 @@ App::~App()
     {
         pluginCtx_->ClearSubscriptions();
     }
-    contextMenu_.Clear();
     keys_.Clear();
 
     player_.reset(); // destroy the player's render context before the GL context is torn down
@@ -229,200 +223,12 @@ void App::LoadPlugins()
     pluginCtx_->SaveSettings();
 }
 
-// ── Context menu ──────────────────────────────────────────────────────────────
-
-void App::BuildContextMenu()
-{
-    // Host core items come first, then plugin sections (registered during
-    // LoadPlugins() and replayed by EmitSections()), then Quit, always last.
-    contextMenu_.SetKeys(&keys_);
-    framelift::AddItem(
-        contextMenu_, "Open File", "openFileDialog",
-        [this]
-        {
-            OpenFileAction();
-        }
-    );
-    framelift::AddItem(
-        contextMenu_, "Open Network Stream\xe2\x80\xa6",
-        [this]
-        {
-            // The RemoteStream plugin owns the URL-entry modal and all stream
-            // handling; the host just surfaces the entry point next to "Open File".
-            pluginCtx_->Publish<OpenNetworkStreamRequestEvent>({});
-        }
-    );
-    contextMenu_.AddSeparator();
-    framelift::AddItem(
-        contextMenu_, "Play / Pause", "togglePause",
-        [this]
-        {
-            TogglePauseAction();
-        }
-    );
-    framelift::AddItem(
-        contextMenu_, "Toggle Fullscreen", "toggleFullscreen",
-        [this]
-        {
-            appWindow_->SetFullscreen(!appWindow_->IsFullscreen());
-        }
-    );
-    contextMenu_.AddSeparator();
-    framelift::AddDynamicSubMenu(
-        contextMenu_, "Audio",
-        [this](UIContext& ctx)
-        {
-            if (ctx.MenuItem("Toggle Mute", "toggleMute", player_->IsMuted()))
-            {
-                player_->ToggleMute();
-                pluginCtx_->Publish<NotificationEvent>({player_->IsMuted() ? "Mute: On" : "Mute: Off"});
-            }
-            if (ctx.MenuItem("Normalize", "toggleNormalize", player_->IsNormalizeEnabled()))
-            {
-                const bool on = !player_->IsNormalizeEnabled();
-                player_->SetAudioNormalize(on, on ? ParamsFromSettings(settings_) : AudioNormalizeParams{});
-                pluginCtx_->Publish<NotificationEvent>({on ? "Normalize: On" : "Normalize: Off"});
-            }
-            ctx.Separator();
-
-            if (ctx.BeginMenu("Output device"))
-            {
-                struct DeviceCtx
-                {
-                    UIContext* ctx;
-                    IMediaPlayer* player;
-                    AudioPreferences* prefs;
-                    bool empty = true;
-                };
-                DeviceCtx dc{&ctx, player_.get(), &runtimeAudioPrefs_};
-                player_->EnumerateAudioOutputDevices(
-                    [](const AudioOutputDevice* d, void* ud)
-                    {
-                        auto* state = static_cast<DeviceCtx*>(ud);
-                        state->empty = false;
-                        const char* label = d->isDefault ? "System default" : d->name;
-                        if (state->ctx->MenuItem(label, d->selected))
-                        {
-                            std::strncpy(state->prefs->outputDevice, d->name, sizeof(state->prefs->outputDevice) - 1);
-                            state->prefs->outputDevice[sizeof(state->prefs->outputDevice) - 1] = '\0';
-                            state->player->SetAudioPreferences(*state->prefs);
-                        }
-                    },
-                    &dc
-                );
-                if (dc.empty)
-                {
-                    ctx.TextDisabled("No output devices");
-                }
-                ctx.EndMenu();
-            }
-
-            if (ctx.BeginMenu("Sync offset"))
-            {
-                char current[64];
-                std::snprintf(current, sizeof(current), "Current: %+d ms", runtimeAudioPrefs_.syncOffsetMs);
-                ctx.TextDisabled(current);
-                if (ctx.MenuItem("-50 ms"))
-                {
-                    runtimeAudioPrefs_.syncOffsetMs -= 50;
-                    player_->SetAudioPreferences(runtimeAudioPrefs_);
-                }
-                if (ctx.MenuItem("+50 ms"))
-                {
-                    runtimeAudioPrefs_.syncOffsetMs += 50;
-                    player_->SetAudioPreferences(runtimeAudioPrefs_);
-                }
-                if (ctx.MenuItem("Reset"))
-                {
-                    runtimeAudioPrefs_.syncOffsetMs = 0;
-                    player_->SetAudioPreferences(runtimeAudioPrefs_);
-                }
-                ctx.EndMenu();
-            }
-            ctx.Separator();
-
-            struct AudioCtx
-            {
-                UIContext* ctx;
-                IMediaPlayer* player;
-                bool empty = true;
-            };
-            AudioCtx ac{&ctx, player_.get()};
-            player_->EnumerateAudioTracks(
-                [](const AudioTrack* t, void* ud)
-                {
-                    auto* a = static_cast<AudioCtx*>(ud);
-                    a->empty = false;
-                    if (a->ctx->MenuItem(t->label, t->selected))
-                    {
-                        a->player->SelectAudioTrack(t->id);
-                    }
-                },
-                &ac
-            );
-            if (ac.empty)
-            {
-                ctx.TextDisabled("No audio tracks");
-            }
-        }
-    );
-    framelift::AddDynamicSubMenu(
-        contextMenu_, "Subtitles",
-        [this](UIContext& ctx)
-        {
-            if (ctx.MenuItem("Toggle", "toggleSubtitles", player_->IsSubtitlesEnabled()))
-            {
-                player_->ToggleSubtitles();
-                pluginCtx_->Publish<NotificationEvent>(
-                    {player_->IsSubtitlesEnabled() ? "Subtitles: On" : "Subtitles: Off"}
-                );
-            }
-            ctx.Separator();
-
-            struct SubCtx
-            {
-                UIContext* ctx;
-                IMediaPlayer* player;
-                bool empty = true;
-            };
-            SubCtx sc{&ctx, player_.get()};
-            player_->EnumerateSubtitleTracks(
-                [](const SubtitleTrack* t, void* ud)
-                {
-                    auto* s = static_cast<SubCtx*>(ud);
-                    s->empty = false;
-                    if (s->ctx->MenuItem(t->label, t->selected))
-                    {
-                        s->player->SelectSubtitleTrack(t->id);
-                    }
-                },
-                &sc
-            );
-            if (sc.empty)
-            {
-                ctx.TextDisabled("No subtitles");
-            }
-        }
-    );
-
-    // Plugin items land here, between the core items and Quit.
-    contextMenu_.EmitSections();
-
-    contextMenu_.AddSeparator();
-    framelift::AddItem(
-        contextMenu_, "Quit", "quit",
-        [this]
-        {
-            appWindow_->PushQuitEvent();
-        }
-    );
-}
-
 // ── Renderables ───────────────────────────────────────────────────────────────
 
 void App::BuildRenderables()
 {
-    // Collect (order, renderable) pairs from plugins, sort, then insert contextMenu_ at 30.
+    // Collect (order, renderable) pairs from plugins and sort. The context menu is
+    // itself a plugin (renderOrder 30), so it sorts in alongside the rest.
     using OrderedR = std::pair<int, IRenderable*>;
     std::vector<OrderedR> items;
 
@@ -433,7 +239,6 @@ void App::BuildRenderables()
             items.emplace_back(p.renderOrder, p.renderable);
         }
     }
-    items.emplace_back(30, &contextMenu_);
 
     std::ranges::stable_sort(
         items,

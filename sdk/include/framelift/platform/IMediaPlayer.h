@@ -321,4 +321,11 @@ public:
     // Apply user audio output, track-selection and behavior preferences.
     // Appended at the end (host-provided surface; MINOR ABI addition).
     virtual void SetAudioPreferences(const AudioPreferences& prefs) noexcept = 0;
+
+    // The currently-applied audio preferences (the last value passed to
+    // SetAudioPreferences, or defaults if never set). Lets a UI read and
+    // round-trip the live runtime prefs (e.g. sync-offset / output-device tweaks)
+    // without holding its own copy. Appended at the end (host-provided surface;
+    // MINOR ABI addition).
+    [[nodiscard]] virtual AudioPreferences GetAudioPreferences() const noexcept = 0;
 };

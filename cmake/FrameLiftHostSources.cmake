@@ -45,8 +45,6 @@ set(_FRAMELIFT_HOST_READ_AHEAD_SOURCES
 )
 
 set(_FRAMELIFT_HOST_UI_SOURCES
-        "${CMAKE_SOURCE_DIR}/modules/host/ui/ContextMenuImpl.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/ui/ContextMenuImpl.h"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/Theme.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/Theme.h"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeUtil.h"

@@ -16,6 +16,7 @@ public:
     int loadCount = 0;
     bool pauseSet = true; // last SetPause() arg
     double imageDuration = -1.0;
+    AudioPreferences audioPrefs_{}; // last SetAudioPreferences() arg, returned by GetAudioPreferences()
 
     // ── Playback commands ──────────────────────────────────────────────────────
     void LoadFile(const char* path, double resumePos) noexcept override
@@ -71,8 +72,14 @@ public:
     {
     }
 
-    void SetAudioPreferences(const AudioPreferences&) noexcept override
+    void SetAudioPreferences(const AudioPreferences& prefs) noexcept override
     {
+        audioPrefs_ = prefs;
+    }
+
+    [[nodiscard]] AudioPreferences GetAudioPreferences() const noexcept override
+    {
+        return audioPrefs_;
     }
 
     // ── Tracks ─────────────────────────────────────────────────────────────────

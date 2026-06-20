@@ -8,7 +8,6 @@
 #include "PluginRegistry.h"
 #include "Services.h"
 #include "Settings.h"
-#include "ContextMenuImpl.h"
 #include "UIContextImpl.h"
 #include <framelift/IRenderable.h>
 #include <framelift/platform/IAppWindow.h>
@@ -56,7 +55,6 @@ private:
     void RenderFrame();
 
     void LoadPlugins();
-    void BuildContextMenu();
     void BuildRenderables();
     void PulseAudioDucking();
     void RefreshAudioDucking();
@@ -78,7 +76,6 @@ private:
     bool playerIdle_ = true;
     bool audioDucked_ = false;
     std::chrono::steady_clock::time_point audioDuckUntil_{};
-    AudioPreferences runtimeAudioPrefs_{};
 
     // Theme application is deferred: the settings-change callback fires mid-frame
     // (during SettingsMenu's Save inside Render), so it only sets these flags and
@@ -99,7 +96,6 @@ private:
     FileDialogServiceImpl fileDialogService_{&settings_};
     FocusManagerImpl focus_;
     HotkeysImpl keys_;
-    ContextMenuImpl contextMenu_;
     UIContextImpl uiCtx_;
 
     std::unique_ptr<PluginContext> pluginCtx_;

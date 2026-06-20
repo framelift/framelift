@@ -1850,6 +1850,12 @@ void FFmpegPlayer::SetAudioPreferences(const AudioPreferences& prefs) noexcept
     }
 }
 
+AudioPreferences FFmpegPlayer::GetAudioPreferences() const noexcept
+{
+    std::lock_guard lock(tracksMutex_);
+    return audioPrefs_;
+}
+
 void FFmpegPlayer::SetAudioDucked(bool ducked) noexcept
 {
     audioOut_->SetDucked(ducked);

@@ -66,6 +66,7 @@ public:
     void SetReadAheadCache(const ReadAheadCacheOptions& opts) noexcept override;
     void SetSubtitleStyle(const SubtitleStyle& style) noexcept override;
     void SetAudioPreferences(const AudioPreferences& prefs) noexcept override;
+    [[nodiscard]] AudioPreferences GetAudioPreferences() const noexcept override;
     void SetAudioDucked(bool ducked) noexcept;
 
     void ToggleSubtitles() noexcept override;

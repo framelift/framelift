@@ -108,7 +108,10 @@ struct Settings
 
     // List of plugin package ids to load from the Modules/ directory.
     // Serialized under [plugins] enabled=framelift.foo;framelift.bar;... in the ini file.
-    std::vector<std::string> enabledPlugins = {"framelift.playlist",      "framelift.history", "framelift.overlay",
+    // The context menu is listed first so it registers the ContextMenu service
+    // before History/Playlist/SettingsMenu add their sections during install.
+    std::vector<std::string> enabledPlugins = {"framelift.context_menu",  "framelift.playlist",
+                                               "framelift.history",       "framelift.overlay",
                                                "framelift.debug_overlay", "framelift.settings_menu",
                                                "framelift.benchmark",     "framelift.remote_stream",
                                                "framelift.updater"};

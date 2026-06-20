@@ -2,14 +2,13 @@
   "fileVersion": 1,
   "id": "framelift.host.ui",
   "name": "Host UI",
-  "description": "Dear ImGui host UI services, theme, and context menu implementation.",
+  "description": "Dear ImGui host UI services and theme.",
   "enabled": true,
   "required": true,
   "provides": {
     "features": [
       "ui.context",
-      "ui.theme",
-      "ui.context_menu"
+      "ui.theme"
     ]
   },
   "requires": {

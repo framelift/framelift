@@ -18,7 +18,7 @@ TEST(SettingsTest, DefaultsAreSane)
     EXPECT_FLOAT_EQ(s.panelWidth, 320.f);
     EXPECT_EQ(s.dynaudnormFrameLen, 100);
     EXPECT_EQ(s.videoExtensions.rfind("mp4", 0), 0u); // starts with "mp4"
-    EXPECT_EQ(s.enabledPlugins.size(), 8u);
+    EXPECT_EQ(s.enabledPlugins.size(), 9u);
 }
 
 TEST(SettingsTest, ThemeDefaults)
@@ -324,7 +324,7 @@ TEST(SettingsTest, EmptyFileSeedsDefaults)
     Settings reloaded;
     reloaded.Load(f.str());
     EXPECT_FLOAT_EQ(reloaded.panelWidth, 320.f);
-    EXPECT_EQ(reloaded.enabledPlugins.size(), 8u);
+    EXPECT_EQ(reloaded.enabledPlugins.size(), 9u);
 }
 
 TEST(SettingsTest, SaveLoadRoundTrip)

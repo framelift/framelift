@@ -19,8 +19,9 @@
 // MINOR 1: appended IMediaPlayer::SetSubtitleStyle.
 // MINOR 2: appended audio output enumeration and preferences.
 // MAJOR 3: plugin identity moved to JSON-authored embedded package/module metadata.
+// MINOR 1: appended IMediaPlayer::GetAudioPreferences.
 #define FRAMELIFT_PLUGIN_ABI_MAJOR 3
-#define FRAMELIFT_PLUGIN_ABI_MINOR 0
+#define FRAMELIFT_PLUGIN_ABI_MINOR 1
 #define FRAMELIFT_PLUGIN_ABI_PATCH 0
 
 struct FrameLiftStringList

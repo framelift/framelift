@@ -26,7 +26,7 @@ TEST(PluginAbiTest, DifferentMajorRejectedEitherDirection)
 TEST(PluginAbiTest, PackageMetadataIsAbiThree)
 {
     EXPECT_EQ(FRAMELIFT_PLUGIN_ABI_MAJOR, 3);
-    EXPECT_EQ(FRAMELIFT_PLUGIN_ABI_MINOR, 0);
+    EXPECT_EQ(FRAMELIFT_PLUGIN_ABI_MINOR, 1);
 }
 
 TEST(PluginAbiTest, MetadataCarriesPackageAndModules)
