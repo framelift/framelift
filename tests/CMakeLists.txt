@@ -52,6 +52,7 @@ set(FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/host/settings"
         "${FRAMELIFT_ROOT}/modules/host/services"
         "${FRAMELIFT_ROOT}/modules/host/logging"
+        "${FRAMELIFT_ROOT}/modules/host/audio"
         "${FRAMELIFT_ROOT}/modules/host/fonts"
         "${FRAMELIFT_ROOT}/modules/host/read-ahead"
         "${FRAMELIFT_ROOT}/modules/host/ui"

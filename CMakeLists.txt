@@ -46,6 +46,7 @@ set(FRAMELIFT_HOST_MODULE_INCLUDE_DIRS
         "${CMAKE_SOURCE_DIR}/modules/host/services"
         "${CMAKE_SOURCE_DIR}/modules/host/controls"
         "${CMAKE_SOURCE_DIR}/modules/host/logging"
+        "${CMAKE_SOURCE_DIR}/modules/host/audio"
         "${CMAKE_SOURCE_DIR}/modules/host/fonts"
         "${CMAKE_SOURCE_DIR}/modules/host/read-ahead"
         "${CMAKE_SOURCE_DIR}/modules/host/ui"

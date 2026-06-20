@@ -50,6 +50,15 @@ set(_FRAMELIFT_HOST_LOGGING_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/logging/Log.cpp"
 )
 
+set(_FRAMELIFT_HOST_AUDIO_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/host/audio/AudioSettings.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/audio/FFmpegAudioFilter.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/audio/FFmpegAudioFilter.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/audio/FFmpegAudioOptions.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/audio/FFmpegAudioOutput.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/audio/FFmpegAudioOutput.h"
+)
+
 set(_FRAMELIFT_HOST_FONTS_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/fonts/FontScan.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/fonts/FontScan.h"
@@ -88,12 +97,6 @@ set(_FRAMELIFT_HOST_WATCH_SOURCES
 )
 
 set(_FRAMELIFT_HOST_FFMPEG_SOURCES
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/AudioSettings.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioFilter.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioFilter.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioOptions.h"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioOutput.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegAudioOutput.h"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegClock.h"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegFilters.h"
         "${CMAKE_SOURCE_DIR}/modules/media/ffmpeg/FFmpegHwDecode.cpp"
@@ -148,6 +151,7 @@ set(FRAMELIFT_HOST_SOURCES
         ${_FRAMELIFT_HOST_SERVICES_SOURCES}
         ${_FRAMELIFT_HOST_CONTROLS_SOURCES}
         ${_FRAMELIFT_HOST_LOGGING_SOURCES}
+        ${_FRAMELIFT_HOST_AUDIO_SOURCES}
         ${_FRAMELIFT_HOST_FONTS_SOURCES}
         ${_FRAMELIFT_HOST_READ_AHEAD_SOURCES}
         ${_FRAMELIFT_HOST_UI_SOURCES}

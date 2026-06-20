@@ -4,7 +4,7 @@
 
 // Settings.cpp is the single place that knows the full set of settings sections.
 #include "CoreSettings.h"     // host-core: General/Files/Keybinds
-#include "AudioSettings.h"    // media/ffmpeg
+#include "AudioSettings.h"    // host/audio
 #include "PlaybackSettings.h" // media/ffmpeg
 #include "SubtitleSettings.h" // media/ffmpeg
 #include "CacheSettings.h"    // host/read-ahead

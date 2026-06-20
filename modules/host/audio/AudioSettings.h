@@ -4,7 +4,7 @@
 
 #include <string>
 
-// Audio settings — owned by the media/ffmpeg module.
+// Audio settings — owned by the host/audio module.
 
 struct AudioSettings
 {
