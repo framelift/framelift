@@ -1,14 +1,15 @@
 # FrameLift
 
-An **extensible** video player built on Dear ImGui, SDL3, FFmpeg, and libass — where every feature
-is a runtime-loaded plugin. The host application has no compile-time knowledge of any capability:
-playback controls, playlists, history, settings, network streaming, and updates are all plugin DLLs
-loaded at startup over a stable, versioned binary ABI. Add or remove features by dropping a DLL in or
-out of the `packages/` folder.
+An **extensible** video player built on Dear ImGui, SDL3, FFmpeg, and libass — where user-facing
+features are runtime-loaded plugins. The host application has no compile-time knowledge of any of
+them: playback controls, playlists, history, settings, network streaming, and updates are all plugin
+DLLs loaded at startup over a stable, versioned binary ABI; the window, decode/playback engine, and
+platform integration are built-in modules compiled into the host. Add or remove plugin features by
+dropping a DLL in or out of the `packages/` folder.
 
 ## Features
 
-- **Plugin architecture** — every capability is a separate DLL loaded at runtime; build and ship your
+- **Plugin architecture** — user-facing features are separate DLLs loaded at runtime; build and ship your
   own against the dependency-free [Plugin SDK](#extending-framelift-plugin-sdk)
 - **Vulkan-first rendering** — defaults to a Vulkan backend, automatically falling back to OpenGL
   on machines without a suitable Vulkan device
@@ -61,7 +62,7 @@ current list of options.
 
 ## Extending FrameLift (Plugin SDK)
 
-Every FrameLift feature ships as a **package** — one runtime-loaded DLL under the `packages/` folder
+Each FrameLift plugin ships as a **package** — one runtime-loaded DLL under the `packages/` folder
 next to the executable. A *plugin* (what you build with the SDK) ships as a package: a `.Plugin.json`
 plus its `.Module.json`(s), compiled into one DLL that carries one or more **modules**, each declaring
 the **features** it provides and requires. A package may carry several modules, and each module can be
