@@ -9,6 +9,9 @@
 #include "DirWatcher.h"
 #include "FFmpegPlayer.h"
 #include "SdlAppWindow.h"
+#if FRAMELIFT_MODULE_WIN_SHELL
+#include "WinShell.h"
+#endif
 #include <framelift/Log.h>
 #include <framelift/Events.h>
 #include <framelift/IModule.h>
@@ -128,6 +131,13 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
         );
     playbackControls_->Connect();
     themeController_.Connect(*moduleCtx_, settings_);
+
+#if FRAMELIFT_MODULE_WIN_SHELL
+    // Windows shell integration consumes the same services/events; wire it after
+    // they're registered so its Connect() can resolve them.
+    winShell_ = std::make_unique<WinShell>(appWindow_->GetWin32Hwnd());
+    winShell_->Connect(*moduleCtx_);
+#endif
 }
 
 // ── Package loading ─────────────────────────────────────────────────────────────
@@ -324,6 +334,12 @@ void App::DrainMediaEvents()
         {
             playbackControls_->SetPlayerIdle(ev.property.value.flag != 0);
         }
+#if FRAMELIFT_MODULE_WIN_SHELL
+        if (winShell_)
+        {
+            winShell_->OnMediaEvent(ev);
+        }
+#endif
         registry_.OnMediaEvent(ev);
         if (ev.type == MediaEventType::VideoReconfig)
         {
@@ -341,6 +357,12 @@ void App::Dispatch(const AppEvent& e)
         // Let modules handle their own Quit cleanup (e.g. Playlist::FlushCurrentPos).
         registry_.OnEvent(e);
         registry_.OnShutdown();
+#if FRAMELIFT_MODULE_WIN_SHELL
+        if (winShell_)
+        {
+            winShell_->OnShutdown();
+        }
+#endif
         running_ = false;
         return;
     case AppEventType::WindowExposed:

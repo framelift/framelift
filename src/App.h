@@ -21,6 +21,7 @@
 
 class SdlAppWindow;
 class FFmpegPlayer;
+class WinShell;
 
 // Top-level application object. Owns all subsystems, drives the main loop,
 // and co-ordinates rendering. Exactly one instance exists for the program lifetime.
@@ -87,6 +88,11 @@ private:
 
     std::unique_ptr<ModuleContext> moduleCtx_;
     std::unique_ptr<PlaybackControls> playbackControls_;
+#if FRAMELIFT_MODULE_WIN_SHELL
+    // Windows-only: taskbar playback progress + error toasts. Driven off the media
+    // event stream in DrainMediaEvents; not part of the plugin registry.
+    std::unique_ptr<WinShell> winShell_;
+#endif
     PackageLoader packageLoader_;
     ModuleRegistry registry_;
 
