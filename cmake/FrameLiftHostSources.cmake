@@ -1,4 +1,4 @@
-# Explicit host source ownership for framelift.exe.
+# Explicit host source ownership for framelift app.
 #
 # Built-in modules are JSON-authored and reported by FrameLiftBuiltinModules.cmake.
 # Source groups are appended by module state so lean builds do not compile code
@@ -96,6 +96,16 @@ set(_FRAMELIFT_HOST_WATCH_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/Win32DirWatcher.h"
 )
 
+set(_FRAMELIFT_HOST_WIN_SHELL_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/WinShell.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/WinShell.h"
+        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/ProgressMapping.h"
+        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/TaskbarProgress.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/TaskbarProgress.h"
+        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/ToastNotifier.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/ToastNotifier.h"
+)
+
 set(_FRAMELIFT_HOST_PLAYBACK_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegClock.h"
         "${CMAKE_SOURCE_DIR}/modules/host/playback/FFmpegFilters.h"
@@ -167,6 +177,10 @@ if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
             ${_FRAMELIFT_HOST_PLAYBACK_VULKAN_SOURCES}
             ${_FRAMELIFT_HOST_GRAPHICS_VULKAN_SOURCES}
     )
+endif ()
+
+if (FRAMELIFT_MODULE_WIN_SHELL)
+    list(APPEND FRAMELIFT_HOST_SOURCES ${_FRAMELIFT_HOST_WIN_SHELL_SOURCES})
 endif ()
 
 source_group(TREE "${CMAKE_SOURCE_DIR}" FILES ${FRAMELIFT_HOST_SOURCES})

@@ -60,6 +60,11 @@ public:
     int GetPrefPath(const char* org, const char* app, char* buf, int cap) const noexcept;
     int GetBasePath(char* buf, int cap) const noexcept;
 
+    // The native Win32 window handle (HWND as void*), or nullptr off Windows /
+    // before the window exists. Confines the SDL property lookup to this file so
+    // the WinShell module needs no SDL dependency.
+    [[nodiscard]] void* GetWin32Hwnd() const noexcept;
+
     void SetImGuiIniPath(const char* path) noexcept;
     void ImGuiInit() noexcept;
     void ImGuiShutdown() noexcept;

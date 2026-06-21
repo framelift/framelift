@@ -56,6 +56,7 @@ set(FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/host/ui"
         "${FRAMELIFT_ROOT}/modules/platform/window-sdl"
         "${FRAMELIFT_ROOT}/modules/platform/dir-watch"
+        "${FRAMELIFT_ROOT}/modules/platform/win-shell"
 )
 
 # ── Coverage (gcov/gcovr) ─────────────────────────────────────────────────────
@@ -92,6 +93,7 @@ add_executable(framelift_tests
         unit/misc/ExtensionFilterTests.cpp
         unit/media/FFmpegFiltersTests.cpp
         unit/media/MediaEventTests.cpp
+        unit/host/WinShellTests.cpp
         unit/host/SettingsMappingTests.cpp
         unit/host/ReadAheadCacheTests.cpp
         unit/misc/ThemeUtilTests.cpp

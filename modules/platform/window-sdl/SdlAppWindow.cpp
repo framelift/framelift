@@ -96,6 +96,19 @@ void* SdlAppWindow::GetNativeHandle() const noexcept
     return window_;
 }
 
+void* SdlAppWindow::GetWin32Hwnd() const noexcept
+{
+#ifdef SDL_PLATFORM_WIN32
+    if (!window_)
+    {
+        return nullptr;
+    }
+    return SDL_GetPointerProperty(SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+#else
+    return nullptr;
+#endif
+}
+
 bool SdlAppWindow::SetWindowIcon(const char* path) noexcept
 {
     int w = 0, h = 0, ch = 0;

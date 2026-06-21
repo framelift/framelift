@@ -50,6 +50,7 @@ set(FRAMELIFT_HOST_MODULE_INCLUDE_DIRS
         "${CMAKE_SOURCE_DIR}/modules/host/ui"
         "${CMAKE_SOURCE_DIR}/modules/platform/window-sdl"
         "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch"
+        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell"
 )
 
 # ── Shader → SPIR-V build step (glslang, fetched in-tree) ─────────────────────
@@ -153,6 +154,13 @@ target_link_libraries(FrameLift PRIVATE ${CMAKE_DL_LIBS})
 # (the waitable-timer / event APIs live in kernel32, linked by default).
 if (WIN32)
     target_link_libraries(FrameLift PRIVATE winmm)
+endif ()
+
+# Windows shell integration (taskbar progress + toast notifications): COM
+# (ole32), the shell shortcut/AUMID APIs (shell32), and the WinRT activation
+# runtime for the Windows.UI.Notifications ABI (runtimeobject).
+if (FRAMELIFT_MODULE_WIN_SHELL)
+    target_link_libraries(FrameLift PRIVATE ole32 shell32 runtimeobject)
 endif ()
 
 if (MINGW)
