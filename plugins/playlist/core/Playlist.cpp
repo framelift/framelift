@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <numeric>
 #include <random>
+#include <thread>
 
 // Read a string setting via the ABI-stable per-key getter (host owns the value).
 // Falls back to the supplied default if no context is available.
@@ -66,6 +67,11 @@ static void ScanVideos(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 Playlist::~Playlist()
 {
+    // Tell any in-flight scan worker not to touch the event pump after we're gone.
+    if (scanShared_)
+    {
+        scanShared_->alive = false;
+    }
     if (auto* dw = ctx_ ? ctx_->GetService<IDirWatcher>() : nullptr)
     {
         dw->Unwatch();
@@ -141,6 +147,9 @@ void Playlist::OnInstall(IModuleContext& ctx)
     if (auto* events = ctx.GetService<IEventPump>())
     {
         dirChangedEventType_ = events->RegisterCustomEventType();
+        scanDoneEventType_ = events->RegisterCustomEventType();
+        scanShared_->events = events;
+        scanShared_->doneEventType = scanDoneEventType_;
     }
 
     SetContext(&ctx);
@@ -217,11 +226,17 @@ bool Playlist::HandleEvent(const AppEvent& e)
         FlushCurrentPos();
         return false; // don't consume — let other plugins see Quit too
     }
-    if (e.type == AppEventType::Custom && dirChangedEventType_ != 0)
+    if (e.type == AppEventType::Custom)
     {
-        if (e.AsCustom().eventType == dirChangedEventType_)
+        const uint32_t et = e.AsCustom().eventType;
+        if (dirChangedEventType_ != 0 && et == dirChangedEventType_)
         {
             Reload();
+            return false;
+        }
+        if (scanDoneEventType_ != 0 && et == scanDoneEventType_)
+        {
+            ApplyScanResult();
             return false;
         }
     }
@@ -347,6 +362,27 @@ void Playlist::OpenFile(const char* path) noexcept
     {
         return;
     }
+    const std::string pathStr(path);
+
+    // Start playback immediately with a provisional single-item playlist. The full
+    // directory listing is scanned on a background thread and swapped in by
+    // ApplyScanResult() — so a large/nested folder never blocks the start of
+    // playback or the UI thread (see ScanShared in the header).
+    Clear();
+    AddFile(pathStr);
+    current_ = 0;
+    cursor_ = 0;
+    LoadFile(pathStr.c_str());
+
+    StartScan(pathStr);
+}
+
+void Playlist::StartScan(const std::string& path)
+{
+    if (!scanShared_)
+    {
+        return;
+    }
 
     const auto dir = std::filesystem::path(path).parent_path();
     const std::string videoExt =
@@ -368,27 +404,82 @@ void Playlist::OpenFile(const char* path) noexcept
         scanExt = videoExt;
     }
 
+    // Claim a generation so a later OpenFile() supersedes this scan's result.
+    const uint64_t gen = scanShared_->latestGen.fetch_add(1) + 1;
+
+    // Runs the directory walk and publishes into the shared slot; returns false if
+    // a newer open superseded us in the meantime. Heavy work happens here.
+    auto scan = [shared = scanShared_, dir, scanExt, maxDepth, gen, path]
+    {
+        std::vector<std::string> files;
+        ScanVideos(dir, 0, maxDepth, scanExt, files);
+
+        std::lock_guard<std::mutex> lk(shared->mtx);
+        if (gen != shared->latestGen.load())
+        {
+            return false; // superseded by a newer open
+        }
+        shared->files = std::move(files);
+        shared->dir = dir.string();
+        shared->openedPath = path;
+        shared->gen = gen;
+        shared->ready = true;
+        return true;
+    };
+
+    // Without an event pump we can't marshal the result back to the UI thread, so
+    // scan synchronously and apply inline (also keeps headless/unit-test runs
+    // deterministic). With a pump, offload to a detached worker so a large folder
+    // never blocks the UI thread or the start of playback.
+    if (!scanShared_->events)
+    {
+        if (scan())
+        {
+            ApplyScanResult();
+        }
+        return;
+    }
+
+    std::thread(
+        [shared = scanShared_, scan = std::move(scan)]
+        {
+            if (scan() && shared->alive.load() && shared->events)
+            {
+                shared->events->PushCustomEvent(shared->doneEventType);
+            }
+        }
+    ).detach();
+}
+
+void Playlist::ApplyScanResult()
+{
+    if (!scanShared_)
+    {
+        return;
+    }
+
     std::vector<std::string> files;
-    ScanVideos(dir, 0, maxDepth, scanExt, files);
-    std::ranges::sort(files);
-
-    Clear();
-
-    const bool hasPath = std::ranges::find(files, path) != files.end();
-    entries_.reserve(files.size() + (hasPath ? 0 : 1));
-
-    for (auto& f : files)
+    std::string dir;
+    std::string openedPath;
     {
-        AddFile(std::move(f));
+        std::lock_guard<std::mutex> lk(scanShared_->mtx);
+        if (!scanShared_->ready || scanShared_->gen != scanShared_->latestGen.load())
+        {
+            return; // nothing ready, or superseded by a newer open
+        }
+        files = std::move(scanShared_->files);
+        dir = std::move(scanShared_->dir);
+        openedPath = std::move(scanShared_->openedPath);
+        scanShared_->ready = false;
     }
 
-    if (!hasPath)
-    {
-        AddFile(path);
-    }
+    // Keep whatever is currently playing selected, without restarting playback.
+    const std::string keepPath =
+        current_ >= 0 && current_ < static_cast<int>(entries_.size()) ? entries_[current_].path : openedPath;
+    RebuildEntries(files, keepPath);
 
-    // Start watching the directory for new/removed files.
-    watchedDir_ = dir.string();
+    // (Re)arm the directory watcher for the now-listed directory.
+    watchedDir_ = dir;
     auto* dw = ctx_ ? ctx_->GetService<IDirWatcher>() : nullptr;
     auto* events = ctx_ ? ctx_->GetService<IEventPump>() : nullptr;
     if (dw && events)
@@ -408,10 +499,8 @@ void Playlist::OpenFile(const char* path) noexcept
             }
         };
         watchCbCtx_ = {this, events};
-        dw->Watch(watchedDir_.c_str(), cb, &watchCbCtx_, maxDepth);
+        dw->Watch(watchedDir_.c_str(), cb, &watchCbCtx_, scanSubdirs_ ? scanMaxDepth_ : 0);
     }
-
-    ActivateByPath(path);
 }
 
 // ── Entry management ──────────────────────────────────────────────────────────
@@ -520,34 +609,39 @@ void Playlist::Reload()
 
     std::vector<std::string> files;
     ScanVideos(std::filesystem::path(watchedDir_), 0, maxDepth, scanExt, files);
+    RebuildEntries(files, currentPath);
+}
+
+void Playlist::RebuildEntries(std::vector<std::string>& files, const std::string& keepPath)
+{
     std::ranges::sort(files);
 
     entries_.clear();
     current_ = -1;
     cursor_ = -1;
-    entries_.reserve(files.size());
+    entries_.reserve(files.size() + 1);
     for (auto& f : files)
     {
         AddFile(std::move(f));
     }
 
-    // Ensure the currently-playing file stays in the list even if not scanned.
-    const bool currentFound = !currentPath.empty() && std::ranges::any_of(
-                                  entries_,
-                                  [&](const Entry& e)
-                                  {
-                                      return e.path == currentPath;
-                                  }
-                              );
-    if (!currentPath.empty() && !currentFound)
+    // Ensure the file to keep stays in the list even if it wasn't scanned.
+    const bool keepFound = !keepPath.empty() && std::ranges::any_of(
+                               entries_,
+                               [&](const Entry& e)
+                               {
+                                   return e.path == keepPath;
+                               }
+                           );
+    if (!keepPath.empty() && !keepFound)
     {
-        AddFile(currentPath);
+        AddFile(keepPath);
     }
 
     // Restore current_ by path match.
     for (int i = 0; i < static_cast<int>(entries_.size()); ++i)
     {
-        if (entries_[i].path == currentPath)
+        if (entries_[i].path == keepPath)
         {
             current_ = i;
             break;

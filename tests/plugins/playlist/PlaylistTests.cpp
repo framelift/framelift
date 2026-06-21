@@ -89,8 +89,9 @@ TEST(PlaylistTest, OpenFileScansDirectoryForVideosOnly)
     pl.OpenFile((dir.path / "a.mp4").string().c_str());
 
     // Non-mixed playlist: only the two video files are picked up (.txt/readme excluded).
+    // With no event pump available, OpenFile scans synchronously and applies inline.
     EXPECT_EQ(pl.Count(), 2);
-    EXPECT_GE(pl.Current(), 0); // ActivateByPath found the opened file
+    EXPECT_GE(pl.Current(), 0); // the opened file is selected after the scan applies
 }
 
 // ── LoadFile drives the media player + publishes FileOpenedEvent (with ctx) ────

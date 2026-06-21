@@ -5,6 +5,9 @@
 #include <framelift/services.h>
 #include <framelift/ui.h>
 
+#include <atomic>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -111,6 +114,14 @@ private:
     // Extract the filename component of a path for use as a display label.
     static std::string FilenameOf(const std::string& path);
 
+    // Replace entries_ with the (to-be-sorted) scanned paths, keeping keepPath
+    // present and selected (current_/cursor_) without restarting playback.
+    // Shared by Reload() and the async-scan completion path.
+    void RebuildEntries(std::vector<std::string>& files, const std::string& keepPath);
+    // UI-thread handler for a completed background directory scan: swaps in the
+    // full playlist and (re)arms the directory watcher. No-op if superseded.
+    void ApplyScanResult();
+
     std::vector<Entry> entries_;
     int current_ = -1; // index of the currently playing entry, or -1 if none
     int cursor_ = -1;  // keyboard-navigation cursor, or -1 if none
@@ -130,6 +141,30 @@ private:
     // ── Directory watching ─────────────────────────────────────────────
     std::string watchedDir_;
     uint32_t dirChangedEventType_ = 0;
+
+    // ── Async directory scan ───────────────────────────────────────────────────
+    // OpenFile() starts playback immediately and offloads the recursive directory
+    // scan to a detached worker so a large/nested folder never blocks the UI thread
+    // or the start of playback. The worker fills this heap-owned slot (it outlives
+    // the plugin via shared_ptr) and wakes the UI thread with a custom event; the
+    // UI thread alone mutates entries_, so no locking of entries_ is needed.
+    uint32_t scanDoneEventType_ = 0;
+    struct ScanShared
+    {
+        std::mutex mtx;
+        std::vector<std::string> files;     // scanned paths (guarded by mtx)
+        std::string dir;                    // directory that was scanned
+        std::string openedPath;             // file that triggered this scan
+        uint64_t gen = 0;                   // generation of the published result
+        std::atomic<uint64_t> latestGen{0}; // newest OpenFile() generation
+        bool ready = false;                 // a result is waiting to be applied
+        std::atomic<bool> alive{true};      // cleared in ~Playlist
+        IEventPump* events = nullptr;       // host service, app-lifetime
+        uint32_t doneEventType = 0;
+    };
+    std::shared_ptr<ScanShared> scanShared_ = std::make_shared<ScanShared>();
+    // Build scan parameters from settings and launch the worker (UI thread).
+    void StartScan(const std::string& path);
 
     std::string currentFile_;
     double currentTimePos_ = 0.0; // most recent time-pos for the current file
