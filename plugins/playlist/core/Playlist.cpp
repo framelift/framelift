@@ -199,7 +199,6 @@ void Playlist::OnInstall(IModuleContext& ctx)
             *menu,
             [this](ContextMenu& m)
             {
-                m.AddSeparator();
                 framelift::AddItem(
                     m, "Playlist", "togglePlaylist",
                     [this]

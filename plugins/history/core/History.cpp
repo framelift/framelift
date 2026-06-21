@@ -123,6 +123,7 @@ void History::OnInstall(IModuleContext& ctx)
             *menu,
             [this](ContextMenu& m)
             {
+                m.AddSeparator();
                 framelift::AddItem(
                     m, "History", "toggleHistory",
                     [this]
