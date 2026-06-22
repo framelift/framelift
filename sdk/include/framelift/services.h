@@ -8,6 +8,7 @@
 #include <framelift/services/IFontCatalog.h>
 #include <framelift/services/IHistory.h>
 #include <framelift/services/IJson.h>
+#include <framelift/services/ILogBuffer.h>
 #include <framelift/services/IPackageCatalog.h>
 #include <framelift/services/ISettingsRegistry.h>
 #include <framelift/services/ISettingsStore.h>

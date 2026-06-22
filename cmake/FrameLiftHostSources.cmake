@@ -50,6 +50,8 @@ set(_FRAMELIFT_HOST_CONTROLS_SOURCES
 
 set(_FRAMELIFT_HOST_LOGGING_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/logging/Log.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/logging/LogBuffer.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/logging/LogBuffer.h"
 )
 
 set(_FRAMELIFT_HOST_AUDIO_SOURCES

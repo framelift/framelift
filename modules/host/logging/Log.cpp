@@ -5,6 +5,8 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#include "LogBuffer.h"
+
 namespace
 {
 // Host sink: receives formatted lines from the SDK (host + every plugin) and
@@ -12,6 +14,9 @@ namespace
 // plugin DLL by the loader via framelift_set_log_sink.
 void SpdlogSink(const int level, const char* msg)
 {
+    // Keep an in-memory copy for the Log Viewer plugin (read back via ILogBuffer).
+    HostLogBuffer().Push(level, msg);
+
     switch (static_cast<Log::Level>(level))
     {
     case Log::Level::Debug:
