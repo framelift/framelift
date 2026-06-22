@@ -78,6 +78,22 @@ private:
     bool pendingResize_ = false;
     bool running_ = true;
 
+    // Set when a media/video state change (other than a routine position tick) may have
+    // altered the video image without a freshly decoded frame — e.g. EOF → idle screen,
+    // a video reconfig, or a seek. Forces the Vulkan compositor to re-render the video
+    // layer once; consumed in App::Render. Ignored by the OpenGL backend.
+    bool pendingVideoRedraw_ = false;
+
+    // ── Demand-driven render loop (see App::Run) ──
+    // The loop renders+presents only when something changed and otherwise blocks on
+    // events so the GPU idles. uiEventThisIteration_ is set in Dispatch for input/window
+    // events (render once per input) and reset each loop iteration; redrawPending_ carries
+    // a renderable's RequestRedraw() (an in-progress animation or live panel — see
+    // UIContextImpl::ConsumeRedrawRequest) from one frame to the next, so the loop keeps
+    // painting exactly as long as something is actually animating, then sleeps.
+    bool uiEventThisIteration_ = false;
+    bool redrawPending_ = false;
+
     Settings settings_;
     PackageConfig packageConfig_;
     std::string packagesPath_;

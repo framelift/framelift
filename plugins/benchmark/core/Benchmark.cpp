@@ -167,6 +167,11 @@ void Benchmark::OnRender(UIContext& ctx)
         return;
     }
 
+    // The panel shows live system stats (sampled on a timer below) and a live fps readout,
+    // so it must keep repainting while open even with no input or new video frames. Asking
+    // for the next frame here keeps the demand-driven loop awake exactly while it is shown.
+    ctx.RequestRedraw();
+
     // ── UI frame timing (every frame) ───────────────────────────────────────────
     // Folded outside the 1 Hz refresh below so min/avg/max capture real per-frame
     // jitter; frameMsSmoothed_ drives the live fps readout (raw 1/dt is too noisy).

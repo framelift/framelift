@@ -1,5 +1,4 @@
 #include "Overlay.h"
-#include <chrono>
 #include <cstdio>
 #include <string>
 #include <utility>
@@ -61,14 +60,14 @@ void Overlay::OnInstall(IModuleContext& ctx)
 void Overlay::ShowCommand(std::string label)
 {
     commandLabel_ = std::move(label);
-    shownAt_ = std::chrono::steady_clock::now();
+    hud_.Trigger();
 }
 
 bool Overlay::HandleEvent(const AppEvent& e)
 {
     if (e.type == AppEventType::MouseMotion || e.type == AppEventType::MouseButtonDown)
     {
-        mouseActiveAt_ = std::chrono::steady_clock::now();
+        bar_.Trigger();
     }
     return false;
 }
@@ -134,19 +133,14 @@ static std::string FormatTime(const double sec)
 
 void Overlay::RenderControlsBar(const float w, const float h, UIContext& ctx)
 {
-    const double barElapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - mouseActiveAt_).count();
-    if (barElapsed >= barVisible + barFade)
+    if (!bar_.Active())
     {
         isDraggingSeek_ = false;
         return;
     }
-
-    float alpha = 1.f;
-    if (barElapsed > barVisible)
-    {
-        alpha = 1.f - static_cast<float>((barElapsed - barVisible) / barFade);
-    }
-    alpha = std::clamp(alpha, 0.f, 1.f);
+    // 1 during the visible hold, ramping to 0 across the fade. Value(ctx) also keeps the
+    // render loop awake until the fade completes.
+    const float alpha = 1.f - bar_.Value(ctx);
 
     constexpr float kBarH = 56.f;
     constexpr float kPadX = 16.f;
@@ -305,15 +299,9 @@ void Overlay::OnRender(UIContext& ctx)
     }
 
     // ── HUD: command label ────────────────────────────────────────────────────
-    const double hudElapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - shownAt_).count();
-    if (hudElapsed < fadeDelay + fadeDur)
+    if (hud_.Active())
     {
-        float alpha = 1.0f;
-        if (hudElapsed > fadeDelay)
-        {
-            alpha = 1.0f - static_cast<float>((hudElapsed - fadeDelay) / fadeDur);
-        }
-        alpha = std::clamp(alpha, 0.f, 1.f);
+        const float alpha = 1.0f - hud_.Value(ctx);
 
         auto& dl = ctx.GetForegroundDrawList();
 

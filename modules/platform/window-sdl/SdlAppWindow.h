@@ -65,6 +65,10 @@ public:
     // the WinShell module needs no SDL dependency.
     [[nodiscard]] void* GetWin32Hwnd() const noexcept;
 
+    // Host-only: forward the per-frame layer-dirty hint to the graphics backend
+    // (Vulkan layered compositor; no-op on OpenGL). Call before BeginFrame().
+    void SetFrameDirty(bool videoDirty, bool uiDirty) noexcept;
+
     void SetImGuiIniPath(const char* path) noexcept;
     void ImGuiInit() noexcept;
     void ImGuiShutdown() noexcept;

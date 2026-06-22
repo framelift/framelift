@@ -540,6 +540,13 @@ void Updater::OnRender(UIContext& ctx)
         return;
     }
 
+    // Checking/Downloading are driven by a background thread that flips state_ without an
+    // event; keep repainting while in a transient state so the loop notices when it settles.
+    if (s == UpdaterState::Checking || s == UpdaterState::Downloading)
+    {
+        ctx.RequestRedraw();
+    }
+
     const char* msg;
     switch (s)
     {

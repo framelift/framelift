@@ -17,6 +17,11 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
 
+// Embedded SPIR-V for the fullscreen-triangle blit, reused for the layer composition
+// pass (generated at build time; the video renderer uses the same shaders).
+#include "video.frag.spv.h"
+#include "video.vert.spv.h"
+
 #include <framelift/Log.h>
 
 #include <algorithm>
@@ -535,7 +540,8 @@ void VulkanGraphicsBackend::OnWindowCreated(SDL_Window* window)
         Fatal("Vulkan command buffer allocation failed");
     }
 
-    if (!CreateSwapchain() || !CreateRenderPass() || !CreateFramebuffers() || !CreateSyncObjects())
+    if (!CreateSwapchain() || !CreateRenderPass() || !CreateLayerRenderPass() || !CreateCompositeResources() ||
+        !CreateFramebuffers() || !CreateLayerTargets() || !CreateSyncObjects())
     {
         Fatal("Vulkan swapchain/render-pass setup failed");
     }
@@ -581,23 +587,10 @@ bool VulkanGraphicsBackend::CreateSwapchain()
         }
     }
 
-    // Present mode: FIFO is always available (VSync). Prefer MAILBOX when VSync is off.
-    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    if (!vsync_)
-    {
-        uint32_t pmCount = 0;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_, &pmCount, nullptr);
-        std::vector<VkPresentModeKHR> modes(pmCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice_, surface_, &pmCount, modes.data());
-        for (VkPresentModeKHR m : modes)
-        {
-            if (m == VK_PRESENT_MODE_MAILBOX_KHR)
-            {
-                presentMode = m;
-                break;
-            }
-        }
-    }
+    // Present mode: always FIFO (the only universally-available mode, paced to the display
+    // refresh). A video player gains nothing from MAILBOX/IMMEDIATE — those just render as fast
+    // as the GPU allows, burning power for frames the display never shows — so we never use them.
+    const VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
     // Extent: honour the surface's currentExtent when fixed, else clamp the pixel size.
     VkExtent2D extent = caps.currentExtent;
@@ -672,6 +665,9 @@ bool VulkanGraphicsBackend::CreateSwapchain()
     }
     // ImGui's MinImageCount must be >= 2 and <= ImageCount; the actual count satisfies both.
     minImageCount_ = scImgCount;
+
+    Log::Debug("Vulkan swapchain created: imageCount={} extent={}x{}",
+              scImgCount, extent.width, extent.height);
     return true;
 }
 
@@ -731,6 +727,335 @@ bool VulkanGraphicsBackend::CreateFramebuffers()
     return true;
 }
 
+// Render pass for the offscreen video / UI layers: clear, render, then leave the image
+// in SHADER_READ_ONLY_OPTIMAL ready for the composition pass to sample. Format-only, so
+// it survives swapchain recreation; shared by both layer framebuffers.
+bool VulkanGraphicsBackend::CreateLayerRenderPass()
+{
+    VkAttachmentDescription color{};
+    color.format = swapchainFormat_;
+    color.samples = VK_SAMPLE_COUNT_1_BIT;
+    color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    color.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    color.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkAttachmentReference colorRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorRef;
+
+    // Incoming: a re-render of a layer must wait for the previous frame's composite that
+    // sampled it (WAR) and any prior write (WAW). Outgoing: this frame's layer write must
+    // be visible to the composite pass's fragment-shader sampling.
+    VkSubpassDependency deps[2]{};
+    deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    deps[0].dstSubpass = 0;
+    deps[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    deps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    deps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    deps[1].srcSubpass = 0;
+    deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    deps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    deps[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    VkRenderPassCreateInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+    rp.attachmentCount = 1;
+    rp.pAttachments = &color;
+    rp.subpassCount = 1;
+    rp.pSubpasses = &subpass;
+    rp.dependencyCount = 2;
+    rp.pDependencies = deps;
+    return vkCreateRenderPass(device_, &rp, nullptr, &layerRenderPass_) == VK_SUCCESS;
+}
+
+// One fullscreen-triangle pipeline that samples a layer into the swapchain render pass.
+// blend=false: opaque copy (the video layer, already letterboxed over black). blend=true:
+// straight-alpha over (the UI layer, transparent except where ImGui drew).
+bool VulkanGraphicsBackend::CreateCompositePipeline(bool blend, VkPipeline& out)
+{
+    VkShaderModuleCreateInfo vci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    vci.codeSize = sizeof(kVideoVertSpv);
+    vci.pCode = kVideoVertSpv;
+    VkShaderModule vs = VK_NULL_HANDLE;
+    vkCreateShaderModule(device_, &vci, nullptr, &vs);
+    VkShaderModuleCreateInfo fci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    fci.codeSize = sizeof(kVideoFragSpv);
+    fci.pCode = kVideoFragSpv;
+    VkShaderModule fs = VK_NULL_HANDLE;
+    vkCreateShaderModule(device_, &fci, nullptr, &fs);
+    if (vs == VK_NULL_HANDLE || fs == VK_NULL_HANDLE)
+    {
+        Log::Error("VulkanGraphicsBackend: composite shader module creation failed");
+        return false;
+    }
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vs;
+    stages[0].pName = "main";
+    stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fs;
+    stages[1].pName = "main";
+
+    VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    VkPipelineViewportStateCreateInfo vp{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+    vp.viewportCount = 1;
+    vp.scissorCount = 1;
+    VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    rs.polygonMode = VK_POLYGON_MODE_FILL;
+    rs.cullMode = VK_CULL_MODE_NONE;
+    rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rs.lineWidth = 1.0f;
+    VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    // The UI layer holds PREMULTIPLIED alpha: ImGui rendered onto a transparent target
+    // with its SRC_ALPHA/ONE_MINUS_SRC_ALPHA blend, which leaves color = rgb*a. So
+    // composite it premultiplied-over the video: out = src + dst*(1 - srcA). The video
+    // layer is opaque, so its pipeline disables blending and copies straight.
+    VkPipelineColorBlendAttachmentState cba{};
+    cba.blendEnable = blend ? VK_TRUE : VK_FALSE;
+    cba.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.colorBlendOp = VK_BLEND_OP_ADD;
+    cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.alphaBlendOp = VK_BLEND_OP_ADD;
+    cba.colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    VkPipelineColorBlendStateCreateInfo cb{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+    cb.attachmentCount = 1;
+    cb.pAttachments = &cba;
+
+    VkDynamicState dyn[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo ds{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+    ds.dynamicStateCount = 2;
+    ds.pDynamicStates = dyn;
+
+    VkGraphicsPipelineCreateInfo gp{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+    gp.stageCount = 2;
+    gp.pStages = stages;
+    gp.pVertexInputState = &vi;
+    gp.pInputAssemblyState = &ia;
+    gp.pViewportState = &vp;
+    gp.pRasterizationState = &rs;
+    gp.pMultisampleState = &ms;
+    gp.pColorBlendState = &cb;
+    gp.pDynamicState = &ds;
+    gp.layout = compositePipelineLayout_;
+    gp.renderPass = renderPass_; // the swapchain pass (composition target)
+    gp.subpass = 0;
+
+    const VkResult r = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &gp, nullptr, &out);
+    vkDestroyShaderModule(device_, vs, nullptr);
+    vkDestroyShaderModule(device_, fs, nullptr);
+    if (r != VK_SUCCESS)
+    {
+        Log::Error("VulkanGraphicsBackend: composite pipeline creation failed");
+        return false;
+    }
+    return true;
+}
+
+// Size-independent composition resources (sampler, set layout, pool, the two pipelines
+// and their descriptor sets). Created once; the sets are re-pointed at the layer views
+// each time CreateLayerTargets() runs.
+bool VulkanGraphicsBackend::CreateCompositeResources()
+{
+    VkSamplerCreateInfo si{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    si.magFilter = VK_FILTER_LINEAR;
+    si.minFilter = VK_FILTER_LINEAR;
+    si.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    si.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    if (vkCreateSampler(device_, &si, nullptr, &compositeSampler_) != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    binding.descriptorCount = 1;
+    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutCreateInfo li{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    li.bindingCount = 1;
+    li.pBindings = &binding;
+    if (vkCreateDescriptorSetLayout(device_, &li, nullptr, &compositeSetLayout_) != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2};
+    VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    pi.maxSets = 2;
+    pi.poolSizeCount = 1;
+    pi.pPoolSizes = &ps;
+    if (vkCreateDescriptorPool(device_, &pi, nullptr, &compositeDescPool_) != VK_SUCCESS)
+    {
+        return false;
+    }
+    VkDescriptorSetLayout layouts[2] = {compositeSetLayout_, compositeSetLayout_};
+    VkDescriptorSet sets[2]{};
+    VkDescriptorSetAllocateInfo dai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    dai.descriptorPool = compositeDescPool_;
+    dai.descriptorSetCount = 2;
+    dai.pSetLayouts = layouts;
+    if (vkAllocateDescriptorSets(device_, &dai, sets) != VK_SUCCESS)
+    {
+        return false;
+    }
+    videoSet_ = sets[0];
+    uiSet_ = sets[1];
+
+    VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pl.setLayoutCount = 1;
+    pl.pSetLayouts = &compositeSetLayout_;
+    if (vkCreatePipelineLayout(device_, &pl, nullptr, &compositePipelineLayout_) != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    return CreateCompositePipeline(false, compositeVideoPipeline_) &&
+           CreateCompositePipeline(true, compositeUiPipeline_);
+}
+
+// The two offscreen layer targets (swapchain-sized). Recreated with the swapchain; the
+// composite descriptor sets are re-pointed at the fresh views here.
+bool VulkanGraphicsBackend::CreateLayerTargets()
+{
+    auto makeLayer = [&](LayerTarget& t) -> bool
+    {
+        VkImageCreateInfo ici{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        ici.imageType = VK_IMAGE_TYPE_2D;
+        ici.format = swapchainFormat_;
+        ici.extent = {swapchainExtent_.width, swapchainExtent_.height, 1};
+        ici.mipLevels = 1;
+        ici.arrayLayers = 1;
+        ici.samples = VK_SAMPLE_COUNT_1_BIT;
+        ici.tiling = VK_IMAGE_TILING_OPTIMAL;
+        ici.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        VmaAllocationCreateInfo aci{};
+        aci.usage = VMA_MEMORY_USAGE_AUTO;
+        if (vmaCreateImage(allocator_, &ici, &aci, &t.image, &t.alloc, nullptr) != VK_SUCCESS)
+        {
+            return false;
+        }
+        VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        vci.image = t.image;
+        vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        vci.format = swapchainFormat_;
+        vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        if (vkCreateImageView(device_, &vci, nullptr, &t.view) != VK_SUCCESS)
+        {
+            return false;
+        }
+        VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+        fb.renderPass = layerRenderPass_;
+        fb.attachmentCount = 1;
+        fb.pAttachments = &t.view;
+        fb.width = swapchainExtent_.width;
+        fb.height = swapchainExtent_.height;
+        fb.layers = 1;
+        return vkCreateFramebuffer(device_, &fb, nullptr, &t.framebuffer) == VK_SUCCESS;
+    };
+    if (!makeLayer(videoLayer_) || !makeLayer(uiLayer_))
+    {
+        Log::Error("VulkanGraphicsBackend: layer target creation failed");
+        return false;
+    }
+
+    VkDescriptorImageInfo vInfo{compositeSampler_, videoLayer_.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkDescriptorImageInfo uInfo{compositeSampler_, uiLayer_.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkWriteDescriptorSet writes[2]{};
+    writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    writes[0].dstSet = videoSet_;
+    writes[0].dstBinding = 0;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[0].pImageInfo = &vInfo;
+    writes[1] = writes[0];
+    writes[1].dstSet = uiSet_;
+    writes[1].pImageInfo = &uInfo;
+    vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+
+    // Fresh images hold no content — force both layers to render before the first composite.
+    videoLayerValid_ = false;
+    uiLayerValid_ = false;
+    return true;
+}
+
+void VulkanGraphicsBackend::DestroyLayerTargets()
+{
+    for (LayerTarget* t : {&videoLayer_, &uiLayer_})
+    {
+        if (t->framebuffer != VK_NULL_HANDLE)
+        {
+            vkDestroyFramebuffer(device_, t->framebuffer, nullptr);
+        }
+        if (t->view != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(device_, t->view, nullptr);
+        }
+        if (t->image != VK_NULL_HANDLE)
+        {
+            vmaDestroyImage(allocator_, t->image, t->alloc);
+        }
+        *t = {};
+    }
+}
+
+// Composite the video + UI layers onto the acquired swapchain image (called from
+// SwapBuffers): video first as an opaque copy, then the UI alpha-blended over it.
+void VulkanGraphicsBackend::RecordComposite()
+{
+    VkClearValue clear{};
+    clear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    rp.renderPass = renderPass_;
+    rp.framebuffer = framebuffers_[imageIndex_];
+    rp.renderArea.extent = swapchainExtent_;
+    rp.clearValueCount = 1;
+    rp.pClearValues = &clear;
+    vkCmdBeginRenderPass(currentCmd_, &rp, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkViewport vp{};
+    vp.x = 0.0f;
+    vp.y = 0.0f;
+    vp.width = static_cast<float>(swapchainExtent_.width);
+    vp.height = static_cast<float>(swapchainExtent_.height);
+    vp.minDepth = 0.0f;
+    vp.maxDepth = 1.0f;
+    VkRect2D scissor{{0, 0}, swapchainExtent_};
+    vkCmdSetViewport(currentCmd_, 0, 1, &vp);
+    vkCmdSetScissor(currentCmd_, 0, 1, &scissor);
+
+    vkCmdBindPipeline(currentCmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, compositeVideoPipeline_);
+    vkCmdBindDescriptorSets(currentCmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, compositePipelineLayout_, 0, 1, &videoSet_, 0,
+                            nullptr);
+    vkCmdDraw(currentCmd_, 3, 1, 0, 0);
+
+    vkCmdBindPipeline(currentCmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, compositeUiPipeline_);
+    vkCmdBindDescriptorSets(currentCmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, compositePipelineLayout_, 0, 1, &uiSet_, 0,
+                            nullptr);
+    vkCmdDraw(currentCmd_, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(currentCmd_);
+}
+
 bool VulkanGraphicsBackend::CreateSyncObjects()
 {
     VkSemaphoreCreateInfo sem{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -761,6 +1086,8 @@ bool VulkanGraphicsBackend::CreateSyncObjects()
 
 void VulkanGraphicsBackend::DestroySwapchain()
 {
+    // The offscreen layers are swapchain-sized, so they recreate with it.
+    DestroyLayerTargets();
     for (VkFramebuffer fb : framebuffers_)
     {
         vkDestroyFramebuffer(device_, fb, nullptr);
@@ -794,7 +1121,7 @@ bool VulkanGraphicsBackend::RecreateSwapchain()
     }
     renderFinished_.clear();
 
-    const bool ok = CreateSwapchain() && CreateFramebuffers();
+    const bool ok = CreateSwapchain() && CreateFramebuffers() && CreateLayerTargets();
     if (old != VK_NULL_HANDLE)
     {
         vkDestroySwapchainKHR(device_, old, nullptr);
@@ -924,18 +1251,36 @@ bool VulkanGraphicsBackend::BeginFrame()
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     vkBeginCommandBuffer(currentCmd_, &begin);
 
-    VkClearValue clear{};
-    clear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-    VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-    rp.renderPass = renderPass_;
-    rp.framebuffer = framebuffers_[imageIndex_];
-    rp.renderArea.extent = swapchainExtent_;
-    rp.clearValueCount = 1;
-    rp.pClearValues = &clear;
-    vkCmdBeginRenderPass(currentCmd_, &rp, VK_SUBPASS_CONTENTS_INLINE);
+    // Resolve which layers to (re-)render this frame. A layer with no content yet (first
+    // frame / after a resize) must render regardless of the dirty hint.
+    frameRenderVideo_ = videoDirty_ || !videoLayerValid_;
+    frameRenderUi_ = uiDirty_ || !uiLayerValid_;
+
+    // Open the video-layer pass now so player_->RenderFrame() records into it. When the
+    // video is reused (cached), we skip the pass and the video renderer — seeing
+    // IsRecordingVideoLayer()==false — records nothing; the composite reuses videoLayer_.
+    if (frameRenderVideo_)
+    {
+        VkClearValue clear{};
+        clear.color = {{0.0f, 0.0f, 0.0f, 1.0f}}; // opaque black (letterbox bars)
+        VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        rp.renderPass = layerRenderPass_;
+        rp.framebuffer = videoLayer_.framebuffer;
+        rp.renderArea.extent = swapchainExtent_;
+        rp.clearValueCount = 1;
+        rp.pClearValues = &clear;
+        vkCmdBeginRenderPass(currentCmd_, &rp, VK_SUBPASS_CONTENTS_INLINE);
+        recordingVideoLayer_ = true;
+    }
 
     frameActive_ = true;
     return true;
+}
+
+void VulkanGraphicsBackend::SetFrameDirty(bool videoDirty, bool uiDirty)
+{
+    videoDirty_ = videoDirty;
+    uiDirty_ = uiDirty;
 }
 
 void VulkanGraphicsBackend::SwapBuffers()
@@ -946,7 +1291,9 @@ void VulkanGraphicsBackend::SwapBuffers()
     }
     frameActive_ = false;
 
-    vkCmdEndRenderPass(currentCmd_);
+    // Both layer passes are already closed (video in ImGuiNewFrame, UI in
+    // ImGuiRenderDrawData); composite them onto the acquired swapchain image.
+    RecordComposite();
     vkEndCommandBuffer(currentCmd_);
 
     // Combine the binary swapchain-acquire wait + per-image render-finished signal with
@@ -1027,14 +1374,10 @@ void VulkanGraphicsBackend::SwapBuffers()
     }
 }
 
-void VulkanGraphicsBackend::SetVSync(bool enabled)
+void VulkanGraphicsBackend::SetVSync(bool /*enabled*/)
 {
-    if (vsync_ == enabled)
-    {
-        return;
-    }
-    vsync_ = enabled;
-    RecreateSwapchain(); // present mode is baked into the swapchain
+    // No-op: the Vulkan swapchain is always FIFO (vsynced) — see CreateSwapchain. The vsync
+    // toggle only has meaning on the OpenGL backend. Kept to satisfy the IGraphicsBackend ABI.
 }
 
 bool VulkanGraphicsBackend::ImmediateSubmit(void (*record)(VkCommandBuffer, void*), void* ud)
@@ -1207,13 +1550,38 @@ void VulkanGraphicsBackend::ImGuiShutdownBackends()
 
 void VulkanGraphicsBackend::ImGuiNewFrame()
 {
+    // Close the video-layer pass (opened in BeginFrame) before ImGui starts a new frame;
+    // the UI is recorded into its own pass in ImGuiRenderDrawData().
+    if (recordingVideoLayer_)
+    {
+        vkCmdEndRenderPass(currentCmd_);
+        recordingVideoLayer_ = false;
+        videoLayerValid_ = true;
+    }
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
 }
 
 void VulkanGraphicsBackend::ImGuiRenderDrawData()
 {
+    if (!frameRenderUi_)
+    {
+        return; // UI unchanged this frame — the composite reuses the cached uiLayer_.
+    }
+    // Render the main-viewport draw data into the UI layer, cleared transparent so only
+    // the pixels ImGui actually drew composite over the video.
+    VkClearValue clear{};
+    clear.color = {{0.0f, 0.0f, 0.0f, 0.0f}};
+    VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    rp.renderPass = layerRenderPass_;
+    rp.framebuffer = uiLayer_.framebuffer;
+    rp.renderArea.extent = swapchainExtent_;
+    rp.clearValueCount = 1;
+    rp.pClearValues = &clear;
+    vkCmdBeginRenderPass(currentCmd_, &rp, VK_SUBPASS_CONTENTS_INLINE);
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), currentCmd_);
+    vkCmdEndRenderPass(currentCmd_);
+    uiLayerValid_ = true;
 }
 
 void VulkanGraphicsBackend::ImGuiRenderPlatformWindows()
@@ -1262,7 +1630,38 @@ void VulkanGraphicsBackend::Shutdown()
     }
     renderFinished_.clear();
 
-    DestroySwapchain();
+    DestroySwapchain(); // also destroys the offscreen layer targets
+
+    // Size-independent composition resources + the layer render pass.
+    if (compositeVideoPipeline_ != VK_NULL_HANDLE)
+    {
+        vkDestroyPipeline(device_, compositeVideoPipeline_, nullptr);
+    }
+    if (compositeUiPipeline_ != VK_NULL_HANDLE)
+    {
+        vkDestroyPipeline(device_, compositeUiPipeline_, nullptr);
+    }
+    if (compositePipelineLayout_ != VK_NULL_HANDLE)
+    {
+        vkDestroyPipelineLayout(device_, compositePipelineLayout_, nullptr);
+    }
+    if (compositeDescPool_ != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorPool(device_, compositeDescPool_, nullptr);
+    }
+    if (compositeSetLayout_ != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorSetLayout(device_, compositeSetLayout_, nullptr);
+    }
+    if (compositeSampler_ != VK_NULL_HANDLE)
+    {
+        vkDestroySampler(device_, compositeSampler_, nullptr);
+    }
+    if (layerRenderPass_ != VK_NULL_HANDLE)
+    {
+        vkDestroyRenderPass(device_, layerRenderPass_, nullptr);
+    }
+
     if (swapchain_ != VK_NULL_HANDLE)
     {
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);

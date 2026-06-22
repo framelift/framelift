@@ -137,6 +137,17 @@ public:
     bool ColorEdit3(const char* label, float* rgb) noexcept override;
     bool InputTextMultiline(const char* label, char* buf, int bufSize, UI::Vec2 size) noexcept override;
 
+    void RequestRedraw() noexcept override
+    {
+        redrawRequested_ = true;
+    }
+
+    // Read (and clear) the per-frame redraw demand: a plugin RequestRedraw() this frame, OR
+    // ImGui's own continuous needs (an active item / a focused text field whose caret blinks)
+    // so those animate without plugin coupling. Call after the renderables have submitted
+    // their UI for the frame but before the frame is ended. Drives App's render loop.
+    [[nodiscard]] bool ConsumeRedrawRequest() noexcept;
+
     void UpdateKeys(const Hotkeys* keys) noexcept
     {
         keys_ = keys;
@@ -162,4 +173,7 @@ private:
     // Main OS window client-area size in pixels, cached each BeginFrame. Replaces
     // the Render(windowW, windowH) parameters.
     float mainW_ = 0.f, mainH_ = 0.f;
+    // Set by RequestRedraw() during a renderable's Render(); cleared each BeginFrame and
+    // consumed by ConsumeRedrawRequest(). Drives demand-driven rendering in App::Run.
+    bool redrawRequested_ = false;
 };

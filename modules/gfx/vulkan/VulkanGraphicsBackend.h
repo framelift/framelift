@@ -48,6 +48,7 @@ public:
     bool BeginFrame() override;
     void SwapBuffers() override;
     void SetVSync(bool enabled) override;
+    void SetFrameDirty(bool videoDirty, bool uiDirty) override;
 
     void ImGuiInitBackends() override;
     void ImGuiShutdownBackends() override;
@@ -67,6 +68,11 @@ public:
     [[nodiscard]] VkQueue GraphicsQueue() const { return graphicsQueue_; }
     [[nodiscard]] uint32_t GraphicsQueueFamily() const { return graphicsQueueFamily_; }
     [[nodiscard]] bool SupportsVulkanVideoDecode() const { return supportsVulkanVideo_; }
+
+    // True only while the video-layer render pass is open (between BeginFrame and
+    // ImGuiNewFrame). The paired VulkanVideoRenderer checks this in Draw() and skips
+    // recording when the video layer is being reused from a previous frame (cached).
+    [[nodiscard]] bool IsRecordingVideoLayer() const noexcept { return recordingVideoLayer_; }
 
     // Lock serializing queue access shared with FFmpeg's decode thread and ImGui's
     // platform-window renderer (see VulkanQueueLock.h). The renderer takes a
@@ -106,9 +112,18 @@ private:
     bool CreateFramebuffers();
     bool CreateSyncObjects();
 
+    // ── Layered compositor (offscreen video + UI layers → composite to swapchain) ──
+    // layerRenderPass_ + composite pipeline/sampler/sets are format-only, created once;
+    // the per-layer targets are swapchain-sized and recreated with the swapchain.
+    bool CreateLayerRenderPass();
+    bool CreateCompositeResources();
+    bool CreateCompositePipeline(bool blend, VkPipeline& out);
+    bool CreateLayerTargets();
+    void DestroyLayerTargets();
+    void RecordComposite();
+
     SDL_Window* window_ = nullptr;
     bool shown_ = false;  // created hidden; shown on the first successful present
-    bool vsync_ = false;  // FIFO when true, MAILBOX/IMMEDIATE when false
 
     VkInstance instance_ = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;
@@ -178,6 +193,46 @@ private:
     std::vector<VkFramebuffer> framebuffers_;
 
     VkRenderPass renderPass_ = VK_NULL_HANDLE;
+
+    // ── Layered compositor state ───────────────────────────────────────────────
+    // The video and the ImGui UI are each rendered into their own swapchain-sized RGBA
+    // target (layerRenderPass_), then composited onto the swapchain image in
+    // SwapBuffers. Reusing an unchanged layer (videoLayerValid_/uiLayerValid_) lets a
+    // paused / slow-fps video or a static UI skip its render and just re-composite.
+    struct LayerTarget
+    {
+        VkImage image = VK_NULL_HANDLE;
+        VmaAllocation alloc = nullptr;
+        VkImageView view = VK_NULL_HANDLE;
+        VkFramebuffer framebuffer = VK_NULL_HANDLE;
+    };
+    LayerTarget videoLayer_;
+    LayerTarget uiLayer_;
+    VkRenderPass layerRenderPass_ = VK_NULL_HANDLE; // CLEAR → COLOR → SHADER_READ_ONLY
+
+    // Composition: samples both layers into the swapchain. Size-independent (created once).
+    VkSampler compositeSampler_ = VK_NULL_HANDLE;
+    VkDescriptorSetLayout compositeSetLayout_ = VK_NULL_HANDLE;
+    VkDescriptorPool compositeDescPool_ = VK_NULL_HANDLE;
+    VkPipelineLayout compositePipelineLayout_ = VK_NULL_HANDLE;
+    VkPipeline compositeVideoPipeline_ = VK_NULL_HANDLE; // opaque copy
+    VkPipeline compositeUiPipeline_ = VK_NULL_HANDLE;    // premultiplied-alpha over
+    VkDescriptorSet videoSet_ = VK_NULL_HANDLE;          // points at videoLayer_.view
+    VkDescriptorSet uiSet_ = VK_NULL_HANDLE;             // points at uiLayer_.view
+
+    // Per-frame layer-dirty state. videoDirty_/uiDirty_ are set by SetFrameDirty before
+    // BeginFrame; the *Valid flags say whether a layer already holds content (false
+    // until first rendered / after a resize); the frameRender* flags are the resolved
+    // decision for the current frame; recordingVideoLayer_ is true while the video-layer
+    // pass is open (queried by the video renderer to skip a cached frame).
+    bool videoDirty_ = true;
+    bool uiDirty_ = true;
+    bool videoLayerValid_ = false;
+    bool uiLayerValid_ = false;
+    bool frameRenderVideo_ = false;
+    bool frameRenderUi_ = false;
+    bool recordingVideoLayer_ = false;
+
     VkCommandPool commandPool_ = VK_NULL_HANDLE;
     std::array<VkCommandBuffer, kMaxFramesInFlight> commandBuffers_{};
     std::array<VkSemaphore, kMaxFramesInFlight> imageAvailable_{};

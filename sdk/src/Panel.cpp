@@ -135,6 +135,9 @@ void Panel::Render(UIContext& ctx) noexcept
     else
     {
         animX_ += (targetX - animX_) * std::min(speed, 1.f);
+        // Still sliding: ask the host to paint the next frame so the animation runs to
+        // completion under the demand-driven render loop, then settles and lets it sleep.
+        ctx.RequestRedraw();
     }
 
     // Broadcast the animated width so other modules (e.g. Overlay's controls

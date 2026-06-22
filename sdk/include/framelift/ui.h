@@ -2,6 +2,7 @@
 // Aggregate header — include this instead of individual UI headers.
 #pragma once
 #include <framelift/IRenderable.h>
+#include <framelift/ui/Animation.h>
 #include <framelift/ui/ContextMenu.h>
 #include <framelift/ui/ContextMenuHelpers.h>
 #include <framelift/ui/Panel.h>
