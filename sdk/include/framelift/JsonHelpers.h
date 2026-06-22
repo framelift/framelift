@@ -59,7 +59,7 @@ public:
             return {};
         }
         std::string s(static_cast<std::size_t>(len), '\0');
-        json_->GetString(n, s.data(), len + 1);
+        (void)json_->GetString(n, s.data(), len + 1);
         return s;
     }
 
@@ -186,7 +186,7 @@ public:
             return {};
         }
         std::string s(static_cast<std::size_t>(len), '\0');
-        json_->Serialize(b_, indent, s.data(), len + 1);
+        (void)json_->Serialize(b_, indent, s.data(), len + 1);
         return s;
     }
 
