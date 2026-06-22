@@ -198,6 +198,7 @@ void FFmpegPlayer::DecodeThreadMain()
 
 void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
 {
+    FRAMELIFT_PERF_START("file-open");
     QueueEvent(MakeLifecycle(MediaEventType::StartFile));
     SetIdle(false);
     eofReached_ = false;
@@ -988,6 +989,14 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
         }
         newFramePending_ = true;
         RequestRender();
+
+        // Perf timing: the first presented frame ends whichever op is in flight.
+        // Each END is a no-op until its matching START, so calling both every frame
+        // is safe; a resume-position seek on load never STARTs "seek", so it stays
+        // folded into "file-open".
+        FRAMELIFT_PERF_END("file-open");
+        FRAMELIFT_PERF_END("seek");
+
         seekRefresh_ = false; // the post-seek frame has been shown
 
         EmitDouble(PlayerProperty::TimePos, framePts);
@@ -1691,6 +1700,8 @@ void FFmpegPlayer::RequestSeek(double target) noexcept
         seekTarget_ = target; // latest-wins: coalesces rapid seeks (seek-bar drags)
         hasPendingSeek_ = true;
     }
+    // Perf timing: measure from the latest request to the first post-seek frame.
+    FRAMELIFT_PERF_START("seek");
     // Unblock the demux read loop / keep-open wait and any worker mid-present.
     audioQ_->Abort();
     videoQ_->Abort();

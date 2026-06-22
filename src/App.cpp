@@ -7,6 +7,7 @@
 #include "IGraphicsBackend.h"
 #include "DirWatcher.h"
 #include "FFmpegPlayer.h"
+#include "LogBuffer.h"
 #include "SdlAppWindow.h"
 #if FRAMELIFT_MODULE_WIN_SHELL
 #include "WinShell.h"
@@ -14,6 +15,7 @@
 #include <framelift/Log.h>
 #include <framelift/Events.h>
 #include <framelift/IModule.h>
+#include <framelift/services/ILogBuffer.h>
 #include <memory>
 #include <string>
 #include <utility>
@@ -37,6 +39,8 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     : cliArgc_(cliArgc), cliArgv_(cliArgv), player_(std::make_unique<FFmpegPlayer>()),
       dirWatcher_(CreateDirWatcher())
 {
+    FRAMELIFT_PERF_START("app-start");
+
     ffmpeg_ = player_.get();
 
     // Resolve the pref dir up front: the graphics backend — and thus the SDL window
@@ -130,6 +134,7 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
     moduleCtx_->RegisterService<FocusManager>(&focus_);
     moduleCtx_->RegisterService<IFileDialog>(&fileDialogService_);
     moduleCtx_->RegisterService<IJson>(&jsonService_);
+    moduleCtx_->RegisterService<ILogBuffer>(&HostLogBuffer());
 
     // Controllers own their own event-bus wiring (settings re-apply, audio ducking,
     // theme reaction) so App holds no subscriptions.
@@ -540,6 +545,8 @@ int App::Run()
     // hidden window emits no WindowExposed event, so we cannot rely on the loop
     // to trigger this first render.
     RenderFrame();
+
+    FRAMELIFT_PERF_END("app-start");
 
     while (running_)
     {

@@ -1,0 +1,12 @@
+{
+  "fileVersion": 1,
+  "id": "framelift.log_viewer",
+  "name": "LogViewer",
+  "publisher": "FrameLift",
+  "description": "In-app log and performance viewer",
+  "version": "project",
+  "abi": 1,
+  "modules": [
+    "core/Core.Module.json"
+  ]
+}
