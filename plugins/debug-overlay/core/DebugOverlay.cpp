@@ -160,6 +160,10 @@ void DebugOverlay::OnRender(UIContext& ctx)
         return;
     }
 
+    // The overlay refreshes its readouts on a timer (below), so while it is open it must
+    // keep repainting even with no input — request the next frame from the loop.
+    ctx.RequestRedraw();
+
     const auto now = std::chrono::steady_clock::now();
     const double elapsed = std::chrono::duration<double>(now - lastRefresh_).count();
     if (elapsed >= refreshInterval)

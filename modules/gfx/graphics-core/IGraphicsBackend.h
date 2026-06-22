@@ -81,6 +81,17 @@ public:
     virtual void SwapBuffers() = 0;
     virtual void SetVSync(bool enabled) = 0;
 
+    // Hint, set before BeginFrame(), of which logical layers changed this frame so a
+    // layered backend can reuse cached layers instead of re-rendering them: the Vulkan
+    // backend renders the video and UI into separate offscreen targets and only
+    // composites them to the swapchain, skipping the re-render of an unchanged layer.
+    // Default no-op — the OpenGL backend draws everything directly every frame.
+    virtual void SetFrameDirty(bool videoDirty, bool uiDirty)
+    {
+        (void)videoDirty;
+        (void)uiDirty;
+    }
+
     // ── Dear ImGui backend lifecycle (owns all imgui_impl_* calls) ────────────
     // The neutral ImGui context (CreateContext, style, io flags) is owned by the
     // caller; these wire up and drive the platform+renderer backends around it.

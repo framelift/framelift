@@ -807,6 +807,14 @@ void VulkanVideoRenderer::DrawVulkanFrame()
 
 void VulkanVideoRenderer::Draw(int /*fbW*/, int /*fbH*/, bool drawOverlay)
 {
+    // The compositor reuses the cached video layer when the frame is unchanged: the
+    // backend then leaves the video-layer pass closed, so there is nothing to record
+    // into and we must not emit draw commands outside a render pass.
+    if (!backend_->IsRecordingVideoLayer())
+    {
+        return;
+    }
+
     VkCommandBuffer cmd = backend_->CurrentCommandBuffer();
 
     if (vkFrame_)

@@ -4,7 +4,6 @@
 #include <framelift/platform.h>
 #include <framelift/ui.h>
 
-#include <chrono>
 #include <memory>
 #include <string>
 
@@ -65,18 +64,13 @@ private:
     bool settingsOpen_ = false;
 
     std::string commandLabel_;
-    // Initialised far in the past so the HUD is invisible until ShowCommand() is called.
-    std::chrono::steady_clock::time_point shownAt_{std::chrono::steady_clock::now() - std::chrono::seconds(9999)};
-
-    // Controls bar: shown on mouse activity, auto-hides after inactivity.
-    std::chrono::steady_clock::time_point mouseActiveAt_{std::chrono::steady_clock::now() - std::chrono::seconds(9999)};
+    // HUD command label: held 2.0s after ShowCommand(), then fades out over 0.4s.
+    framelift::Animation hud_{0.4f /*fade*/, 2.0f /*hold*/};
+    // Controls bar: shown on mouse activity, held 1.5s, then fades out over 0.25s. While
+    // either animation is running its Value(ctx) requests the next frame, so the loop
+    // animates exactly as long as the fade lasts and then sleeps (no host-side keep-alive).
+    framelift::Animation bar_{0.25f /*fade*/, 1.5f /*hold*/};
     bool isDraggingSeek_ = false; // true while the user drags the seek bar thumb
-
-    static constexpr double fadeDelay = 2.0; // seconds the command label is held before fading
-    static constexpr double fadeDur = 0.4;   // fade-out duration in seconds
-    static constexpr double barVisible = 1.5;
-    // seconds the controls bar stays visible after mouse activity
-    static constexpr double barFade = 0.25; // controls bar fade-out duration in seconds
 };
 
 FRAMELIFT_MODULE_ENTRY(Overlay, {

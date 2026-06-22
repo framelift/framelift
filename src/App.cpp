@@ -2,7 +2,6 @@
 #include "Cli.h"
 #include "IconData.h"
 #include "CoreSettings.h"
-#include "PlaybackSettings.h"
 #include "GraphicsApi.h"
 #include "GraphicsSettings.h"
 #include "IGraphicsBackend.h"
@@ -23,6 +22,14 @@
 #include <algorithm>
 #include <ranges>
 #include <unordered_set>
+
+namespace
+{
+// Wait cap while a UI animation / live panel is asking for more frames (redrawPending_).
+// A continuous RequestRedraw() must not free-run the loop, so each such frame waits at
+// least this long — ~60 fps — instead of spinning at the display rate.
+constexpr int kUiRedrawIntervalMs = 16;
+} // namespace
 
 // ── Constructor / Destructor ──────────────────────────────────────────────────
 
@@ -297,6 +304,17 @@ void App::Render()
     int w = 0, h = 0;
     appWindow_->GetSize(w, h);
 
+    // Tell the backend which logical layers changed so the Vulkan compositor can reuse
+    // cached layers and only composite (no-op on OpenGL). The video layer re-renders on a
+    // freshly decoded frame or a significant media/video state change; the UI layer
+    // re-renders on input, while something is animating (redrawPending_ carries the last
+    // frame's RequestRedraw), and whenever the video advances so live overlays
+    // (DebugOverlay stats, position readout, subtitles) track playback instead of freezing.
+    const bool videoDirty = player_->HasNewFrame() || pendingVideoRedraw_;
+    const bool uiDirty = uiEventThisIteration_ || redrawPending_ || videoDirty;
+    pendingVideoRedraw_ = false;
+    appWindow_->SetFrameDirty(videoDirty, uiDirty);
+
     // Acquire the frame's render target. The backend may decline (e.g. the Vulkan
     // swapchain is being recreated) — skip rendering and presenting this iteration.
     if (!appWindow_->BeginFrame())
@@ -313,6 +331,10 @@ void App::Render()
     {
         r->Render(uiCtx_);
     }
+    // Capture whether anything still needs to animate (a plugin RequestRedraw, or ImGui's
+    // own active item / text caret) before ImGui::Render ends the frame; the loop uses it
+    // to decide whether to paint again next iteration or block on events.
+    redrawPending_ = uiCtx_.ConsumeRedrawRequest();
     appWindow_->UIEndFrame();
 
     appWindow_->SwapBuffers();
@@ -330,6 +352,20 @@ void App::DrainMediaEvents()
         {
             break;
         }
+
+        // A media state change other than the routine position tick should repaint
+        // promptly even while the controls are hidden (EOF → idle screen, buffering
+        // spinner, the pause icon, …). Position updates are excluded so steady playback
+        // isn't pinned to the display refresh by a redraw it doesn't need. pendingVideoRedraw_
+        // both triggers a render (it is in the gate) and refreshes the cached video layer.
+        const bool positionTick = ev.type == MediaEventType::PropertyChange &&
+                                  (ev.property.prop == PlayerProperty::TimePos ||
+                                   ev.property.prop == PlayerProperty::PercentPos);
+        if (!positionTick)
+        {
+            pendingVideoRedraw_ = true;
+        }
+
         if (ev.type == MediaEventType::PropertyChange && ev.property.prop == PlayerProperty::IdleActive &&
             ev.property.type == PropertyType::Flag)
         {
@@ -352,6 +388,27 @@ void App::DrainMediaEvents()
 void App::Dispatch(const AppEvent& e)
 {
     appWindow_->ImGuiProcessEvent(e);
+
+    // Any user input or window-repaint event makes the loop paint one frame so it reflects
+    // the input. RenderUpdate and PlayerWakeup are excluded: a new frame already renders via
+    // HasNewFrame(), and media state changes set pendingVideoRedraw_ in DrainMediaEvents().
+    // Continuing animations are driven separately by redrawPending_ (RequestRedraw).
+    switch (e.type) // NOLINT(clang-diagnostic-switch-enum)
+    {
+    case AppEventType::WindowExposed:
+    case AppEventType::KeyDown:
+    case AppEventType::KeyUp:
+    case AppEventType::MouseButtonDown:
+    case AppEventType::MouseMotion:
+    case AppEventType::MouseWheel:
+    case AppEventType::DropFile:
+    case AppEventType::Custom:
+        uiEventThisIteration_ = true;
+        break;
+    default:
+        break;
+    }
+
     switch (e.type) // NOLINT(clang-diagnostic-switch-enum)
     {
     case AppEventType::Quit:
@@ -367,9 +424,15 @@ void App::Dispatch(const AppEvent& e)
         running_ = false;
         return;
     case AppEventType::WindowExposed:
+        // Keep-alive already refreshed above; the repaint happens via the render gate
+        // (App::Run), compositing from the cached layers.
+        return;
     case AppEventType::RenderUpdate:
-        // The loop renders every frame while visible, so these only need to wake
-        // WaitNextEvent; the new video frame is consumed by player_->RenderFrame().
+        // The player wants a repaint: a freshly decoded frame (also seen via
+        // HasNewFrame), or a paused redraw with no new frame (subtitle toggle, seek
+        // preview). Mark the video layer dirty so the gate renders and the compositor
+        // refreshes it even when no new frame is pending.
+        pendingVideoRedraw_ = true;
         return;
     case AppEventType::PlayerWakeup:
         DrainMediaEvents();
@@ -481,13 +544,44 @@ int App::Run()
     while (running_)
     {
         const bool renderable = appWindow_->IsRenderable();
-        // While visible we render every frame; vsync paces via SwapBuffers (poll
-        // events with 0 timeout), vsync-off caps at ~250 fps so a static screen
-        // doesn't spin. While minimized/occluded we don't paint, so block on
-        // events (100 ms) to idle instead of busy-looping.
-        const int timeoutMs = !renderable ? 100 : (settings_.Get<PlaybackSettings>().videoSync ? 0 : 4);
+        // How long to block waiting for the next event:
+        //  - not renderable (minimized/occluded): we don't paint, so just idle on events
+        //    (100 ms) instead of busy-looping;
+        //  - something is animating (redrawPending_): wait one ~60 fps tick so the loop
+        //    repaints at a vsync-like rate. This caps a continuous RequestRedraw() (a fade,
+        //    a live benchmark/debug panel, a blinking text caret) to ~60 fps instead of
+        //    free-running at the display rate when vsync is off;
+        //  - otherwise idle: block on events indefinitely. Every source of visual change
+        //    posts a wake event — a decoded frame (RenderUpdate), input, media state
+        //    (PlayerWakeup), and async results (Playlist dir-watch / file dialog via
+        //    PushCustomEvent) — so App is a pure event dispatcher with no polling. (A source
+        //    that changed pixels without posting a wake event would stall the UI; none does.)
+        int timeoutMs;
+        if (!renderable)
+        {
+            timeoutMs = 100;
+        }
+        else if (redrawPending_)
+        {
+            timeoutMs = kUiRedrawIntervalMs;
+        }
+        else
+        {
+            timeoutMs = -1;
+        }
+
+        uiEventThisIteration_ = false;
         DrainEvents(timeoutMs);
-        if (running_ && appWindow_->IsRenderable())
+
+        if (!running_ || !appWindow_->IsRenderable())
+        {
+            continue;
+        }
+        // Render only when something visible changed: a freshly decoded frame, a
+        // player-requested repaint (media/subtitle/seek), a pending video-driven resize, a
+        // user-input event this iteration, or an in-progress animation (redrawPending_).
+        // Otherwise we loop back and block, leaving the GPU idle.
+        if (player_->HasNewFrame() || pendingVideoRedraw_ || pendingResize_ || uiEventThisIteration_ || redrawPending_)
         {
             RenderFrame();
         }

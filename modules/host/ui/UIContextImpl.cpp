@@ -138,6 +138,10 @@ UIContextImpl::UIContextImpl(const Hotkeys* keys) : keys_(keys)
 
 void UIContextImpl::BeginFrame() noexcept
 {
+    // A fresh frame starts with no pending redraw demand; renderables re-assert it via
+    // RequestRedraw() while they still animate / show live data (see ConsumeRedrawRequest).
+    redrawRequested_ = false;
+
     // Draw list pointers are refreshed lazily on each Get*DrawList() call.
     windowDL_.SetTarget(nullptr);
     backgroundDL_.SetTarget(nullptr);
@@ -156,6 +160,19 @@ void UIContextImpl::BeginFrame() noexcept
 float UIContextImpl::GetDeltaTime() const noexcept
 {
     return ImGui::GetIO().DeltaTime;
+}
+
+bool UIContextImpl::ConsumeRedrawRequest() noexcept
+{
+    // A plugin asked for another frame, OR ImGui itself wants to keep animating: an active
+    // item (a slider being dragged, a button held) or a focused text field (the caret blinks
+    // and the selection animates). Honouring these here means the loop keeps painting through
+    // continuous interaction without the host knowing which plugin owns the widget. Must be
+    // called while the ImGui frame is still live (items submitted, before ImGui::Render()).
+    const ImGuiIO& io = ImGui::GetIO();
+    const bool want = redrawRequested_ || io.WantTextInput || ImGui::IsAnyItemActive();
+    redrawRequested_ = false;
+    return want;
 }
 
 void UIContextImpl::SetNextWindowPos(UI::Vec2 pos, UI::Cond cond) noexcept

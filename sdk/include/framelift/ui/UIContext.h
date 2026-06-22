@@ -209,4 +209,15 @@ public:
 
     // Like TextDisabled(), but wraps long lines to the window's content region.
     virtual void TextDisabledWrapped(const char* text) noexcept = 0;
+
+    // ── Demand-driven rendering ───────────────────────────────────────────────────
+    // Ask the host to paint at least one more frame after this one. The render loop is
+    // event-driven and otherwise sleeps, so a renderable that animates or shows live data
+    // must call this every frame while it still needs to update — when nothing requests a
+    // redraw (and no input/media event arrives) the loop blocks and the GPU idles.
+    //
+    // Prefer the framelift::Animation helper (<framelift/ui.h>) for time-based effects: it
+    // calls this for you while the animation is running. Appended at the end to preserve the
+    // vtable layout for plugins built against an earlier minor.
+    virtual void RequestRedraw() noexcept = 0;
 };

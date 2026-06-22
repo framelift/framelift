@@ -344,6 +344,11 @@ void SdlAppWindow::ImGuiShutdown() noexcept
     ImGui::DestroyContext();
 }
 
+void SdlAppWindow::SetFrameDirty(const bool videoDirty, const bool uiDirty) noexcept
+{
+    backend_->SetFrameDirty(videoDirty, uiDirty);
+}
+
 void SdlAppWindow::UIBeginFrame() noexcept
 {
     backend_->ImGuiNewFrame();
