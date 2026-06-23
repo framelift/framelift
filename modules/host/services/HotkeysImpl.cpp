@@ -246,6 +246,25 @@ void HotkeysImpl::BindRaw(Key key, Mod mods, void (*action)(void*), void* ud, vo
     BindRawImpl({}, key, mods, action, ud, cleanup);
 }
 
+void HotkeysImpl::EraseGroup(const std::string& name, bool runCleanup)
+{
+    std::erase_if(
+        bindings_,
+        [&](const Binding& b)
+        {
+            if (b.name.empty() || b.name != name)
+            {
+                return false;
+            }
+            if (runCleanup && b.cleanup)
+            {
+                b.cleanup(b.ud);
+            }
+            return true;
+        }
+    );
+}
+
 void HotkeysImpl::BindNamedRaw(
     const char* name, const char* bindList, void (*action)(void*), void* ud, void (*cleanup)(void*)
 ) noexcept
@@ -255,10 +274,19 @@ void HotkeysImpl::BindNamedRaw(
     {
         return;
     }
-    BindRawImpl(name ? name : "", binds[0].key, binds[0].mods, action, ud, cleanup);
+    // Re-binding a name replaces its whole key group. Drop the old group first
+    // (freeing its callback) so stale aliases never linger across a rebind.
+    const std::string nm = name ? name : "";
+    if (!nm.empty())
+    {
+        EraseGroup(nm, /*runCleanup=*/true);
+    }
+    // The first key is the primary; the rest share its name as aliases. Only the
+    // primary owns the heap callback ud — aliases get cleanup=nullptr so it frees once.
+    bindings_.push_back({nm, binds[0].key, binds[0].mods, action, ud, cleanup});
     for (std::size_t i = 1; i < binds.size(); ++i)
     {
-        BindRawImpl({}, binds[i].key, binds[i].mods, action, ud, nullptr);
+        bindings_.push_back({nm, binds[i].key, binds[i].mods, action, ud, nullptr});
     }
 }
 
@@ -268,16 +296,41 @@ bool HotkeysImpl::Rebind(const char* name, Key newKey, Mod newMods) noexcept
     {
         return false;
     }
+    // Collapse a multi-key action to a single key: update the primary (first match)
+    // and drop its aliases so they don't keep firing.
+    bool primarySeen = false;
     for (auto& b : bindings_)
     {
         if (!b.name.empty() && b.name == name)
         {
             b.key = newKey;
             b.mods = newMods;
-            return true;
+            primarySeen = true;
+            break;
         }
     }
-    return false;
+    if (!primarySeen)
+    {
+        return false;
+    }
+    bool keptPrimary = false;
+    std::erase_if(
+        bindings_,
+        [&](const Binding& b)
+        {
+            if (b.name.empty() || b.name != name)
+            {
+                return false;
+            }
+            if (!keptPrimary)
+            {
+                keptPrimary = true;
+                return false; // keep the primary we just updated
+            }
+            return true; // drop aliases
+        }
+    );
+    return true;
 }
 
 void HotkeysImpl::Unbind(const char* name) noexcept
@@ -286,13 +339,56 @@ void HotkeysImpl::Unbind(const char* name) noexcept
     {
         return;
     }
-    std::erase_if(
-        bindings_,
-        [name](const Binding& b)
+    // Removes the whole group (primary + aliases). Matches existing behavior of not
+    // running cleanup here — that only happens on Clear().
+    EraseGroup(name, /*runCleanup=*/false);
+}
+
+void HotkeysImpl::RebindList(const char* name, const char* bindList) noexcept
+{
+    if (!name)
+    {
+        return;
+    }
+    // Reuse the existing action callback so callers (e.g. the settings menu) that
+    // don't own it can still swap the whole key set.
+    void (*action)(void*) = nullptr;
+    void* ud = nullptr;
+    void (*cleanup)(void*) = nullptr;
+    bool found = false;
+    for (const auto& b : bindings_)
+    {
+        if (!b.name.empty() && b.name == name)
         {
-            return !b.name.empty() && b.name == name;
+            action = b.action;
+            ud = b.ud;
+            cleanup = b.cleanup;
+            found = true;
+            break;
         }
-    );
+    }
+    if (!found)
+    {
+        return; // nothing bound under this name
+    }
+    const auto binds = ParseKeyBindList(bindList ? bindList : "");
+    // Drop the old group WITHOUT freeing ud — we re-attach it to the new bindings.
+    EraseGroup(name, /*runCleanup=*/false);
+    if (binds.empty())
+    {
+        // No keys left: free the now-orphaned callback (we own it here).
+        if (cleanup)
+        {
+            cleanup(ud);
+        }
+        return;
+    }
+    const std::string nm = name;
+    bindings_.push_back({nm, binds[0].key, binds[0].mods, action, ud, cleanup});
+    for (std::size_t i = 1; i < binds.size(); ++i)
+    {
+        bindings_.push_back({nm, binds[i].key, binds[i].mods, action, ud, nullptr});
+    }
 }
 
 int HotkeysImpl::GetShortcutString(const char* name, char* buf, int cap) const noexcept

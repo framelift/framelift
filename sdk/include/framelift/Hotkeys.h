@@ -30,6 +30,12 @@ public:
     virtual bool Rebind(const char* name, Key newKey, Mod newMods) noexcept = 0;
     virtual void Unbind(const char* name) noexcept = 0;
 
+    // Replace every key bound to `name` with the parsed bind-list (e.g. "Ctrl+F;F2"),
+    // reusing the existing action callback so the caller need not own it. The first
+    // entry stays the named/rebindable binding; the rest are aliases for the same
+    // action. No-op if `name` isn't currently bound. Empty list ⇒ same as Unbind().
+    virtual void RebindList(const char* name, const char* bindList) noexcept = 0;
+
     // Returns a human-readable shortcut string for a named binding.
     // Writes to buf[0..cap-1]+NUL; returns length excl. NUL (0 if not found).
     virtual int GetShortcutString(const char* name, char* buf, int cap) const noexcept = 0;
