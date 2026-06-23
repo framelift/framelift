@@ -401,6 +401,26 @@ void App::DrainMediaEvents()
             }
             moduleCtx_->Publish<NotificationEvent>({msg});
         }
+
+        // Non-fatal notice: a stream was dropped (unsupported decoder) but the file still
+        // plays. Tell the user which fallback is in effect.
+        if (ev.type == MediaEventType::Notice && moduleCtx_)
+        {
+            const char* msg = nullptr;
+            switch (static_cast<MediaNoticeKind>(ev.property.value.i64))
+            {
+            case MediaNoticeKind::VideoUnsupported:
+                msg = "Unsupported video codec - playing audio only";
+                break;
+            case MediaNoticeKind::AudioUnsupported:
+                msg = "Unsupported audio codec - playing video only";
+                break;
+            }
+            if (msg)
+            {
+                moduleCtx_->Publish<NotificationEvent>({msg});
+            }
+        }
 #if FRAMELIFT_MODULE_WIN_SHELL
         if (winShell_)
         {

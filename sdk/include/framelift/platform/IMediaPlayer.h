@@ -16,6 +16,7 @@ enum class MediaEventType : std::uint8_t
     PlaybackRestart, // playback (re)started after a seek
     Seek,            // a seek was initiated
     AudioReconfig,   // audio output reconfigured
+    Notice,          // non-fatal informational notice (playback continues); kind in property.value.i64
 };
 
 enum class EndFileReason : std::uint8_t
@@ -28,6 +29,15 @@ enum class EndFileReason : std::uint8_t
     Unsupported, // no demuxer/decoder/protocol for this container or codec
     Corrupt,     // invalid or truncated data
     NoStream,    // opened, but no playable audio or video stream
+};
+
+// Payload for a MediaEventType::Notice, carried in MediaEvent.property.value.i64. These
+// flag a stream that was dropped because its decoder was unavailable, while the file
+// still plays the other stream — the host turns each into a user notification.
+enum class MediaNoticeKind : std::int64_t
+{
+    VideoUnsupported, // video decoder unavailable; playing audio only
+    AudioUnsupported, // audio decoder unavailable; playing video only
 };
 
 enum class PropertyType : std::uint8_t
