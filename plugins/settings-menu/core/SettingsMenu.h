@@ -214,6 +214,7 @@ private:
     bool configTruncated_ = false; // file was larger than the buffer
 
     std::string capturingName_; // action name of the keybind being rebound
+    int capturingSlot_ = 0;     // which slot (0 primary, 1 alternate) is being rebound
 
     // For core keybinds: points into the model's keybind string value.
     std::string* capturingBind_ = nullptr;
@@ -221,6 +222,16 @@ private:
     const char* (*capturingGetStr_)(void*) = nullptr;
     void (*capturingSetStr_)(void*, const char*) = nullptr;
     void* capturingUd_ = nullptr;
+
+    // Transient warning shown on the Keybinds page when a capture is rejected
+    // because the pressed key is already bound to a different action. Cleared on
+    // the next capture start or successful edit.
+    std::string keybindConflict_;
+
+    // Returns the label of whichever keybind currently holds `canonicalKey`, or an
+    // empty string if none — ignoring `exceptAction` (the action being edited).
+    // Scans both core ("keybinds.*") and plugin-registered keybind entries.
+    [[nodiscard]] std::string FindKeyOwnerLabel(const std::string& canonicalKey, const char* exceptAction);
 };
 
 FRAMELIFT_MODULE_ENTRY(SettingsMenu, {

@@ -1,4 +1,5 @@
 #include "SettingsMenu.h"
+#include "KeybindList.h"
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
@@ -77,6 +78,32 @@ bool HasNvidiaAdapter(const IModuleContext* ctx)
     auto* backend = surface ? static_cast<IGraphicsBackend*>(surface->GetGraphicsBackend()) : nullptr;
     return backend && backend->HasNvidiaAdapter();
 }
+
+// ── Core keybind table (Settings → Keybinds "Player" section) ─────────────────
+// At file scope so both RenderPageKeybinds and the conflict search can iterate it.
+struct CoreBindEntry
+{
+    const char* label;
+    const char* name; // Hotkeys action name
+    const char* key;  // "keybinds.*" model field
+};
+
+constexpr CoreBindEntry kCoreKeybinds[] = {
+    {"Toggle pause", "togglePause", "keybinds.togglePause"},
+    {"Toggle fullscreen", "toggleFullscreen", "keybinds.toggleFullscreen"},
+    {"Quit", "quit", "keybinds.quit"},
+    {"Volume up", "volumeUp", "keybinds.volumeUp"},
+    {"Volume down", "volumeDown", "keybinds.volumeDown"},
+    {"Toggle mute", "toggleMute", "keybinds.toggleMute"},
+    {"Seek forward", "seekForward", "keybinds.seekForward"},
+    {"Seek back", "seekBack", "keybinds.seekBack"},
+    {"Seek forward (long)", "seekForwardLong", "keybinds.seekForwardLong"},
+    {"Seek back (long)", "seekBackLong", "keybinds.seekBackLong"},
+    {"Toggle normalize", "toggleNormalize", "keybinds.toggleNormalize"},
+    {"Toggle subtitles", "toggleSubtitles", "keybinds.toggleSubtitles"},
+    {"Open file dialog", "openFileDialog", "keybinds.openFileDialog"},
+};
+
 } // namespace
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -243,25 +270,102 @@ bool SettingsMenu::HandleKeyDownEvent(const AppEvent& e)
     }
     char bindBuf[64] = {};
     KeyBindToString(kp.key, kp.mods, bindBuf, sizeof(bindBuf));
-    const std::string bindStr = bindBuf;
+    const std::string keyStr = bindBuf;
+
+    // Reject keys already owned by a different action (conflict). The captured key
+    // is added to the *current* action's list, so a key already in this action's
+    // own list is a harmless duplicate handled below.
+    const std::string owner = FindKeyOwnerLabel(keyStr, capturingName_.c_str());
+    if (!owner.empty())
+    {
+        keybindConflict_ = "\"" + keyStr + "\" is already bound to " + owner;
+        SetCapturing(false);
+        return true;
+    }
+
+    const std::string cur = capturingBind_         ? *capturingBind_
+                            : capturingGetStr_     ? capturingGetStr_(capturingUd_)
+                                                   : std::string{};
+    if (keybinds::Contains(cur, keyStr))
+    {
+        // Already bound to this same action (either slot) — nothing to do.
+        keybindConflict_.clear();
+        SetCapturing(false);
+        return true;
+    }
+
+    const std::string next = keybinds::SetSlot(cur, capturingSlot_, keyStr);
     if (capturingBind_)
     {
-        *capturingBind_ = bindStr;
+        *capturingBind_ = next;
     }
     else if (capturingSetStr_)
     {
-        capturingSetStr_(capturingUd_, bindStr.c_str());
+        capturingSetStr_(capturingUd_, next.c_str());
     }
     if (!capturingName_.empty())
     {
         if (auto* hk = ctx_ ? ctx_->GetService<Hotkeys>() : nullptr)
         {
-            hk->Rebind(capturingName_.c_str(), kp.key, kp.mods);
+            hk->RebindList(capturingName_.c_str(), next.c_str());
         }
     }
+    keybindConflict_.clear();
     dirty_ = true;
     SetCapturing(false);
     return true;
+}
+
+std::string SettingsMenu::FindKeyOwnerLabel(const std::string& canonicalKey, const char* exceptAction)
+{
+    if (canonicalKey.empty())
+    {
+        return {};
+    }
+    const std::string except = exceptAction ? exceptAction : "";
+
+    // Core keybinds — compare against the live edited model values.
+    for (const auto& e : kCoreKeybinds)
+    {
+        if (e.name == except)
+        {
+            continue;
+        }
+        if (keybinds::Contains(model_.Str(e.key), canonicalKey))
+        {
+            return e.label;
+        }
+    }
+
+    // Plugin keybinds — enumerate registered entries and check each one's list.
+    struct SearchCtx
+    {
+        const std::string* key;
+        const std::string* except;
+        std::string found;
+    };
+    SearchCtx sc{&canonicalKey, &except, {}};
+    if (auto* reg = SettingsReg())
+    {
+        reg->EnumerateKeybindEntries(
+            [](const char* label, const char* actionName, const char* (*getStr)(void*),
+               void (*)(void*, const char*), void* ud, void* pv)
+            {
+                auto& s = *static_cast<SearchCtx*>(pv);
+                if (!s.found.empty() || (actionName && *s.except == actionName))
+                {
+                    return;
+                }
+                const std::string list = getStr ? getStr(ud) : "";
+                if (keybinds::Contains(list, *s.key))
+                {
+                    s.found = label ? label : "";
+                }
+            },
+            &sc
+        );
+    }
+    return sc.found;
 }
 
 void SettingsMenu::SetCapturing(const bool v)
@@ -299,6 +403,7 @@ void SettingsMenu::Open() noexcept
 void SettingsMenu::Close() noexcept
 {
     open_ = false;
+    keybindConflict_.clear();
     if (isCapturing_)
     {
         SetCapturing(false);
@@ -1030,58 +1135,55 @@ void SettingsMenu::RenderPageAudio(UIContext& ctx)
 
 void SettingsMenu::RenderPageKeybinds(UIContext& ctx)
 {
-    // ── Core keybinds (host "keybinds.*" fields, edited by key) ────────────────
-    struct BindEntry
+    if (!keybindConflict_.empty())
     {
-        const char* label;
-        const char* name;
-        const char* key;
-    };
+        ctx.TextColored(UI::Color4f(1.f, 0.45f, 0.4f, 1.f), keybindConflict_.c_str());
+    }
 
-    static const BindEntry coreEntries[] = {
-        {"Toggle pause", "togglePause", "keybinds.togglePause"},
-        {"Toggle fullscreen", "toggleFullscreen", "keybinds.toggleFullscreen"},
-        {"Quit", "quit", "keybinds.quit"},
-        {"Volume up", "volumeUp", "keybinds.volumeUp"},
-        {"Volume down", "volumeDown", "keybinds.volumeDown"},
-        {"Toggle mute", "toggleMute", "keybinds.toggleMute"},
-        {"Seek forward", "seekForward", "keybinds.seekForward"},
-        {"Seek back", "seekBack", "keybinds.seekBack"},
-        {"Seek forward (long)", "seekForwardLong", "keybinds.seekForwardLong"},
-        {"Seek back (long)", "seekBackLong", "keybinds.seekBackLong"},
-        {"Toggle normalize", "toggleNormalize", "keybinds.toggleNormalize"},
-        {"Toggle subtitles", "toggleSubtitles", "keybinds.toggleSubtitles"},
-        {"Open file dialog", "openFileDialog", "keybinds.openFileDialog"},
-    };
-
+    // ── Core keybinds (host "keybinds.*" fields) ──────────────────────────────
+    // Each action shows up to two key slots (primary + alternate). The alternate
+    // row only appears once a primary key is set.
     Widgets::SectionHeader(ctx, "Player");
-    for (const auto& e : coreEntries)
+    for (const auto& e : kCoreKeybinds)
     {
-        const bool thisCapturing = isCapturing_ && capturingName_ == e.name;
-        ctx.PushID(e.name);
-        const auto action = Widgets::KeybindRow(ctx, e.label, model_.Str(e.key), thisCapturing);
-        ctx.PopID();
-
-        switch (action)
+        auto* hk = ctx_ ? ctx_->GetService<Hotkeys>() : nullptr;
+        for (int slot = 0; slot < 2; ++slot)
         {
-        case Widgets::KeybindAction::StartCapture:
-            SetCapturing(true);
-            capturingName_ = e.name;
-            capturingBind_ = &model_.Str(e.key);
-            break;
-        case Widgets::KeybindAction::CancelCapture:
-            SetCapturing(false);
-            break;
-        case Widgets::KeybindAction::Clear:
-            model_.Str(e.key).clear();
-            if (auto* hk = ctx_ ? ctx_->GetService<Hotkeys>() : nullptr)
+            std::string& list = model_.Str(e.key);
+            if (slot == 1 && keybinds::Slot(list, 0).empty())
             {
-                hk->Unbind(e.name);
+                break;
             }
-            dirty_ = true;
-            break;
-        case Widgets::KeybindAction::None:
-            break;
+            const bool thisCapturing = isCapturing_ && capturingName_ == e.name && capturingSlot_ == slot;
+            ctx.PushID(e.name);
+            ctx.PushID(slot);
+            const auto action = Widgets::KeybindRow(ctx, slot == 0 ? e.label : "", keybinds::Slot(list, slot), thisCapturing);
+            ctx.PopID();
+            ctx.PopID();
+
+            switch (action)
+            {
+            case Widgets::KeybindAction::StartCapture:
+                SetCapturing(true);
+                capturingName_ = e.name;
+                capturingSlot_ = slot;
+                capturingBind_ = &model_.Str(e.key);
+                keybindConflict_.clear();
+                break;
+            case Widgets::KeybindAction::CancelCapture:
+                SetCapturing(false);
+                break;
+            case Widgets::KeybindAction::Clear:
+                list = keybinds::SetSlot(list, slot, "");
+                if (hk)
+                {
+                    list.empty() ? hk->Unbind(e.name) : hk->RebindList(e.name, list.c_str());
+                }
+                dirty_ = true;
+                break;
+            case Widgets::KeybindAction::None:
+                break;
+            }
         }
     }
 
@@ -1108,38 +1210,54 @@ void SettingsMenu::RenderPageKeybinds(UIContext& ctx)
                     kc.hadEntries = true;
                 }
 
-                const bool thisCapturing = kc.self->isCapturing_ && kc.self->capturingName_ == actionName;
-                const std::string binding = getStr ? getStr(ud) : "";
-                kc.ctx->PushID(actionName);
-                const auto action = Widgets::KeybindRow(*kc.ctx, label, binding, thisCapturing);
-                kc.ctx->PopID();
-
-                switch (action)
+                auto* hk = kc.self->ctx_->GetService<Hotkeys>();
+                for (int slot = 0; slot < 2; ++slot)
                 {
-                case Widgets::KeybindAction::StartCapture:
-                    kc.self->SetCapturing(true);
-                    kc.self->capturingName_ = actionName;
-                    kc.self->capturingGetStr_ = getStr;
-                    kc.self->capturingSetStr_ = setStr;
-                    kc.self->capturingUd_ = ud;
-                    kc.self->dirty_ = true;
-                    break;
-                case Widgets::KeybindAction::CancelCapture:
-                    kc.self->SetCapturing(false);
-                    break;
-                case Widgets::KeybindAction::Clear:
-                    if (setStr)
+                    const std::string list = getStr ? getStr(ud) : "";
+                    if (slot == 1 && keybinds::Slot(list, 0).empty())
                     {
-                        setStr(ud, "");
+                        break;
                     }
-                    if (auto* hk = kc.self->ctx_->GetService<Hotkeys>())
+                    const bool thisCapturing = kc.self->isCapturing_ && kc.self->capturingName_ == actionName &&
+                                               kc.self->capturingSlot_ == slot;
+                    kc.ctx->PushID(actionName);
+                    kc.ctx->PushID(slot);
+                    const auto action =
+                        Widgets::KeybindRow(*kc.ctx, slot == 0 ? label : "", keybinds::Slot(list, slot), thisCapturing);
+                    kc.ctx->PopID();
+                    kc.ctx->PopID();
+
+                    switch (action)
                     {
-                        hk->Unbind(actionName);
+                    case Widgets::KeybindAction::StartCapture:
+                        kc.self->SetCapturing(true);
+                        kc.self->capturingName_ = actionName;
+                        kc.self->capturingSlot_ = slot;
+                        kc.self->capturingGetStr_ = getStr;
+                        kc.self->capturingSetStr_ = setStr;
+                        kc.self->capturingUd_ = ud;
+                        kc.self->keybindConflict_.clear();
+                        break;
+                    case Widgets::KeybindAction::CancelCapture:
+                        kc.self->SetCapturing(false);
+                        break;
+                    case Widgets::KeybindAction::Clear:
+                    {
+                        const std::string next = keybinds::SetSlot(getStr ? getStr(ud) : "", slot, "");
+                        if (setStr)
+                        {
+                            setStr(ud, next.c_str());
+                        }
+                        if (hk)
+                        {
+                            next.empty() ? hk->Unbind(actionName) : hk->RebindList(actionName, next.c_str());
+                        }
+                        kc.self->dirty_ = true;
+                        break;
                     }
-                    kc.self->dirty_ = true;
-                    break;
-                case Widgets::KeybindAction::None:
-                    break;
+                    case Widgets::KeybindAction::None:
+                        break;
+                    }
                 }
             },
             &kc

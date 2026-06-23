@@ -18,6 +18,7 @@ public:
 
     bool Rebind(const char* name, Key newKey, Mod newMods) noexcept override;
     void Unbind(const char* name) noexcept override;
+    void RebindList(const char* name, const char* bindList) noexcept override;
 
     int GetShortcutString(const char* name, char* buf, int cap) const noexcept override;
     void Clear() noexcept override;
@@ -39,6 +40,10 @@ private:
     void BindRawImpl(
         const std::string& name, Key key, Mod mods, void (*action)(void*), void* ud, void (*cleanup)(void*)
     );
+
+    // Erase every binding sharing `name` (primary + aliases). When runCleanup, each
+    // erased binding's cleanup(ud) is invoked first.
+    void EraseGroup(const std::string& name, bool runCleanup);
 };
 
 // Free-function helper (non-virtual, std::function wrapper) for host use only.

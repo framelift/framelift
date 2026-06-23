@@ -88,6 +88,7 @@ add_executable(framelift_tests
         unit/host/FocusManagerTests.cpp
         unit/misc/KeyNamesTests.cpp
         unit/host/SemVerTests.cpp
+        unit/host/HotkeysTests.cpp
         unit/host/PackageAbiTests.cpp
         unit/host/PackageResolverTests.cpp
         unit/misc/UrlUtilsTests.cpp
@@ -112,7 +113,9 @@ add_executable(framelift_tests
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/PackageResolver.cpp"
         "${FRAMELIFT_ROOT}/modules/host/fonts/FontScan.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/services/HotkeysImpl.cpp"
         "${FRAMELIFT_ROOT}/sdk/src/KeyNames.cpp"
+        "${FRAMELIFT_ROOT}/sdk/src/Log.cpp"
 )
 set_target_properties(framelift_tests PROPERTIES
         CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
