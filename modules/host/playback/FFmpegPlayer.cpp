@@ -90,6 +90,17 @@ MediaEvent MakeEndFile(EndFileReason reason)
     return e;
 }
 
+// A non-fatal notice (playback continues): the kind rides in property.value.i64, which
+// PollEvent copies by value like any other field. The host maps it to a notification.
+MediaEvent MakeNotice(MediaNoticeKind kind)
+{
+    MediaEvent e;
+    e.type = MediaEventType::Notice;
+    e.property.type = PropertyType::Int64;
+    e.property.value.i64 = static_cast<int64_t>(kind);
+    return e;
+}
+
 // A packet failed to decode: bump the counter and warn, but throttle the log so a
 // badly corrupt stream can't flood it (first error, then every 100th).
 void CountDecodeError(std::atomic<int64_t>& counter, const AVCodecContext* dec)
@@ -341,6 +352,18 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
         avformat_close_input(&fmt);
         QueueEvent(MakeEndFile(EndFileReason::NoStream));
         return;
+    }
+
+    // Something plays, but a present stream may have been dropped because its decoder was
+    // unavailable — tell the user so the silent audio-only / video-only fallback isn't a
+    // mystery. (The both-failed case returned NoStream above, so these are exclusive.)
+    if (vIdx >= 0 && !hasVideo_ && aud.dec)
+    {
+        QueueEvent(MakeNotice(MediaNoticeKind::VideoUnsupported));
+    }
+    else if (defaultAudioIdx >= 0 && !aud.dec && hasVideo_)
+    {
+        QueueEvent(MakeNotice(MediaNoticeKind::AudioUnsupported));
     }
 
     // Duration (seconds): container first, then the playing stream's own duration.
