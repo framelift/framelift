@@ -2,11 +2,11 @@
 #
 # These are NOT part of the public plugin SDK — after the COM-like ABI redesign,
 # nothing crosses the host↔plugin boundary as a third-party type, so plugins do
-# not need imgui/spdlog/stb. JSON is a host capability too: nlohmann backs the
+# not need spdlog/stb. JSON is a host capability too: nlohmann backs the
 # host IJson service (modules/host/services/JsonServiceImpl), and plugins reach it
 # via ctx.GetService<IJson>() — no plugin links a JSON library.
-# SDL3, FFmpeg, and libass are set up by FrameLiftPlatformLibs.cmake before this module,
-# because the imgui static library links SDL3::SDL3.
+# FFmpeg and libass are set up by FrameLiftPlatformLibs.cmake; Qt6 (the UI/window
+# toolkit that replaced SDL3 + Dear ImGui) is resolved in the root CMakeLists.txt.
 
 include(FetchContent)
 
@@ -61,50 +61,6 @@ FetchContent_Declare(
         GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(vma)
-endif ()
-
-# ── Dear ImGui ────────────────────────────────────────────────────────────────
-# The docking-branch tag is a superset of the like-versioned release: it adds
-# multi-viewport (ImGuiConfigFlags_ViewportsEnable + UpdatePlatformWindows/
-# RenderPlatformWindowsDefault), which the host uses to pop panels out into their
-# own OS windows.
-FetchContent_Declare(
-        imgui
-        GIT_REPOSITORY https://github.com/ocornut/imgui.git
-        GIT_TAG v1.92.8-docking
-        GIT_SHALLOW TRUE
-)
-# imgui ships no CMakeLists.txt; FetchContent_MakeAvailable silently skips
-# add_subdirectory() in that case (CMake 3.28+), leaving imgui_SOURCE_DIR set.
-FetchContent_MakeAvailable(imgui)
-
-set(_FRAMELIFT_IMGUI_SOURCES
-        "${imgui_SOURCE_DIR}/imgui.cpp"
-        "${imgui_SOURCE_DIR}/imgui_draw.cpp"
-        "${imgui_SOURCE_DIR}/imgui_tables.cpp"
-        "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
-        "${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp"
-        "${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp"
-)
-if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
-    list(APPEND _FRAMELIFT_IMGUI_SOURCES
-            "${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp")
-endif ()
-add_library(imgui STATIC ${_FRAMELIFT_IMGUI_SOURCES})
-target_include_directories(imgui PUBLIC
-        "${imgui_SOURCE_DIR}"
-        "${imgui_SOURCE_DIR}/backends"
-)
-target_link_libraries(imgui PUBLIC SDL3::SDL3)
-
-# Route imgui_impl_vulkan through volk (no Vulkan prototypes linked): with
-# IMGUI_IMPL_VULKAN_USE_VOLK the backend includes volk.h and calls the dynamically
-# loaded entry points. PUBLIC so the host's Vulkan backend TU sees the same flag when
-# it includes imgui_impl_vulkan.h. Only volk_headers here (include-only) — the single
-# compiled `volk` definition is linked into the FrameLift exe.
-if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
-    target_compile_definitions(imgui PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
-    target_link_libraries(imgui PUBLIC volk_headers)
 endif ()
 
 # ── stb (header-only) ─────────────────────────────────────────────────────────

@@ -9,32 +9,28 @@
 #include "VulkanDeviceInfo.h"
 #endif
 
-struct SDL_Window;
-
 // Host-internal abstraction over the graphics presentation API (OpenGL today, Vulkan
 // planned). It owns everything API-specific behind the window: the GL context / Vulkan
-// device, buffer presentation, vsync, and the full Dear ImGui backend lifecycle
-// (all imgui_impl_* calls). SdlAppWindow owns the SDL_Window and event loop and
-// delegates the rendering surface to one of these.
+// device, buffer presentation, and vsync. Under Qt the window is a QQuickWindow owned by
+// QtAppWindow, which adopts Qt's scene-graph GL context into the backend; the video is
+// drawn as a QSGRenderNode inside the scene-graph render pass.
 //
 // Not part of the plugin ABI — signatures may evolve as the Vulkan backend lands.
-// Implementations may #include <SDL3/SDL.h> and imgui_impl_*.h (same allowance as
-// SdlAppWindow). All methods run on the host's main / render thread.
+// GL/Qt implementations may #include <QtGui/...> and system GL headers (same allowance
+// as QtAppWindow). All methods run on the host's main / scene-graph render thread (the
+// GUI thread, with the "basic" QSG render loop forced).
 class IGraphicsBackend
 {
 public:
     virtual ~IGraphicsBackend() = default;
 
-    // Called before SDL_CreateWindow: set any API-specific SDL attributes (e.g. the GL
-    // context version). Returns the extra SDL_WindowFlags to OR into the creation flags
-    // (SDL_WINDOW_OPENGL / SDL_WINDOW_VULKAN).
-    virtual uint64_t PreWindowCreate() = 0;
+    // Called once Qt's scene-graph OpenGL context exists and is current (from the first
+    // VideoRenderNode::render()): adopt that context and resolve the GL entry points the
+    // backend needs. The backend does NOT create or own the context — Qt does.
+    virtual void OnQtWindowCreated() = 0;
 
-    // Called once the window exists: create the GL context / Vulkan device + swapchain
-    // and make it current. The backend retains the window for present/show.
-    virtual void OnWindowCreated(SDL_Window* window) = 0;
-
-    // Destroy the API context/device. Called before the SDL_Window is destroyed.
+    // Release any GL resources the backend created. Called while Qt's GL context is still
+    // current (before the QQuickWindow is torn down).
     virtual void Shutdown() = 0;
 
     // Human-readable name of the active API ("OpenGL" / "Vulkan"), for diagnostics.
@@ -52,10 +48,9 @@ public:
     // and calls IVideoRenderer::Init(this) on it.
     [[nodiscard]] virtual std::unique_ptr<IVideoRenderer> CreateVideoRenderer() = 0;
 
-    // Upload a tightly packed RGBA8 image and return an ImGui-usable texture handle
-    // (ImTextureID value): a GL texture name for the GL backend, a VkDescriptorSet for
-    // Vulkan. Used by UIContextImpl for plugin icons (UIContext::LoadTexture*). The
-    // backend owns the resource and frees it on shutdown. Returns 0 on failure.
+    // Upload a tightly packed RGBA8 image and return a backend-native texture handle (a
+    // GL texture name for the GL backend, a VkDescriptorSet for Vulkan). The backend owns
+    // the resource and frees it on shutdown. Returns 0 on failure.
     [[nodiscard]] virtual uintptr_t CreateUiTexture(const unsigned char* rgba, int w, int h) = 0;
 
 #if FRAMELIFT_MODULE_GRAPHICS_VULKAN
@@ -73,42 +68,22 @@ public:
 
     // ── Presentation ──────────────────────────────────────────────────────────
     [[nodiscard]] virtual void* GetProcAddr(const char* name) const = 0;
-    // Begin a frame: acquire/clear the render target. Returns false if the frame
-    // should be skipped (e.g. the Vulkan swapchain is mid-recreation). GL always
-    // succeeds. Both the video renderer and the ImGui pass then record into the frame
-    // before SwapBuffers() presents it.
+    // Begin a frame: acquire/clear the render target. Returns false if the frame should
+    // be skipped (e.g. the Vulkan swapchain is mid-recreation). GL always succeeds. Under
+    // Qt the scene graph owns acquire/present, so the GL backend's BeginFrame/SwapBuffers
+    // are effectively no-ops — kept for the Vulkan backend and ABI shape.
     virtual bool BeginFrame() = 0;
     virtual void SwapBuffers() = 0;
     virtual void SetVSync(bool enabled) = 0;
 
     // Hint, set before BeginFrame(), of which logical layers changed this frame so a
-    // layered backend can reuse cached layers instead of re-rendering them: the Vulkan
-    // backend renders the video and UI into separate offscreen targets and only
-    // composites them to the swapchain, skipping the re-render of an unchanged layer.
-    // Default no-op — the OpenGL backend draws everything directly every frame.
+    // layered backend can reuse cached layers instead of re-rendering them. Default
+    // no-op — the OpenGL backend draws everything directly every frame.
     virtual void SetFrameDirty(bool videoDirty, bool uiDirty)
     {
         (void)videoDirty;
         (void)uiDirty;
     }
-
-    // ── Dear ImGui backend lifecycle (owns all imgui_impl_* calls) ────────────
-    // The neutral ImGui context (CreateContext, style, io flags) is owned by the
-    // caller; these wire up and drive the platform+renderer backends around it.
-    virtual void ImGuiInitBackends() = 0;
-    virtual void ImGuiShutdownBackends() = 0;
-    // New-frame for the platform + renderer backends (the caller then calls
-    // ImGui::NewFrame()).
-    virtual void ImGuiNewFrame() = 0;
-    // Render the current main-viewport draw data (the caller has already called
-    // ImGui::Render()) into the active frame.
-    virtual void ImGuiRenderDrawData() = 0;
-    // Render/present secondary ImGui platform windows after the main frame has been
-    // submitted/presented. This keeps Vulkan multi-viewport backend submits out of
-    // the middle of the main swapchain frame.
-    virtual void ImGuiRenderPlatformWindows() = 0;
-    // Forward a native event to the ImGui platform backend. e is a const SDL_Event*.
-    virtual void ImGuiProcessEvent(const void* sdlEvent) = 0;
 };
 
 // Create the presentation backend for `api`. Phase 1 implements OpenGL only; any other

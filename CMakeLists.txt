@@ -5,7 +5,12 @@ project(FrameLift VERSION ${FRAMELIFT_VERSION} LANGUAGES C CXX)
 
 # Build the native unit-test suite (tests/) as part of this project so it shows up
 # in IDEs. Disabled for the Windows app/CI build, which can't run native test exes.
-option(FRAMELIFT_BUILD_TESTS "Build the unit tests (tests/)" ON)
+# Forced OFF during the Qt migration (the test targets reference SDL/ImGui-era headers).
+option(FRAMELIFT_BUILD_TESTS "Build the unit tests (tests/)" OFF)
+
+# Build the runtime plugin package DLLs in plugins/. Forced OFF during the Qt migration:
+# Phase 1 targets host-only video playback, and the plugins are still ImGui-based.
+option(FRAMELIFT_BUILD_PLUGINS "Build the plugin package DLLs (plugins/)" OFF)
 
 # Display string shown in the UI; defaults to the numeric version for local/release builds.
 if (NOT DEFINED FRAMELIFT_VERSION_DISPLAY OR FRAMELIFT_VERSION_DISPLAY STREQUAL "")
@@ -19,17 +24,24 @@ include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftBuiltinModules.cmake")
 framelift_load_builtin_modules("${CMAKE_SOURCE_DIR}/modules")
 framelift_report_builtin_modules()
 
-# ── Platform libraries (SDL3 + FFmpeg + libass) ───────────────────────────────
-# Defines the SDL3::SDL3, `ffmpeg`, and `libass` targets: Linux uses system dev
-# packages (libsdl3-dev / libav*-dev / libass-dev); Windows resolves them all from
-# the vcpkg manifest (vcpkg.json). Resolved before the host third-party deps
-# because the imgui static lib (FrameLiftDeps.cmake) links SDL3::SDL3.
+# ── Platform libraries (FFmpeg + libass) ──────────────────────────────────────
+# Defines the `ffmpeg` and `libass` targets: Linux uses system dev packages
+# (libav*-dev / libass-dev); Windows resolves them from the vcpkg manifest
+# (vcpkg.json). Qt6 (the window/audio/UI toolkit, replacing SDL3) is resolved
+# separately via find_package(Qt6 ...) below.
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftPlatformLibs.cmake")
 
 # ── OpenGL (opengl32 on Windows, libGL on Linux) ──────────────────────────────
 find_package(OpenGL REQUIRED)
 
-# ── Host third-party dependencies (imgui/spdlog/stb/json — NOT in the SDK) ────
+# ── Qt6 (window / events / audio / UI — replaces SDL3 + Dear ImGui) ───────────
+# Gui+Quick drive the QQuickWindow and scene graph (video is a QSGRenderNode);
+# Multimedia provides QAudioSink (replacing the SDL3 audio device). AUTOMOC is
+# required for the Q_OBJECT types in the window-qt module.
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Multimedia)
+set(CMAKE_AUTOMOC ON)
+
+# ── Host third-party dependencies (spdlog/stb/json — NOT in the SDK) ──────────
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftDeps.cmake")
 
 set(FRAMELIFT_GRAPHICS_INCLUDE_DIRS
@@ -48,7 +60,7 @@ set(FRAMELIFT_HOST_MODULE_INCLUDE_DIRS
         "${CMAKE_SOURCE_DIR}/modules/host/fonts"
         "${CMAKE_SOURCE_DIR}/modules/host/read-ahead"
         "${CMAKE_SOURCE_DIR}/modules/host/ui"
-        "${CMAKE_SOURCE_DIR}/modules/platform/window-sdl"
+        "${CMAKE_SOURCE_DIR}/modules/platform/window-qt"
         "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch"
         "${CMAKE_SOURCE_DIR}/modules/platform/win-shell"
 )
@@ -116,15 +128,16 @@ set_target_properties(FrameLift PROPERTIES
 )
 
 # FrameLiftSdk now carries only the public headers; the host links the third-party
-# libraries (imgui/spdlog/json) and stb headers directly, since they no longer
+# libraries (Qt/spdlog/json) and stb headers directly, since they no longer
 # cross the plugin boundary.
 target_include_directories(FrameLift PRIVATE "${CMAKE_SOURCE_DIR}/src" "${stb_SOURCE_DIR}")
 target_include_directories(FrameLift PRIVATE
         ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS}
         ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS})
 target_link_libraries(FrameLift PRIVATE
-        FrameLiftSdk SDL3::SDL3 OpenGL::GL
-        imgui spdlog::spdlog nlohmann_json::nlohmann_json)
+        FrameLiftSdk OpenGL::GL
+        Qt6::Core Qt6::Gui Qt6::Quick Qt6::Multimedia
+        spdlog::spdlog nlohmann_json::nlohmann_json)
 
 # Vulkan graphics backend (OpenGL→Vulkan migration, #17). volk is the meta-loader
 # (compiled here exactly once — imgui only takes volk_headers); VMA is single-source.
@@ -176,43 +189,50 @@ add_custom_command(TARGET FrameLift PRE_BUILD
 )
 
 # Discover plugin package source folders automatically. Each plugin CMakeLists
-# registers its target through add_framelift_plugin().
-set_property(GLOBAL PROPERTY FRAMELIFT_PLUGIN_TARGETS)
-file(GLOB FRAMELIFT_PLUGIN_DIRS CONFIGURE_DEPENDS LIST_DIRECTORIES TRUE
-        RELATIVE "${CMAKE_SOURCE_DIR}/plugins"
-        "${CMAKE_SOURCE_DIR}/plugins/*")
-list(SORT FRAMELIFT_PLUGIN_DIRS)
-foreach (_plugin_dir_name IN LISTS FRAMELIFT_PLUGIN_DIRS)
-    if (NOT EXISTS "${CMAKE_SOURCE_DIR}/plugins/${_plugin_dir_name}/CMakeLists.txt")
-        continue()
-    endif ()
-    add_subdirectory("plugins/${_plugin_dir_name}")
-endforeach ()
+# registers its target through add_framelift_plugin(). Skipped entirely during the
+# Qt migration (FRAMELIFT_BUILD_PLUGINS=OFF) — the plugins are still ImGui-based and
+# Phase 1 ships host-only video playback. They will be reimplemented (QPluginLoader)
+# in a later phase.
+if (FRAMELIFT_BUILD_PLUGINS)
+    set_property(GLOBAL PROPERTY FRAMELIFT_PLUGIN_TARGETS)
+    file(GLOB FRAMELIFT_PLUGIN_DIRS CONFIGURE_DEPENDS LIST_DIRECTORIES TRUE
+            RELATIVE "${CMAKE_SOURCE_DIR}/plugins"
+            "${CMAKE_SOURCE_DIR}/plugins/*")
+    list(SORT FRAMELIFT_PLUGIN_DIRS)
+    foreach (_plugin_dir_name IN LISTS FRAMELIFT_PLUGIN_DIRS)
+        if (NOT EXISTS "${CMAKE_SOURCE_DIR}/plugins/${_plugin_dir_name}/CMakeLists.txt")
+            continue()
+        endif ()
+        add_subdirectory("plugins/${_plugin_dir_name}")
+    endforeach ()
 
-get_property(FRAMELIFT_PLUGIN_TARGETS GLOBAL PROPERTY FRAMELIFT_PLUGIN_TARGETS)
-if (FRAMELIFT_PLUGIN_TARGETS)
-    add_dependencies(FrameLift ${FRAMELIFT_PLUGIN_TARGETS})
+    get_property(FRAMELIFT_PLUGIN_TARGETS GLOBAL PROPERTY FRAMELIFT_PLUGIN_TARGETS)
+    if (FRAMELIFT_PLUGIN_TARGETS)
+        add_dependencies(FrameLift ${FRAMELIFT_PLUGIN_TARGETS})
+    endif ()
+
+    # Apply the same Release optimizations to each shipped plugin DLL (LTO is
+    # per-binary, so the host's doesn't reach into the plugins).
+    foreach (_plugin IN LISTS FRAMELIFT_PLUGIN_TARGETS)
+        get_target_property(_plugin_disabled ${_plugin} FRAMELIFT_PLUGIN_DISABLED)
+        if (NOT _plugin_disabled)
+            framelift_apply_builtin_module_definitions(${_plugin})
+            target_include_directories(${_plugin} PRIVATE
+                    ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS}
+                    ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS})
+            FrameLift_apply_release_opts(${_plugin})
+        endif ()
+    endforeach ()
 endif ()
-
-# Apply the same Release optimizations to each shipped plugin DLL (LTO is
-# per-binary, so the host's doesn't reach into the plugins).
-foreach (_plugin IN LISTS FRAMELIFT_PLUGIN_TARGETS)
-    get_target_property(_plugin_disabled ${_plugin} FRAMELIFT_PLUGIN_DISABLED)
-    if (NOT _plugin_disabled)
-        framelift_apply_builtin_module_definitions(${_plugin})
-        target_include_directories(${_plugin} PRIVATE
-                ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS}
-                ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS})
-        FrameLift_apply_release_opts(${_plugin})
-    endif ()
-endforeach ()
 
 # ── Runtime DLLs ──────────────────────────────────────────────────────────────
 # On Linux the shared objects are resolved from the system via ldconfig. On
-# Windows SDL3, FFmpeg, and libass all come from vcpkg; their runtime DLLs
-# (SDL3.dll, avcodec-*.dll, ass-*.dll) and transitive deps (freetype/fontconfig/
+# Windows Qt6, FFmpeg, and libass all come from vcpkg; their runtime DLLs
+# (Qt6*.dll, avcodec-*.dll, ass-*.dll) and transitive deps (freetype/fontconfig/
 # harfbuzz/fribidi/…) are deployed next to framelift.exe automatically by vcpkg's
-# app-local deployment (VCPKG_APPLOCAL_DEPS) — no manual copy needed.
+# app-local deployment (VCPKG_APPLOCAL_DEPS) — no manual copy needed. Note: Qt's
+# QML/plugin runtime (platform plugins, QML modules) may additionally need
+# windeployqt; revisit when packaging.
 
 # ── Unit tests (native, IDE-visible) ─────────────────────────────────────────
 # Compiles only platform-independent units; safe to configure alongside the app.

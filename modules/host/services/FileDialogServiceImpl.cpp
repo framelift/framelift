@@ -1,21 +1,18 @@
 #include "FileDialogServiceImpl.h"
-#include "CoreSettings.h"
-#include "Settings.h"
 #include <framelift/platform/IAppWindow.h>
 
-#include <SDL3/SDL.h>
 #include <memory>
 #include <string>
-#include <vector>
 
-// FileDialogServiceImpl.cpp is intentionally SDL-aware: the platform picker API
-// (SDL_ShowOpenFileDialog) is inherently backend-specific. All other code uses
-// IAppWindow / the IFileDialog service.
+// MIGRATION (Phase 1 / Step 5 TODO): the SDL3 native picker (SDL_ShowOpenFileDialog) has
+// been removed. The real Qt picker needs a dependency decision (QtWidgets QFileDialog vs a
+// QML FileDialog) and is not needed for the CLI-driven Phase 1 milestone, so OpenFile is a
+// deferred no-op: it posts the result back through the queued custom-event round-trip with
+// an empty path (ok=false), exercising the same delivery path the real dialog will use.
 
 // ── Internal payload ──────────────────────────────────────────────────────────
-// Allocated per OpenFile call, ownership transferred to SDL, reclaimed in
-// HandleEvent. Carries the window + event type so the (free) SDL callback can
-// route the result back onto the main thread.
+// Allocated per OpenFile call, ownership transferred to the event, reclaimed in
+// HandleEvent. Carries the result-delivery callback and the routing event type.
 
 namespace
 {
@@ -23,23 +20,8 @@ struct Payload
 {
     void (*cb)(const char* path, bool ok, void* ud) = nullptr;
     void* ud = nullptr;
-    IEventPump* events = nullptr;
-    uint32_t eventType = 0;
     std::string path;
-    std::vector<SDL_DialogFileFilter> sdlFilters; // kept alive until the callback fires
 };
-
-// ── SDL async callback (may be called from any thread) ────────────────────────
-
-void SDLCALL SdlCallback(void* userdata, const char* const* fileList, int /*filter*/)
-{
-    auto* p = static_cast<Payload*>(userdata);
-    if (fileList && fileList[0])
-    {
-        p->path = fileList[0];
-    }
-    p->events->PushCustomEvent(p->eventType, p);
-}
 } // namespace
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -53,24 +35,15 @@ void FileDialogServiceImpl::Init(IAppWindow* appWindow, IEventPump* events) noex
 
 void FileDialogServiceImpl::OpenFile(void (*cb)(const char* path, bool ok, void* ud), void* ud) noexcept
 {
-    if (!appWindow_)
+    if (!appWindow_ || !events_)
     {
         return;
     }
 
-    auto* p = new Payload{cb, ud, events_, eventType_, {}, {}};
-    if (settings_)
-    {
-        const FilesSettings& files = settings_->Get<FilesSettings>();
-        p->sdlFilters.push_back({"Video files", files.videoExtensions.c_str()});
-        p->sdlFilters.push_back({"Image files", files.imageExtensions.c_str()});
-    }
-
-    SDL_ShowOpenFileDialog(
-        SdlCallback, p, static_cast<SDL_Window*>(appWindow_->GetNativeHandle()),
-        p->sdlFilters.empty() ? nullptr : p->sdlFilters.data(), static_cast<int>(p->sdlFilters.size()), nullptr, false
-    );
-    // Ownership transferred to the SDL callback; reclaimed in HandleEvent().
+    // Deferred cancel until the Qt picker lands (Step 5): hand an empty-path payload back
+    // through the event loop so the caller gets a clean ok=false next turn (no reentrancy).
+    auto* p = new Payload{cb, ud, {}};
+    events_->PushCustomEvent(eventType_, p);
 }
 
 bool FileDialogServiceImpl::HandleEvent(const AppEvent& e) noexcept

@@ -8,6 +8,7 @@ extern "C"
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -16,14 +17,19 @@ extern "C"
 
 struct AVFrame;
 struct SwrContext;
-struct SDL_AudioStream;
+struct AudioSink; // Qt backend (QAudioSink + ring buffer + audio thread); defined in the .cpp
 
 // Audio output for the FFmpeg backend (issue #8, Phase 3): resamples decoded
-// audio to the device format and feeds an SDL3 playback stream, while exposing
-// the playback position as the master clock that video is synced against.
+// audio to the device format and feeds a playback stream, while exposing the
+// playback position as the master clock that video is synced against.
 //
-// ffmpeg-side (it owns a SwrContext) and SDL-side (it owns the device), so this
-// is one of the few host files that may include both <libsw*/...> and <SDL3/...>.
+// Qt6 backend (Step 4): a QAudioSink driven in PULL mode from a thread-safe ring buffer.
+// The QAudioSink lives on its OWN QThread with an event loop (it needs one to pump audio,
+// which the FFmpeg worker threads don't have), so device lifecycle/gain/suspend are
+// marshalled onto that thread; Feed() (audio worker) and MasterClock()/QueuedBytes()
+// (video/other workers) only touch the lock-protected ring + atomics, never Qt. The
+// master clock keeps ComputeMasterClock(); only the `queued` source changed from SDL's
+// stream queue to the ring fill plus the sink's internal buffer.
 //
 // Lifetime: Open()/Close() run on the decode thread with no decode workers live;
 // the audio worker calls Feed() and the video worker calls MasterClock() while a
@@ -75,9 +81,11 @@ public:
 private:
     void ApplyGainLocked(); // push volume_/muted_ to the device (mutex_ held)
     [[nodiscard]] int DesiredChannelsLocked() const;
+    [[nodiscard]] float CurrentGainLocked() const;     // effective gain from volume/mute/duck
+    [[nodiscard]] int64_t QueuedBytesLocked() const;   // unheard bytes (ring + sink buffer)
 
-    mutable std::mutex mutex_; // serialises all device + swr + clock access
-    SDL_AudioStream* stream_ = nullptr;
+    mutable std::mutex mutex_; // serialises swr + clock + sink lifecycle access
+    std::unique_ptr<AudioSink> sink_; // Qt QAudioSink backend (own thread + ring buffer)
     SwrContext* swr_ = nullptr;
     std::vector<uint8_t> buffer_; // scratch for one resampled chunk (Feed only)
 

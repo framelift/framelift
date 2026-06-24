@@ -1,9 +1,9 @@
 #pragma once
 #include <cstddef>
-#include <framelift/ui/UI.h>
-// ReSharper disable once CppUnusedIncludeDirective
 #include <cstdint>
 #include <string>
+
+#include <framelift/ui/UI.h>
 
 class Hotkeys;
 

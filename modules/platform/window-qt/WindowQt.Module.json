@@ -1,15 +1,14 @@
 {
   "fileVersion": 1,
-  "id": "framelift.host.window_sdl",
-  "name": "SDL Window",
-  "description": "SDL window backend, app event translation, and ImGui platform integration.",
+  "id": "framelift.host.window_qt",
+  "name": "Qt Window",
+  "description": "Qt6 (Qt Quick) window backend, app event translation, and scene-graph video integration.",
   "enabled": true,
   "required": true,
   "provides": {
     "features": [
-      "window.sdl",
-      "events.sdl",
-      "ui.imgui_platform"
+      "window.qt",
+      "events.qt"
     ]
   },
   "requires": {

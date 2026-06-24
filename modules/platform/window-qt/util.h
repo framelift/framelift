@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <algorithm>
 #include <cstdio>
@@ -19,7 +19,7 @@ struct WindowSize
 
 // Scale (w,h) down to fit within (maxW,maxH) preserving aspect ratio. Never scales
 // up (returns the input when it already fits); returns the input unchanged for any
-// non-positive dimension. Pure + SDL-free so it can be unit-tested directly.
+// non-positive dimension. Pure + toolkit-free so it can be unit-tested directly.
 inline WindowSize FitWithinAspect(int w, int h, int maxW, int maxH)
 {
     if (w <= 0 || h <= 0 || maxW <= 0 || maxH <= 0 || (w <= maxW && h <= maxH))
@@ -30,3 +30,7 @@ inline WindowSize FitWithinAspect(int w, int h, int maxW, int maxH)
         std::min(static_cast<float>(maxW) / static_cast<float>(w), static_cast<float>(maxH) / static_cast<float>(h));
     return {static_cast<int>(static_cast<float>(w) * scale), static_cast<int>(static_cast<float>(h) * scale)};
 }
+
+// Qt::Key/Qt::KeyboardModifiers → framelift Key/Mod translation lives in QtAppWindow.cpp
+// (anonymous namespace), used by the QQuickWindow input event filter that produces
+// AppEvents. Kept there so this header stays toolkit-free and unit-testable.

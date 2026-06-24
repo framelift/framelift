@@ -1,4 +1,3 @@
-// ReSharper disable CppMemberFunctionMayBeStatic
 #include "UIContextImpl.h"
 #include "imgui.h"
 #include "IGraphicsBackend.h"

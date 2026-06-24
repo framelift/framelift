@@ -1,7 +1,6 @@
 #pragma once
 #include <framelift/platform/IDirWatcher.h>
 #include <memory>
-// ReSharper disable once CppUnusedIncludeDirective
 #include <string>
 #include <thread>
 
@@ -24,4 +23,4 @@ private:
     std::thread thread_;
 
     void ThreadProc() const;
-};
+};

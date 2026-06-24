@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <cstring>
 
 #include "Version.h"
 #include <IGraphicsBackend.h>
@@ -22,9 +23,6 @@
 #ifndef FRAMELIFT_MODULE_GRAPHICS_VULKAN
 #define FRAMELIFT_MODULE_GRAPHICS_VULKAN 1
 #endif
-
-// ReSharper disable once CppUnusedIncludeDirective
-#include <cstring>
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 

@@ -7,20 +7,18 @@
 #include <algorithm>
 #include <windows.h>
 #include <winhttp.h>
-
-#include <framelift/JsonHelpers.h>
-
-#include "SemVer.h"
-#include "Updater.h"
-#include "Version.h"
-
-// ReSharper disable once CppUnusedIncludeDirective
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include <framelift/JsonHelpers.h>
+
+#include "SemVer.h"
+#include "Updater.h"
+#include "Version.h"
 
 // ── GitHub config ─────────────────────────────────────────────────────────────
 namespace
@@ -46,7 +44,6 @@ struct WHandle
     WHandle(const WHandle&) = delete;
     WHandle& operator=(const WHandle&) = delete;
 
-    // ReSharper disable once CppNonExplicitConversionOperator
     operator HINTERNET() const
     {
         return h;

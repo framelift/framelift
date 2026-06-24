@@ -160,8 +160,8 @@ cd FrameLift
 git config core.hooksPath .github/hooks
 
 # Configure and build
-cmake -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug
-cmake --build cmake-build-debug --config Debug
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --config Debug
 ```
 
 Output: `cmake-build-debug/framelift` (`.exe` on Windows). On Windows the required shared libraries
@@ -178,8 +178,8 @@ Each built-in module exposes a `FRAMELIFT_MODULE_<NAME>` CMake option whose defa
 dependencies from the build — for example, a Vulkan-free build that keeps only the OpenGL backend:
 
 ```sh
-cmake -B cmake-build-lean -DCMAKE_BUILD_TYPE=Debug -DFRAMELIFT_MODULE_GRAPHICS_VULKAN=OFF
-cmake --build cmake-build-lean
+cmake -B build-lean -DCMAKE_BUILD_TYPE=Debug -DFRAMELIFT_MODULE_GRAPHICS_VULKAN=OFF
+cmake --build build-lean
 ```
 
 CMake prints the enabled/disabled module table at configure time. Modules unsupported on the current

@@ -1,22 +1,15 @@
-# Resolves the host's external platform libraries — SDL3 (window/audio/input),
-# FFmpeg (decode/filter), and libass (subtitles) — and defines the link targets
-# the host uses: SDL3::SDL3, `ffmpeg`, and `libass`.
+# Resolves the host's external platform libraries — FFmpeg (decode/filter) and
+# libass (subtitles) — and defines the link targets the host uses: `ffmpeg` and
+# `libass`. Qt6 (window/audio/UI, replacing SDL3) is resolved in the root
+# CMakeLists.txt via find_package(Qt6 ...).
 #
-#  • Linux: system dev packages (libsdl3-dev, libavcodec-dev, libass-dev, ...) via
+#  • Linux: system dev packages (libavcodec-dev, libass-dev, ...) via
 #    find_package / pkg-config.
 #  • Windows: vcpkg manifest mode (see vcpkg.json). The vcpkg toolchain installs the
 #    libraries on configure and seeds the include/lib search paths. Runtime DLLs and
 #    their transitive deps are deployed next to framelift.exe automatically by vcpkg's
 #    app-local deployment (VCPKG_APPLOCAL_DEPS) — no manual DLL copy needed. Requires
 #    configuring with the vcpkg toolchain (see CMakePresets.json).
-
-# ── SDL3 ──────────────────────────────────────────────────────────────────────
-# vcpkg is used on Windows only. On Linux SDL3 comes from the native package
-# manager (libsdl3-dev) — no vcpkg involved. Both ship an SDL3 CMake config, so the
-# same find_package resolves it either way (vcpkg only kicks in when its toolchain
-# is active, i.e. the Windows build). Resolved first because the imgui static lib
-# (FrameLiftDeps.cmake) links SDL3::SDL3.
-find_package(SDL3 REQUIRED CONFIG)
 
 # ── FFmpeg ────────────────────────────────────────────────────────────────────
 if (WIN32)
