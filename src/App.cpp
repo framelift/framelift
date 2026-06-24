@@ -484,8 +484,10 @@ void App::ResizeToVideo() const
             {
                 return;
             }
-            const float ratio = self->settings_.Get<GeneralSettings>().maxDisplayRatio;
-            self->appWindow_->ResizeToVideo(static_cast<int>(size->width), static_cast<int>(size->height), ratio);
+            // Cap the auto-sized window at 80% of the usable screen.
+            constexpr float kMaxDisplayRatio = 0.8f;
+            self->appWindow_->ResizeToVideo(static_cast<int>(size->width), static_cast<int>(size->height),
+                                            kMaxDisplayRatio);
         },
         new AsyncSelf{this}
     );
