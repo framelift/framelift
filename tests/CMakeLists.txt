@@ -24,16 +24,9 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-# JSON — backs the host JsonServiceImpl, compiled into the History test so its
-# persistence round-trips exercise the real backend.
-FetchContent_Declare(
-        nlohmann_json
-        GIT_REPOSITORY https://github.com/nlohmann/json.git
-        GIT_TAG v3.11.3
-        GIT_SHALLOW TRUE
-)
-set(JSON_BuildTests OFF CACHE INTERNAL "")
-FetchContent_MakeAvailable(nlohmann_json)
+# JSON — backs the host JsonServiceImpl (Qt6::Core QJson), compiled into the History
+# test so its persistence round-trips exercise the real backend.
+find_package(Qt6 REQUIRED COMPONENTS Core)
 
 enable_testing()
 include(GoogleTest)
@@ -206,13 +199,13 @@ add_framelift_plugin_test(framelift_test_module_entry_multi
         module-entry/ModuleEntryMultiTests.cpp)
 
 # ── Per-plugin behaviour suites ───────────────────────────────────────────────
-# History persists through the host IJson service; compile the real nlohmann-backed
-# JsonServiceImpl into the test (the only suite that exercises JSON) and link nlohmann.
+# History persists through the host IJson service; compile the real QJson-backed
+# JsonServiceImpl into the test (the only suite that exercises JSON) and link Qt6::Core.
 add_framelift_plugin_test(framelift_test_history
         plugins/history/HistoryTests.cpp
         "${FRAMELIFT_ROOT}/plugins/history/core/History.cpp"
         "${FRAMELIFT_ROOT}/modules/host/services/JsonServiceImpl.cpp")
-target_link_libraries(framelift_test_history PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(framelift_test_history PRIVATE Qt6::Core)
 
 # Playlist + SettingsMenu drive the real ModuleContext, so they also compile
 # the host plugin runtime and settings modules.

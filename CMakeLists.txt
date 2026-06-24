@@ -36,12 +36,13 @@ find_package(OpenGL REQUIRED)
 
 # ── Qt6 (window / events / audio / UI — replaces SDL3 + Dear ImGui) ───────────
 # Gui+Quick drive the QQuickWindow and scene graph (video is a QSGRenderNode);
-# Multimedia provides QAudioSink (replacing the SDL3 audio device). AUTOMOC is
-# required for the Q_OBJECT types in the window-qt module.
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Multimedia)
+# Multimedia provides QAudioSink (replacing the SDL3 audio device). Widgets
+# provides the native QFileDialog open-file picker (replacing SDL_ShowOpenFileDialog).
+# AUTOMOC is required for the Q_OBJECT types in the window-qt module.
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Multimedia Widgets)
 set(CMAKE_AUTOMOC ON)
 
-# ── Host third-party dependencies (spdlog/stb/json — NOT in the SDK) ──────────
+# ── Host third-party dependencies (spdlog/stb — NOT in the SDK) ───────────────
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftDeps.cmake")
 
 set(FRAMELIFT_GRAPHICS_INCLUDE_DIRS
@@ -128,7 +129,7 @@ set_target_properties(FrameLift PROPERTIES
 )
 
 # FrameLiftSdk now carries only the public headers; the host links the third-party
-# libraries (Qt/spdlog/json) and stb headers directly, since they no longer
+# libraries (Qt/spdlog) and stb headers directly, since they no longer
 # cross the plugin boundary.
 target_include_directories(FrameLift PRIVATE "${CMAKE_SOURCE_DIR}/src" "${stb_SOURCE_DIR}")
 target_include_directories(FrameLift PRIVATE
@@ -136,8 +137,8 @@ target_include_directories(FrameLift PRIVATE
         ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS})
 target_link_libraries(FrameLift PRIVATE
         FrameLiftSdk OpenGL::GL
-        Qt6::Core Qt6::Gui Qt6::Quick Qt6::Multimedia
-        spdlog::spdlog nlohmann_json::nlohmann_json)
+        Qt6::Core Qt6::Gui Qt6::Quick Qt6::Multimedia Qt6::Widgets
+        spdlog::spdlog)
 
 # Vulkan graphics backend (OpenGL→Vulkan migration, #17). volk is the meta-loader
 # (compiled here exactly once — imgui only takes volk_headers); VMA is single-source.

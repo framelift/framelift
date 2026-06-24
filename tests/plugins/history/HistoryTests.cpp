@@ -8,8 +8,9 @@
 
 namespace
 {
-// Real nlohmann-backed host JSON service shared by the persistence tests. Stateless,
-// so a single instance is safe across the suite (including detached writer threads).
+// Real QJson-backed host JSON service shared by the persistence tests. The service
+// object is stateless, so a single instance is safe across the suite (including
+// detached writer threads).
 JsonServiceImpl g_json;
 
 std::string MostRecent(const History& h)

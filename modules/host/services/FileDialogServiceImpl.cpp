@@ -1,18 +1,20 @@
 #include "FileDialogServiceImpl.h"
+#include "CoreSettings.h" // FilesSettings (video/image extension lists)
+#include "Settings.h"     // host aggregate settings
 #include <framelift/platform/IAppWindow.h>
+
+#include <QtCore/QString>
+#include <QtCore/QStringList>
+#include <QtWidgets/QFileDialog>
 
 #include <memory>
 #include <string>
 
-// MIGRATION (Phase 1 / Step 5 TODO): the SDL3 native picker (SDL_ShowOpenFileDialog) has
-// been removed. The real Qt picker needs a dependency decision (QtWidgets QFileDialog vs a
-// QML FileDialog) and is not needed for the CLI-driven Phase 1 milestone, so OpenFile is a
-// deferred no-op: it posts the result back through the queued custom-event round-trip with
-// an empty path (ok=false), exercising the same delivery path the real dialog will use.
-
-// ── Internal payload ──────────────────────────────────────────────────────────
-// Allocated per OpenFile call, ownership transferred to the event, reclaimed in
-// HandleEvent. Carries the result-delivery callback and the routing event type.
+// Qt native open-file picker (replaces the removed SDL_ShowOpenFileDialog). The
+// modal QFileDialog runs synchronously on the GUI thread, then the chosen path is
+// posted back through the queued custom-event round-trip so the caller's callback
+// fires on a later turn — never reentrantly inside OpenFile, matching the contract
+// the rest of the host (and plugins) were written against.
 
 namespace
 {
@@ -22,6 +24,22 @@ struct Payload
     void* ud = nullptr;
     std::string path;
 };
+
+// Build a Qt name-filter clause ("Video files (*.mp4 *.mkv ...)") from a host
+// semicolon-separated extension list ("mp4;mkv;..."). Empty input ⇒ empty string.
+QString MakeFilter(const char* label, const std::string& extensions)
+{
+    QStringList globs;
+    for (const QString& ext : QString::fromStdString(extensions).split(';', Qt::SkipEmptyParts))
+    {
+        globs << "*." + ext.trimmed();
+    }
+    if (globs.isEmpty())
+    {
+        return {};
+    }
+    return QString("%1 (%2)").arg(QLatin1String(label), globs.join(' '));
+}
 } // namespace
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -40,9 +58,28 @@ void FileDialogServiceImpl::OpenFile(void (*cb)(const char* path, bool ok, void*
         return;
     }
 
-    // Deferred cancel until the Qt picker lands (Step 5): hand an empty-path payload back
-    // through the event loop so the caller gets a clean ok=false next turn (no reentrancy).
-    auto* p = new Payload{cb, ud, {}};
+    QStringList filters;
+    if (settings_)
+    {
+        const FilesSettings& files = settings_->Get<FilesSettings>();
+        if (const QString f = MakeFilter("Video files", files.videoExtensions); !f.isEmpty())
+        {
+            filters << f;
+        }
+        if (const QString f = MakeFilter("Image files", files.imageExtensions); !f.isEmpty())
+        {
+            filters << f;
+        }
+    }
+    filters << "All files (*)";
+
+    // Modal native picker — blocks on a nested event loop until the user chooses
+    // or cancels. Cancel returns an empty string ⇒ ok=false downstream.
+    const QString chosen = QFileDialog::getOpenFileName(
+        nullptr, "Open File", QString(), filters.join(";;"));
+
+    // Defer delivery through the event loop so the callback never fires reentrantly.
+    auto* p = new Payload{cb, ud, chosen.toStdString()};
     events_->PushCustomEvent(eventType_, p);
 }
 

@@ -1,9 +1,9 @@
 #include "App.h"
 #include <framelift/Log.h>
 
-#include <QtGui/QGuiApplication>
 #include <QtGui/QSurfaceFormat>
 #include <QtQuick/QQuickWindow>
+#include <QtWidgets/QApplication>
 
 int main(int argc, char* argv[])
 {
@@ -16,12 +16,15 @@ int main(int argc, char* argv[])
     // (Qt6 otherwise defaults to D3D11 on Windows). Must be set before any QQuickWindow.
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
-    QGuiApplication qtApp(argc, argv);
-    QGuiApplication::setOrganizationName("FrameLift");
-    QGuiApplication::setApplicationName("FrameLift");
+    // QApplication (not QGuiApplication) so the native QFileDialog open-file picker —
+    // a QWidget — has the widgets application it requires. QApplication is a
+    // QGuiApplication, so Qt Quick / Multimedia are unaffected.
+    QApplication qtApp(argc, argv);
+    QApplication::setOrganizationName("FrameLift");
+    QApplication::setApplicationName("FrameLift");
     // We drive shutdown explicitly (window close → App quit flow), so don't let Qt quit
     // out from under the host when the last window closes.
-    QGuiApplication::setQuitOnLastWindowClosed(false);
+    QApplication::setQuitOnLastWindowClosed(false);
 
     Log::Init();
     App app("FrameLift", 1280, 720, argc, argv);

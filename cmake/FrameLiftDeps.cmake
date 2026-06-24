@@ -2,11 +2,12 @@
 #
 # These are NOT part of the public plugin SDK — after the COM-like ABI redesign,
 # nothing crosses the host↔plugin boundary as a third-party type, so plugins do
-# not need spdlog/stb. JSON is a host capability too: nlohmann backs the
+# not need spdlog/stb. JSON is a host capability too: Qt's QJson backs the
 # host IJson service (modules/host/services/JsonServiceImpl), and plugins reach it
 # via ctx.GetService<IJson>() — no plugin links a JSON library.
 # FFmpeg and libass are set up by FrameLiftPlatformLibs.cmake; Qt6 (the UI/window
-# toolkit that replaced SDL3 + Dear ImGui) is resolved in the root CMakeLists.txt.
+# toolkit that replaced SDL3 + Dear ImGui, and now also the JSON backend) is
+# resolved in the root CMakeLists.txt.
 
 include(FetchContent)
 
@@ -72,14 +73,5 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
-# ── nlohmann/json (header-only) ───────────────────────────────────────────────
-# Host-only: the backend for the IJson service (JsonServiceImpl). Linked to the
-# FrameLift host target, never to a plugin.
-FetchContent_Declare(
-        nlohmann_json
-        GIT_REPOSITORY https://github.com/nlohmann/json.git
-        GIT_TAG v3.11.3
-        GIT_SHALLOW TRUE
-)
-set(JSON_BuildTests OFF CACHE INTERNAL "")
-FetchContent_MakeAvailable(nlohmann_json)
+# JSON: the IJson service (JsonServiceImpl) is backed by Qt6::Core's QJson — no
+# third-party JSON library is fetched or linked.
