@@ -8,39 +8,30 @@
 
 namespace
 {
-bool Contains(const FrameLiftStringList& list, std::string_view value)
+bool Contains(const std::vector<std::string>& list, std::string_view value)
 {
-    for (int i = 0; i < list.count; ++i)
-    {
-        const char* item = list.items ? list.items[i] : nullptr;
-        if (item && std::string_view(item) == value)
-        {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::find(list, value) != list.end();
 }
 
-void AddAll(std::unordered_set<std::string>& out, const FrameLiftStringList& list)
+void AddAll(std::unordered_set<std::string>& out, const std::vector<std::string>& list)
 {
-    for (int i = 0; i < list.count; ++i)
+    for (const std::string& item : list)
     {
-        const char* item = list.items ? list.items[i] : nullptr;
-        if (item && item[0])
+        if (!item.empty())
         {
             out.emplace(item);
         }
     }
 }
 
-bool PlatformSupported(const FrameLiftModuleInfo& module, std::string_view platformId)
+bool PlatformSupported(const ModuleMetadata& module, std::string_view platformId)
 {
-    return module.platforms.count <= 0 || Contains(module.platforms, platformId);
+    return module.platforms.empty() || Contains(module.platforms, platformId);
 }
 
-std::string PackageId(const FrameLiftPackageInfo* info)
+std::string PackageId(const PackageMetadata* meta)
 {
-    return info && info->packageId ? info->packageId : "<unknown>";
+    return meta && !meta->packageId.empty() ? meta->packageId : "<unknown>";
 }
 } // namespace
 
@@ -65,28 +56,27 @@ std::vector<PackageResolveDecision> ResolvePackages(
 
     for (std::size_t i = 0; i < candidates.size(); ++i)
     {
-        const FrameLiftPackageInfo* info = candidates[i].info;
-        if (!info)
+        const PackageMetadata* meta = candidates[i].meta;
+        if (!meta || !meta->valid)
         {
             decisions[i].reason = "missing package metadata";
             continue;
         }
-        if (!info->packageId || !info->packageId[0])
+        if (meta->packageId.empty())
         {
             decisions[i].reason = "missing package id";
             continue;
         }
-        if (!info->modules || info->moduleCount <= 0)
+        if (meta->modules.empty())
         {
             decisions[i].reason = "package has no enabled modules";
             continue;
         }
 
         decisions[i].accepted = true;
-        for (int m = 0; m < info->moduleCount; ++m)
+        for (const ModuleMetadata& module : meta->modules)
         {
-            const FrameLiftModuleInfo& module = info->modules[m];
-            if (!module.id || !module.id[0])
+            if (module.id.empty())
             {
                 decisions[i].accepted = false;
                 decisions[i].reason = "module is missing id";
@@ -95,8 +85,8 @@ std::vector<PackageResolveDecision> ResolvePackages(
             if (!PlatformSupported(module, platformId))
             {
                 decisions[i].accepted = false;
-                decisions[i].reason = "module '" + std::string(module.id) + "' does not support platform '" +
-                                      std::string(platformId) + "'";
+                decisions[i].reason =
+                    "module '" + module.id + "' does not support platform '" + std::string(platformId) + "'";
                 break;
             }
         }
@@ -115,10 +105,8 @@ std::vector<PackageResolveDecision> ResolvePackages(
             {
                 continue;
             }
-            const FrameLiftPackageInfo* info = candidates[i].info;
-            for (int m = 0; m < info->moduleCount; ++m)
+            for (const ModuleMetadata& module : candidates[i].meta->modules)
             {
-                const FrameLiftModuleInfo& module = info->modules[m];
                 providedModules.emplace(module.id);
                 AddAll(providedFeatures, module.providesFeatures);
             }
@@ -131,28 +119,33 @@ std::vector<PackageResolveDecision> ResolvePackages(
                 continue;
             }
 
-            const FrameLiftPackageInfo* info = candidates[i].info;
-            for (int m = 0; m < info->moduleCount && decisions[i].accepted; ++m)
+            const PackageMetadata* meta = candidates[i].meta;
+            for (const ModuleMetadata& module : meta->modules)
             {
-                const FrameLiftModuleInfo& module = info->modules[m];
-                for (int r = 0; r < module.requiresModules.count; ++r)
+                if (!decisions[i].accepted)
                 {
-                    const char* required = module.requiresModules.items ? module.requiresModules.items[r] : nullptr;
-                    if (required && !providedModules.contains(required))
+                    break;
+                }
+                for (const std::string& required : module.requiresModules)
+                {
+                    if (!required.empty() && !providedModules.contains(required))
                     {
                         decisions[i].accepted = false;
-                        decisions[i].reason = PackageId(info) + " requires missing module '" + required + "'";
+                        decisions[i].reason = PackageId(meta) + " requires missing module '" + required + "'";
                         changed = true;
                         break;
                     }
                 }
-                for (int r = 0; r < module.requiresFeatures.count && decisions[i].accepted; ++r)
+                for (const std::string& required : module.requiresFeatures)
                 {
-                    const char* required = module.requiresFeatures.items ? module.requiresFeatures.items[r] : nullptr;
-                    if (required && !providedFeatures.contains(required))
+                    if (!decisions[i].accepted)
+                    {
+                        break;
+                    }
+                    if (!required.empty() && !providedFeatures.contains(required))
                     {
                         decisions[i].accepted = false;
-                        decisions[i].reason = PackageId(info) + " requires missing feature '" + required + "'";
+                        decisions[i].reason = PackageId(meta) + " requires missing feature '" + required + "'";
                         changed = true;
                         break;
                     }
@@ -175,16 +168,15 @@ std::vector<std::size_t> OrderPackages(const std::vector<PackageResolveCandidate
     std::vector<std::string> ids(n);
     for (std::size_t i = 0; i < n; ++i)
     {
-        const FrameLiftPackageInfo* info = candidates[i].info;
-        ids[i] = PackageId(info);
-        if (!info)
+        const PackageMetadata* meta = candidates[i].meta;
+        ids[i] = PackageId(meta);
+        if (!meta)
         {
             continue;
         }
-        for (int m = 0; m < info->moduleCount; ++m)
+        for (const ModuleMetadata& module : meta->modules)
         {
-            const FrameLiftModuleInfo& module = info->modules[m];
-            if (module.id && module.id[0])
+            if (!module.id.empty())
             {
                 provides[i].emplace(module.id);
             }

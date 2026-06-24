@@ -120,6 +120,37 @@ function(_framelift_cpp_optional_string out value)
     endif ()
 endfunction()
 
+function(_framelift_json_escape out value)
+    string(REPLACE "\\" "\\\\" _value "${value}")
+    string(REPLACE "\"" "\\\"" _value "${_value}")
+    set(${out} "${_value}" PARENT_SCOPE)
+endfunction()
+
+function(_framelift_json_string out value)
+    _framelift_json_escape(_escaped "${value}")
+    set(${out} "\"${_escaped}\"" PARENT_SCOPE)
+endfunction()
+
+function(_framelift_json_optional_string_or_null out value)
+    if ("${value}" STREQUAL "")
+        set(${out} "null" PARENT_SCOPE)
+    else ()
+        _framelift_json_string(_quoted "${value}")
+        set(${out} "${_quoted}" PARENT_SCOPE)
+    endif ()
+endfunction()
+
+# Render a CMake list as a JSON array of strings: () -> "[]", (a;b) -> "[\"a\",\"b\"]".
+function(_framelift_json_string_array_expr out items)
+    set(_values)
+    foreach (_item IN LISTS items)
+        _framelift_json_string(_quoted "${_item}")
+        list(APPEND _values "${_quoted}")
+    endforeach ()
+    list(JOIN _values "," _joined)
+    set(${out} "[${_joined}]" PARENT_SCOPE)
+endfunction()
+
 function(_framelift_validate_file_version file_version label)
     if (NOT file_version EQUAL 1)
         message(FATAL_ERROR "${label}: unsupported fileVersion ${file_version}; expected 1")
@@ -331,11 +362,10 @@ function(framelift_generate_package_metadata target plugin_json out_header out_e
         endif ()
     endforeach ()
 
-    set(_header "${CMAKE_CURRENT_BINARY_DIR}/${target}PackageMetadata.h")
-    set(_code "#pragma once\n#include <framelift/ModuleABI.h>\n\nnamespace framelift::generated\n{\n")
-    set(_module_entries)
-    set(_module_index 0)
-
+    # Emit the package metadata JSON embedded by Q_PLUGIN_METADATA(... FILE ...).
+    # The host reads it via QPluginLoader::metaData()["MetaData"] without loading the
+    # plugin. Only enabled modules are listed (a disabled package builds no DLL).
+    set(_module_objects)
     if (_package_enabled)
         foreach (_module_path IN LISTS _module_paths)
             file(READ "${_module_path}" _module_json)
@@ -355,60 +385,44 @@ function(framelift_generate_package_metadata target plugin_json out_header out_e
             _framelift_json_string_array(_optional_features "${_module_json}" "${_module_path}" optional features)
             _framelift_json_string_array(_platforms "${_module_json}" "${_module_path}" platforms)
 
-            _framelift_emit_string_list(_list_code _provides_expr "kModule${_module_index}ProvidesFeatures" "${_provides_features}")
-            string(APPEND _code "${_list_code}")
-            _framelift_emit_string_list(_list_code _requires_modules_expr "kModule${_module_index}RequiresModules" "${_requires_modules}")
-            string(APPEND _code "${_list_code}")
-            _framelift_emit_string_list(_list_code _requires_features_expr "kModule${_module_index}RequiresFeatures" "${_requires_features}")
-            string(APPEND _code "${_list_code}")
-            _framelift_emit_string_list(_list_code _optional_modules_expr "kModule${_module_index}OptionalModules" "${_optional_modules}")
-            string(APPEND _code "${_list_code}")
-            _framelift_emit_string_list(_list_code _optional_features_expr "kModule${_module_index}OptionalFeatures" "${_optional_features}")
-            string(APPEND _code "${_list_code}")
-            _framelift_emit_string_list(_list_code _platforms_expr "kModule${_module_index}Platforms" "${_platforms}")
-            string(APPEND _code "${_list_code}")
-
-            _framelift_cpp_string(_module_id_cpp "${_module_id}")
-            _framelift_cpp_string(_module_name_cpp "${_module_name}")
-            _framelift_cpp_optional_string(_module_description_cpp "${_module_description}")
-            list(APPEND _module_entries
-                    "    {${_module_id_cpp}, ${_module_name_cpp}, ${_module_description_cpp}, ${_provides_expr}, ${_requires_modules_expr}, ${_requires_features_expr}, ${_optional_modules_expr}, ${_optional_features_expr}, ${_platforms_expr}}")
-            math(EXPR _module_index "${_module_index} + 1")
+            _framelift_json_string(_module_id_json "${_module_id}")
+            _framelift_json_string(_module_name_json "${_module_name}")
+            _framelift_json_optional_string_or_null(_module_description_json "${_module_description}")
+            _framelift_json_string_array_expr(_provides_expr "${_provides_features}")
+            _framelift_json_string_array_expr(_requires_modules_expr "${_requires_modules}")
+            _framelift_json_string_array_expr(_requires_features_expr "${_requires_features}")
+            _framelift_json_string_array_expr(_optional_modules_expr "${_optional_modules}")
+            _framelift_json_string_array_expr(_optional_features_expr "${_optional_features}")
+            _framelift_json_string_array_expr(_platforms_expr "${_platforms}")
+            list(APPEND _module_objects
+                    "    {\n      \"id\": ${_module_id_json},\n      \"name\": ${_module_name_json},\n      \"description\": ${_module_description_json},\n      \"providesFeatures\": ${_provides_expr},\n      \"requiresModules\": ${_requires_modules_expr},\n      \"requiresFeatures\": ${_requires_features_expr},\n      \"optionalModules\": ${_optional_modules_expr},\n      \"optionalFeatures\": ${_optional_features_expr},\n      \"platforms\": ${_platforms_expr}\n    }")
         endforeach ()
     endif ()
 
-    list(LENGTH _module_entries _module_count)
-    if (_module_count GREATER 0)
-        list(JOIN _module_entries ",\n" _modules_joined)
-        string(APPEND _code "inline constexpr FrameLiftModuleInfo kPackageModules[] = {\n${_modules_joined}\n};\n")
-        set(_modules_expr "kPackageModules")
-    else ()
-        set(_modules_expr "nullptr")
-    endif ()
+    list(JOIN _module_objects ",\n" _modules_joined)
 
-    _framelift_cpp_string(_package_id_cpp "${_package_id}")
-    _framelift_cpp_string(_module_file_cpp "${_module_binary_name}")
-    _framelift_cpp_string(_package_name_cpp "${_package_name}")
-    _framelift_cpp_optional_string(_package_publisher_cpp "${_package_publisher}")
-    _framelift_cpp_optional_string(_package_description_cpp "${_package_description}")
-    string(APPEND _code
-            "inline constexpr FrameLiftPackageInfo kPackageInfo{\n"
-            "    ${_abi},\n"
-            "    ${_package_id_cpp},\n"
-            "    ${_module_file_cpp},\n"
-            "    ${_package_name_cpp},\n"
-            "    {${_version_MAJOR}, ${_version_MINOR}, ${_version_PATCH}},\n"
-            "    ${_package_publisher_cpp},\n"
-            "    ${_package_description_cpp},\n"
-            "    ${_modules_expr},\n"
-            "    ${_module_count}\n"
-            "};\n"
-            "} // namespace framelift::generated\n\n"
-            "#define FRAMELIFT_MODULE_METADATA ::framelift::generated::kPackageInfo\n")
+    _framelift_json_string(_package_id_json "${_package_id}")
+    _framelift_json_string(_module_file_json "${_module_binary_name}")
+    _framelift_json_string(_package_name_json "${_package_name}")
+    _framelift_json_optional_string_or_null(_package_publisher_json "${_package_publisher}")
+    _framelift_json_optional_string_or_null(_package_description_json "${_package_description}")
+
+    set(_json "{\n")
+    string(APPEND _json "  \"abi\": ${_abi},\n")
+    string(APPEND _json "  \"packageId\": ${_package_id_json},\n")
+    string(APPEND _json "  \"moduleFile\": ${_module_file_json},\n")
+    string(APPEND _json "  \"name\": ${_package_name_json},\n")
+    string(APPEND _json "  \"version\": [${_version_MAJOR}, ${_version_MINOR}, ${_version_PATCH}],\n")
+    string(APPEND _json "  \"publisher\": ${_package_publisher_json},\n")
+    string(APPEND _json "  \"description\": ${_package_description_json},\n")
+    string(APPEND _json "  \"modules\": [\n${_modules_joined}\n  ]\n")
+    string(APPEND _json "}\n")
+
+    set(_metadata_json "${CMAKE_CURRENT_BINARY_DIR}/${target}PackageMetadata.json")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-    file(WRITE "${_header}" "${_code}")
+    file(WRITE "${_metadata_json}" "${_json}")
 
-    set(${out_header} "${_header}" PARENT_SCOPE)
+    set(${out_header} "${_metadata_json}" PARENT_SCOPE)
     set(${out_enabled} "${_package_enabled}" PARENT_SCOPE)
     set(${out_package_id} "${_package_id}" PARENT_SCOPE)
     set(${out_module_binary_name} "${_module_binary_name}" PARENT_SCOPE)

@@ -1,24 +1,21 @@
 #pragma once
+#include "PackageMetadata.h"
 #include <framelift/IModule.h>
 #include <framelift/IRenderable.h>
-#include <framelift/ModuleABI.h>
+#include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
-// Loads every package DLL present in a directory. A package carries one or more
-// modules; each module is instantiated by its id unless that id is in the disabled
-// set. Dependency order between packages is resolved from embedded metadata.
-// Each DLL must export the six framelift_* C symbols below.
-//
-// extern "C" {
-//   const FrameLiftPackageInfo* framelift_module_info();
-//   void         framelift_set_log_sink(Log::SinkFn);
-//   IModule*     framelift_create(const char* moduleId);
-//   void         framelift_destroy(IModule*);
-//   IRenderable* framelift_get_renderable(const char* moduleId, IModule*); // nullptr if not renderable
-//   int          framelift_render_order(const char* moduleId);              // z-order for renderables
-// }
+class IPackage;
+class QPluginLoader;
+
+// Loads every package DLL present in a directory. A package is a Qt plugin: its root
+// object is a QObject implementing IPackage (see sdk/include/framelift/IPackage.h),
+// carrying Q_PLUGIN_METADATA whose JSON gives the package/module identity + ABI. The
+// loader reads that metadata via QPluginLoader::metaData() — without instantiating —
+// to ABI-check and resolve dependencies, then instantiates each enabled module (any
+// module whose id is NOT in the disabled set) via IPackage::CreateModule.
 class PackageLoader
 {
 public:
@@ -35,15 +32,15 @@ public:
     {
         std::string name;       // package id / enabled-list entry
         std::string moduleFile; // shipped package binary filename.
-        void* handle;           // HMODULE on Windows, dlopen handle on POSIX
-        void (*destroyFn)(IModule*);
-        const FrameLiftPackageInfo* info; // identity descriptor (points into the loaded DLL)
+        std::unique_ptr<QPluginLoader> loader; // owns the plugin's root IPackage instance
+        IPackage* package;      // qobject_cast<IPackage*>(loader->instance())
+        PackageMetadata meta;   // owned copy of the embedded metadata
         std::vector<LoadedModule> modules; // every module instantiated from this package
     };
 
     // Module identity copied out of a present-but-not-loaded package's metadata, so
-    // the settings UI can list and re-enable individual modules even when the DLL is
-    // not loaded (the lib is closed after discovery — these strings are owned copies).
+    // the settings UI can list and re-enable individual modules even when the package
+    // is not loaded.
     struct AvailableModule
     {
         std::string id;
@@ -55,12 +52,16 @@ public:
     {
         std::string packageId;
         std::string moduleFile;
-        std::string displayName; // info->name, or moduleFile when metadata is unreadable
+        std::string displayName; // metadata name, or moduleFile when metadata is unreadable
         int version[3] = {0, 0, 0};
         std::string publisher;
         std::string description;
         std::vector<AvailableModule> modules;
     };
+
+    PackageLoader();
+    // Destroys every instantiated module via IPackage::DestroyModule and unloads each plugin.
+    ~PackageLoader();
 
     // Scans packages/ for shared libraries and loads every ABI-compatible package.
     // Within each, every module whose id is NOT in `disabledModules` is instantiated.
@@ -75,12 +76,9 @@ public:
     }
 
     // Discover every package binary present in modulesDir (with full identity and its
-    // module list), so the settings UI can list and re-enable packages/modules that
-    // are currently disabled or failed to load.
+    // module list), by reading embedded metadata only (no instantiation), so the
+    // settings UI can list and re-enable packages/modules that are disabled or failed.
     static std::vector<AvailablePackage> DiscoverAvailable(const std::string& modulesDir);
-
-    // Calls framelift_destroy for every instantiated module and FreeLibrary per package.
-    ~PackageLoader();
 
 private:
     std::vector<LoadedPackage> packages_;

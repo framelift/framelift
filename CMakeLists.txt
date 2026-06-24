@@ -8,9 +8,10 @@ project(FrameLift VERSION ${FRAMELIFT_VERSION} LANGUAGES C CXX)
 # Forced OFF during the Qt migration (the test targets reference SDL/ImGui-era headers).
 option(FRAMELIFT_BUILD_TESTS "Build the unit tests (tests/)" OFF)
 
-# Build the runtime plugin package DLLs in plugins/. Forced OFF during the Qt migration:
-# Phase 1 targets host-only video playback, and the plugins are still ImGui-based.
-option(FRAMELIFT_BUILD_PLUGINS "Build the plugin package DLLs (plugins/)" OFF)
+# Build the runtime plugin package DLLs in plugins/. Phase 2 re-enabled this: plugins
+# load via Qt's QPluginLoader (IPackage + Q_PLUGIN_METADATA). Plugin UI (Render) is not
+# yet driven by the host — that lands with the QML UI step.
+option(FRAMELIFT_BUILD_PLUGINS "Build the plugin package DLLs (plugins/)" ON)
 
 # Display string shown in the UI; defaults to the numeric version for local/release builds.
 if (NOT DEFINED FRAMELIFT_VERSION_DISPLAY OR FRAMELIFT_VERSION_DISPLAY STREQUAL "")
@@ -162,7 +163,8 @@ endif ()
 # FFmpegPlayer unconditionally).
 target_link_libraries(FrameLift PRIVATE ffmpeg libass)
 
-# The plugin loader uses dlopen/dlsym on POSIX (no-op libs on Windows).
+# Packages load via Qt's QPluginLoader (which uses dlopen on POSIX internally);
+# link libdl explicitly so the symbols resolve (no-op libs on Windows).
 target_link_libraries(FrameLift PRIVATE ${CMAKE_DL_LIBS})
 
 # winmm: timeBeginPeriod/timeEndPeriod, used to tighten the video frame-pacing timer

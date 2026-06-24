@@ -27,10 +27,23 @@ endif ()
 
 include("${CMAKE_CURRENT_LIST_DIR}/FrameLiftPackageMetadata.cmake")
 
-# ── Public plugin SDK (headers only) ──────────────────────────────────────────
+# A package DLL is a Qt plugin: its IPackage factory carries Q_OBJECT/Q_PLUGIN_METADATA
+# produced by FRAMELIFT_MODULE_ENTRY / FRAMELIFT_PACKAGE_BEGIN. AUTOMOC greps sources for
+# moc-triggering tokens textually and cannot see those hidden behind our macros, so register
+# the macro names — files using them then get moc'd (moc's own preprocessor expands the rest).
+list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "FRAMELIFT_MODULE_ENTRY" "FRAMELIFT_PACKAGE_BEGIN")
+
+# QPluginLoader + Q_PLUGIN_METADATA pull in QtCore. The SDK is no longer dependency-free
+# (the historical imgui/spdlog/stb/json-free rule); plugins build against Qt6::Core.
+if (NOT TARGET Qt6::Core)
+    find_package(Qt6 REQUIRED COMPONENTS Core)
+endif ()
+
+# ── Public plugin SDK (headers + QtCore) ──────────────────────────────────────
 if (NOT TARGET FrameLiftSdk)
     add_library(FrameLiftSdk INTERFACE)
     target_include_directories(FrameLiftSdk INTERFACE "${_framelift_sdk_include}")
+    target_link_libraries(FrameLiftSdk INTERFACE Qt6::Core)
     if (NOT FRAMELIFT_SDK_STANDALONE)
         # In-tree plugins (Overlay, Updater) consume the generated Version.h.
         target_include_directories(FrameLiftSdk INTERFACE "${CMAKE_BINARY_DIR}")
@@ -60,7 +73,7 @@ function(add_framelift_plugin NAME)
     framelift_generate_package_metadata(
             "${NAME}"
             "${_FL_PLUGIN_PLUGIN_JSON}"
-            _framelift_metadata_header
+            _framelift_metadata_json
             _framelift_plugin_enabled
             _framelift_package_id
             _framelift_module_binary_name)
@@ -72,7 +85,7 @@ function(add_framelift_plugin NAME)
         return()
     endif ()
 
-    get_filename_component(_framelift_metadata_header_name "${_framelift_metadata_header}" NAME)
+    get_filename_component(_framelift_metadata_json_name "${_framelift_metadata_json}" NAME)
 
     add_library(${NAME} SHARED ${_FL_PLUGIN_UNPARSED_ARGUMENTS})
     set_property(GLOBAL APPEND PROPERTY FRAMELIFT_PLUGIN_TARGETS ${NAME})
@@ -80,13 +93,22 @@ function(add_framelift_plugin NAME)
             CXX_STANDARD 23
             CXX_STANDARD_REQUIRED ON
             CXX_EXTENSIONS OFF
+            # The IPackage factory is a Q_OBJECT plugin — moc it.
+            AUTOMOC ON
             # The host scans packages/ for shared libraries; MinGW would otherwise
             # emit lib<Name>.dll and the load would fail.
             OUTPUT_NAME "${_framelift_module_binary_name}"
             PREFIX "")
     target_compile_definitions(${NAME} PRIVATE
             FRAMELIFT_BUILDING_MODULE
-            FRAMELIFT_MODULE_METADATA_HEADER="${_framelift_metadata_header_name}")
+            FRAMELIFT_PACKAGE_METADATA_JSON="${_framelift_metadata_json_name}"
+            # Pulling in QtCore defines the unprefixed signals/slots/emit keyword macros,
+            # which collide with ordinary plugin identifiers (e.g. a `slots` variable). The
+            # generated IPackage factory only uses the Q_* macros, so plugins keep their
+            # identifiers and never touch the bare keywords.
+            QT_NO_KEYWORDS)
+    # CMAKE_CURRENT_BINARY_DIR holds the generated metadata JSON; on the target's include
+    # path so moc resolves Q_PLUGIN_METADATA(... FILE "<NAME>PackageMetadata.json").
     target_include_directories(${NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
     target_link_libraries(${NAME} PRIVATE FrameLiftSdk)
     if (MINGW)

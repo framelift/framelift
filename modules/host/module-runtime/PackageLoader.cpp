@@ -2,24 +2,17 @@
 #include "PackageResolver.h"
 #include <chrono>
 #include <filesystem>
+#include <framelift/IPackage.h>
 #include <framelift/Log.h>
 #include <framelift/ModuleABI.h>
-#include <ranges>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
+#include <QtCore/QJsonObject>
+#include <QtCore/QPluginLoader>
+#include <QtCore/QString>
 
 Log::SinkFn HostLogSink();
 
@@ -27,56 +20,9 @@ namespace
 {
 #ifdef _WIN32
 constexpr const char* kPackageExt = ".dll";
-
-void* OpenLib(const char* path)
-{
-    return LoadLibraryA(path);
-}
-
-void CloseLib(void* h)
-{
-    FreeLibrary(static_cast<HMODULE>(h));
-}
-
-void* FindSym(void* h, const char* name)
-{
-    return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(h), name));
-}
-
-std::string LastLoadError()
-{
-    return std::to_string(GetLastError());
-}
 #else
 constexpr const char* kPackageExt = ".so";
-
-void* OpenLib(const char* path)
-{
-    return dlopen(path, RTLD_NOW | RTLD_LOCAL);
-}
-
-void CloseLib(void* h)
-{
-    dlclose(h);
-}
-
-void* FindSym(void* h, const char* name)
-{
-    return dlsym(h, name);
-}
-
-std::string LastLoadError()
-{
-    const char* err = dlerror();
-    return err ? err : "unknown error";
-}
 #endif
-
-template <typename Fn>
-Fn LoadSym(void* mod, const char* name)
-{
-    return reinterpret_cast<Fn>(FindSym(mod, name));
-}
 
 struct PackageBinary
 {
@@ -87,8 +33,8 @@ struct PackageBinary
 struct PackageCandidate
 {
     PackageBinary binary;
-    void* handle = nullptr;
-    const FrameLiftPackageInfo* info = nullptr;
+    std::unique_ptr<QPluginLoader> loader;
+    PackageMetadata meta;
 };
 
 std::vector<PackageBinary> DiscoverPackageBinaries(const std::string& modulesDir)
@@ -111,65 +57,54 @@ std::vector<PackageBinary> DiscoverPackageBinaries(const std::string& modulesDir
     return out;
 }
 
-const FrameLiftPackageInfo* ReadPackageInfo(void* handle)
+// Read a plugin's embedded Q_PLUGIN_METADATA without loading the plugin: metaData()
+// works on an unloaded QPluginLoader, and the author JSON sits under "MetaData".
+PackageMetadata ReadPackageMetadata(QPluginLoader& loader)
 {
-    using PackageInfoFn = const FrameLiftPackageInfo* (*)();
-    const auto packageInfoFn = LoadSym<PackageInfoFn>(handle, "framelift_module_info");
-    return packageInfoFn ? packageInfoFn() : nullptr;
+    return ParsePackageMetadata(loader.metaData().value("MetaData").toObject());
 }
 
-bool AbiCompatible(const FrameLiftPackageInfo* info)
+bool AbiCompatible(const PackageMetadata& meta)
 {
-    return info && FrameLiftAbiCompatible(info->abiVersion, FRAMELIFT_ABI_VERSION);
-}
-
-std::string PackageId(const FrameLiftPackageInfo* info)
-{
-    return info && info->packageId ? info->packageId : "<unknown>";
+    return meta.valid && FrameLiftAbiCompatible(meta.abiVersion, FRAMELIFT_ABI_VERSION);
 }
 } // namespace
+
+PackageLoader::PackageLoader() = default;
 
 void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_set<std::string>& disabledModules)
 {
     using Clock = std::chrono::steady_clock;
     const auto loadStart = Clock::now();
 
-    // Open and ABI-check every package present in the directory (dedupe by id).
+    // Read metadata for every package present in the directory (dedupe by id). No
+    // plugin code runs here — metaData() reads the embedded JSON only.
     std::vector<PackageCandidate> candidates;
     std::unordered_map<std::string, std::size_t> seenIds;
     for (const auto& binary : DiscoverPackageBinaries(modulesDir))
     {
-        void* const handle = OpenLib(binary.path.c_str());
-        if (!handle)
+        auto loader = std::make_unique<QPluginLoader>(QString::fromStdString(binary.path));
+        PackageMetadata meta = ReadPackageMetadata(*loader);
+        if (!meta.valid)
         {
-            Log::Warn("Package '{}': metadata load failed ({})", binary.moduleFile, LastLoadError());
+            Log::Warn("Package '{}': missing/invalid metadata - rebuild against current SDK", binary.moduleFile);
             continue;
         }
-
-        const FrameLiftPackageInfo* const info = ReadPackageInfo(handle);
-        if (!info)
-        {
-            Log::Warn("Package '{}': missing framelift_module_info - rebuild against current SDK", binary.moduleFile);
-            CloseLib(handle);
-            continue;
-        }
-        if (!AbiCompatible(info))
+        if (!AbiCompatible(meta))
         {
             Log::Warn(
                 "Package '{}' v{}.{}.{}: ABI version {} incompatible with host version {} - rebuild against current SDK",
-                PackageId(info), info->version[0], info->version[1], info->version[2], info->abiVersion, FRAMELIFT_ABI_VERSION
+                meta.packageId, meta.version[0], meta.version[1], meta.version[2], meta.abiVersion, FRAMELIFT_ABI_VERSION
             );
-            CloseLib(handle);
             continue;
         }
-        if (seenIds.contains(PackageId(info)))
+        if (seenIds.contains(meta.packageId))
         {
-            Log::Warn("Package '{}': duplicate package id - skipped", PackageId(info));
-            CloseLib(handle);
+            Log::Warn("Package '{}': duplicate package id - skipped", meta.packageId);
             continue;
         }
-        seenIds.emplace(PackageId(info), candidates.size());
-        candidates.push_back(PackageCandidate{binary, handle, info});
+        seenIds.emplace(meta.packageId, candidates.size());
+        candidates.push_back(PackageCandidate{binary, std::move(loader), std::move(meta)});
     }
 
     // Resolve dependencies over every discovered package, then load the accepted
@@ -178,7 +113,7 @@ void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_
     resolveCandidates.reserve(candidates.size());
     for (const auto& candidate : candidates)
     {
-        resolveCandidates.push_back({candidate.info});
+        resolveCandidates.push_back({&candidate.meta});
     }
 
     const std::vector<PackageResolveDecision> decisions =
@@ -190,14 +125,12 @@ void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_
     {
         if (decisions[i].accepted)
         {
-            acceptedResolve.push_back({candidates[i].info});
+            acceptedResolve.push_back({&candidates[i].meta});
             acceptedIndex.push_back(i);
         }
         else
         {
-            Log::Warn("Package '{}': {} - skipped", PackageId(candidates[i].info), decisions[i].reason);
-            CloseLib(candidates[i].handle);
-            candidates[i].handle = nullptr;
+            Log::Warn("Package '{}': {} - skipped", candidates[i].meta.packageId, decisions[i].reason);
         }
     }
 
@@ -206,9 +139,9 @@ void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_
     // the collision is visible rather than silent.
     {
         std::unordered_map<std::string, std::string> firstProvider; // token -> package id
-        const auto note = [&](const char* token, const char* kind, const char* owner)
+        const auto note = [&](const std::string& token, const char* kind, const std::string& owner)
         {
-            if (!token || !token[0])
+            if (token.empty())
             {
                 return;
             }
@@ -223,18 +156,13 @@ void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_
         };
         for (const auto& accepted : acceptedResolve)
         {
-            const FrameLiftPackageInfo* info = accepted.info;
-            const std::string owner = PackageId(info);
-            for (int m = 0; m < info->moduleCount; ++m)
+            const PackageMetadata& meta = *accepted.meta;
+            for (const ModuleMetadata& module : meta.modules)
             {
-                const FrameLiftModuleInfo& module = info->modules[m];
-                note(module.id, "module", owner.c_str());
-                for (int f = 0; f < module.providesFeatures.count; ++f)
+                note(module.id, "module", meta.packageId);
+                for (const std::string& feature : module.providesFeatures)
                 {
-                    note(
-                        module.providesFeatures.items ? module.providesFeatures.items[f] : nullptr, "feature",
-                        owner.c_str()
-                    );
+                    note(feature, "feature", meta.packageId);
                 }
             }
         }
@@ -243,89 +171,75 @@ void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_
     for (const std::size_t orderIdx : OrderPackages(acceptedResolve))
     {
         PackageCandidate& candidate = candidates[acceptedIndex[orderIdx]];
-        const FrameLiftPackageInfo* const info = candidate.info;
+        const PackageMetadata& meta = candidate.meta;
 
         const auto packageStart = Clock::now();
-        using CreateFn = IModule* (*)(const char*);
-        using DestroyFn = void (*)(IModule*);
-        using GetRenderFn = IRenderable* (*)(const char*, IModule*);
-        using RenderOrderFn = int (*)(const char*);
 
-        const auto createFn = LoadSym<CreateFn>(candidate.handle, "framelift_create");
-        const auto destroyFn = LoadSym<DestroyFn>(candidate.handle, "framelift_destroy");
-        const auto getRenderFn = LoadSym<GetRenderFn>(candidate.handle, "framelift_get_renderable");
-        const auto renderOrderFn = LoadSym<RenderOrderFn>(candidate.handle, "framelift_render_order");
-
-        if (!createFn || !destroyFn || !getRenderFn || !renderOrderFn)
+        QObject* const root = candidate.loader->instance();
+        if (!root)
         {
-            Log::Warn("Package '{}': missing required exports - skipped", PackageId(info));
-            CloseLib(candidate.handle);
-            candidate.handle = nullptr;
+            Log::Warn(
+                "Package '{}': instance() failed ({}) - skipped", meta.packageId,
+                candidate.loader->errorString().toStdString()
+            );
+            continue;
+        }
+        IPackage* const package = qobject_cast<IPackage*>(root);
+        if (!package)
+        {
+            Log::Warn("Package '{}': root object is not an IPackage - skipped", meta.packageId);
+            candidate.loader->unload();
             continue;
         }
 
-        using SetLogSinkFn = void (*)(Log::SinkFn);
-        if (const auto setLogSinkFn = LoadSym<SetLogSinkFn>(candidate.handle, "framelift_set_log_sink"))
-        {
-            setLogSinkFn(HostLogSink());
-        }
+        package->SetLogSink(HostLogSink());
 
         // Instantiate every module the package carries whose id the user hasn't
         // disabled. A package may end up loading some of its modules and not others.
-        std::vector<PackageLoader::LoadedModule> loadedModules;
-        for (int m = 0; m < info->moduleCount; ++m)
+        std::vector<LoadedModule> loadedModules;
+        for (const ModuleMetadata& module : meta.modules)
         {
-            const char* const moduleId = info->modules[m].id;
-            const std::string moduleKey = moduleId ? moduleId : std::string();
-            if (disabledModules.contains(moduleKey))
+            if (disabledModules.contains(module.id))
             {
-                Log::Info("Module '{}': disabled by user - skipped", moduleKey);
+                Log::Info("Module '{}': disabled by user - skipped", module.id);
                 continue;
             }
 
-            IModule* module = createFn(moduleId);
-            if (!module)
+            IModule* const instance = package->CreateModule(module.id.c_str());
+            if (!instance)
             {
-                Log::Warn("Module '{}': framelift_create() returned nullptr - skipped", moduleKey);
+                Log::Warn("Module '{}': CreateModule() returned nullptr - skipped", module.id);
                 continue;
             }
 
-            const int order = renderOrderFn(moduleId);
-            IRenderable* renderable = getRenderFn(moduleId, module);
-            loadedModules.push_back({moduleKey, module, renderable, order});
+            const int order = package->RenderOrder(module.id.c_str());
+            IRenderable* const renderable = package->GetRenderable(module.id.c_str(), instance);
+            loadedModules.push_back({module.id, instance, renderable, order});
         }
 
         if (loadedModules.empty())
         {
-            // Every module disabled (or each failed to construct): the DLL stays
+            // Every module disabled (or each failed to construct): the plugin stays
             // loaded for nothing, so drop it. It still shows in the settings UI via
             // DiscoverAvailable so the user can re-enable a module.
-            Log::Info("Package '{}': no enabled modules - not loaded", PackageId(info));
-            CloseLib(candidate.handle);
-            candidate.handle = nullptr;
+            Log::Info("Package '{}': no enabled modules - not loaded", meta.packageId);
+            candidate.loader->unload();
             continue;
         }
 
+        const std::string by = meta.publisher.empty() ? std::string() : std::string(" by ") + meta.publisher;
+        const std::size_t moduleCount = meta.modules.size();
+        const std::size_t loadedCount = loadedModules.size();
         packages_.push_back(
-            {PackageId(info), candidate.binary.moduleFile, candidate.handle, destroyFn, info, std::move(loadedModules)}
+            {meta.packageId, candidate.binary.moduleFile, std::move(candidate.loader), package, candidate.meta,
+             std::move(loadedModules)}
         );
-        candidate.handle = nullptr; // ownership moved to packages_
 
-        const std::string by = info->publisher ? std::string(" by ") + info->publisher : std::string();
         const double packageMs = std::chrono::duration<double, std::milli>(Clock::now() - packageStart).count();
         Log::Info(
-            "Package '{}' v{}.{}.{}{} loaded (abi version {}, {} of {} module(s), {:.1f} ms)", PackageId(info),
-            info->version[0], info->version[1], info->version[2], by, info->abiVersion, packages_.back().modules.size(),
-            info->moduleCount, packageMs
+            "Package '{}' v{}.{}.{}{} loaded (abi version {}, {} of {} module(s), {:.1f} ms)", meta.packageId,
+            meta.version[0], meta.version[1], meta.version[2], by, meta.abiVersion, loadedCount, moduleCount, packageMs
         );
-    }
-
-    for (auto& candidate : candidates)
-    {
-        if (candidate.handle)
-        {
-            CloseLib(candidate.handle);
-        }
     }
 
     const double totalMs = std::chrono::duration<double, std::milli>(Clock::now() - loadStart).count();
@@ -337,33 +251,22 @@ std::vector<PackageLoader::AvailablePackage> PackageLoader::DiscoverAvailable(co
     std::vector<AvailablePackage> out;
     for (const auto& binary : DiscoverPackageBinaries(modulesDir))
     {
-        void* const handle = OpenLib(binary.path.c_str());
-        if (!handle)
+        QPluginLoader loader(QString::fromStdString(binary.path));
+        const PackageMetadata meta = ReadPackageMetadata(loader);
+        if (meta.valid && AbiCompatible(meta) && !meta.packageId.empty())
         {
-            out.push_back({binary.moduleFile, binary.moduleFile, binary.moduleFile});
-            continue;
-        }
-
-        const FrameLiftPackageInfo* const info = ReadPackageInfo(handle);
-        if (info && AbiCompatible(info) && info->packageId)
-        {
-            // Copy every field the catalogue needs out of the descriptor before the
-            // DLL is closed — the pointers below are invalid after CloseLib.
             AvailablePackage pkg;
-            pkg.packageId = info->packageId;
+            pkg.packageId = meta.packageId;
             pkg.moduleFile = binary.moduleFile;
-            pkg.displayName = info->name ? info->name : info->packageId;
-            pkg.version[0] = info->version[0];
-            pkg.version[1] = info->version[1];
-            pkg.version[2] = info->version[2];
-            pkg.publisher = info->publisher ? info->publisher : "";
-            pkg.description = info->description ? info->description : "";
-            for (int m = 0; m < info->moduleCount; ++m)
+            pkg.displayName = meta.name.empty() ? meta.packageId : meta.name;
+            pkg.version[0] = meta.version[0];
+            pkg.version[1] = meta.version[1];
+            pkg.version[2] = meta.version[2];
+            pkg.publisher = meta.publisher;
+            pkg.description = meta.description;
+            for (const ModuleMetadata& module : meta.modules)
             {
-                const FrameLiftModuleInfo& mod = info->modules[m];
-                pkg.modules.push_back(
-                    {mod.id ? mod.id : "", mod.name ? mod.name : "", mod.description ? mod.description : ""}
-                );
+                pkg.modules.push_back({module.id, module.name, module.description});
             }
             out.push_back(std::move(pkg));
         }
@@ -371,19 +274,21 @@ std::vector<PackageLoader::AvailablePackage> PackageLoader::DiscoverAvailable(co
         {
             out.push_back({binary.moduleFile, binary.moduleFile, binary.moduleFile});
         }
-        CloseLib(handle);
     }
     return out;
 }
 
 PackageLoader::~PackageLoader()
 {
-    for (const auto& p : packages_)
+    for (auto& p : packages_)
     {
         for (const auto& m : p.modules)
         {
-            p.destroyFn(m.module);
+            p.package->DestroyModule(m.module);
         }
-        CloseLib(p.handle);
+        if (p.loader)
+        {
+            p.loader->unload();
+        }
     }
 }

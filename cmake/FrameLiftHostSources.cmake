@@ -21,6 +21,8 @@ set(_FRAMELIFT_HOST_MODULE_RUNTIME_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/ModuleRegistry.h"
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageResolver.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageResolver.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageMetadata.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageMetadata.h"
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/ModuleSettingsImpl.h"
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/Services.h"
 )

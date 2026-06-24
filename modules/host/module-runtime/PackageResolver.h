@@ -1,12 +1,13 @@
 #pragma once
-#include <framelift/ModuleABI.h>
+#include "PackageMetadata.h"
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
 
 struct PackageResolveCandidate
 {
-    const FrameLiftPackageInfo* info = nullptr;
+    const PackageMetadata* meta = nullptr;
 };
 
 struct PackageResolveDecision
