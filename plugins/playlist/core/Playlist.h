@@ -5,6 +5,8 @@
 #include <framelift/services.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QObject>
+#include <QtCore/QVariantList>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -14,8 +16,15 @@
 // Slide-in panel (left edge) that lists and navigates the files in the current
 // directory. Automatically populated when a file is opened via OpenFile().
 // Driven via OpenFileRequestEvent — there is no service interface.
-class Playlist : public Panel, public ModuleBase
+class Playlist : public QObject, public Panel, public ModuleBase
 {
+    Q_OBJECT
+    Q_PROPERTY(bool open READ IsOpen NOTIFY panelStateChanged)
+    Q_PROPERTY(bool shuffleEnabled READ IsShuffleEnabled NOTIFY playlistChanged)
+    Q_PROPERTY(int currentIndex READ Current NOTIFY playlistChanged)
+    Q_PROPERTY(int cursorIndex READ Cursor NOTIFY playlistChanged)
+    Q_PROPERTY(QVariantList entries READ QmlEntries NOTIFY playlistChanged)
+
 public:
     Playlist() : Panel(Side::Left, 320.f, "Playlist")
     {
@@ -56,6 +65,17 @@ public:
         return current_;
     }
 
+    [[nodiscard]] int Cursor() const
+    {
+        return cursor_;
+    }
+
+    [[nodiscard]] QVariantList QmlEntries() const;
+
+    Q_INVOKABLE void togglePanel();
+    Q_INVOKABLE void activateIndex(int index);
+    Q_INVOKABLE void publishVisibleWidth(qreal width);
+
     // Advance to the next entry and activate it (wraps to the beginning).
     void Next();
     // Retreat to the previous entry and activate it (wraps to the end).
@@ -71,9 +91,9 @@ public:
 
     // ── Reload / Shuffle ────────────────────────────────────────────
     // Re-scan the watched directory and update entries without interrupting playback.
-    void Reload();
+    Q_INVOKABLE void Reload();
     // Toggle shuffle mode; rebuilds the order when enabling.
-    void ToggleShuffle();
+    Q_INVOKABLE void ToggleShuffle();
 
     [[nodiscard]] bool IsShuffleEnabled() const
     {
@@ -101,6 +121,10 @@ protected:
     // Reset cursor to the currently playing entry when the panel opens.
     void OnOpened() override;
     void RenderContent(float panelW, float panelH, UIContext& ctx) override;
+
+Q_SIGNALS:
+    void playlistChanged();
+    void panelStateChanged();
 
 private:
     struct Entry
@@ -130,8 +154,8 @@ private:
     // "<current+1> / <total>", rebuilt only when current_ or the entry count
     // changes — the panel renders every frame, so this avoids per-frame allocs.
     std::string counterText_;
-    int counterCur_ = -2;             // current_ the cache was built for (-2 = unset)
-    std::size_t counterTotal_ = 0;    // entries_.size() the cache was built for
+    int counterCur_ = -2;          // current_ the cache was built for (-2 = unset)
+    std::size_t counterTotal_ = 0; // entries_.size() the cache was built for
 
     // ── Shuffle ─────────────────────────────────────────────────────
     bool shuffleEnabled_ = false;
@@ -149,6 +173,7 @@ private:
     // the plugin via shared_ptr) and wakes the UI thread with a custom event; the
     // UI thread alone mutates entries_, so no locking of entries_ is needed.
     uint32_t scanDoneEventType_ = 0;
+
     struct ScanShared
     {
         std::mutex mtx;
@@ -162,6 +187,7 @@ private:
         IEventPump* events = nullptr;       // host service, app-lifetime
         uint32_t doneEventType = 0;
     };
+
     std::shared_ptr<ScanShared> scanShared_ = std::make_shared<ScanShared>();
     // Build scan parameters from settings and launch the worker (UI thread).
     void StartScan(const std::string& path);
@@ -193,6 +219,8 @@ private:
     void RenderSettingsContent(UIContext& ctx);
 };
 
-FRAMELIFT_MODULE_ENTRY(Playlist, {
-    .renderOrder = 10,
-})
+FRAMELIFT_MODULE_ENTRY(
+    Playlist, {
+                  .renderOrder = 10,
+              }
+)

@@ -1,20 +1,19 @@
 #pragma once
 
 #include "FileDialogServiceImpl.h"
-#include "PackageConfig.h"
 #include "FocusManagerImpl.h"
 #include "HotkeysImpl.h"
 #include "JsonServiceImpl.h"
 #include "ModuleContext.h"
-#include "PackageLoader.h"
 #include "ModuleRegistry.h"
+#include "PackageConfig.h"
+#include "PackageLoader.h"
 #include "PlaybackControls.h"
 #include "Settings.h"
-#include <framelift/IRenderable.h>
+#include <chrono>
 #include <framelift/platform/IAppWindow.h>
 #include <framelift/platform/IDirWatcher.h>
 #include <framelift/platform/IMediaPlayer.h>
-#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -44,10 +43,12 @@ private:
     };
 
     // ── Construction phases (run in order from the ctor) ──
-    void InitPlatform(const char* title, int width, int height, const std::string& prefDir, const std::string& settingsPath);
+    void InitPlatform(
+        const char* title, int width, int height, const std::string& prefDir, const std::string& settingsPath
+    );
     void InitServices(const std::string& prefDir, const std::string& settingsPath);
     void LoadPackages();
-    void BuildRenderables();
+    void BuildPluginViews();
 
     // Wire the player's worker-thread wakeups to the window's queued signals (no GL).
     void SetupPlayerCallbacks();
@@ -106,6 +107,4 @@ private:
 #endif
     PackageLoader packageLoader_;
     ModuleRegistry registry_;
-
-    std::vector<IRenderable*> renderables_;
 };

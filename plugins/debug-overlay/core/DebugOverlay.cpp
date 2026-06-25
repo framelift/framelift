@@ -1,4 +1,6 @@
 #include "DebugOverlay.h"
+#include <QtCore/QStringList>
+#include <QtCore/QTimer>
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -24,6 +26,20 @@ std::vector<framelift::Keybind> DebugOverlay::Keybinds()
 void DebugOverlay::OnInstall(IModuleContext& ctx)
 {
     SetupSettingsPage(ctx, false);
+    refreshTimer_ = new QTimer(this);
+    refreshTimer_->setInterval(1000);
+    connect(
+        refreshTimer_, &QTimer::timeout, this,
+        [this]
+        {
+            if (open_)
+            {
+                RequestRefresh();
+                Q_EMIT changed();
+            }
+        }
+    );
+    refreshTimer_->start();
 }
 
 // ── Media events ──────────────────────────────────────────────────────────────
@@ -36,6 +52,7 @@ void DebugOverlay::HandleMediaEvent(const MediaEvent& event)
     }
 
     const auto& [prop, type, value] = event.property;
+    Q_EMIT changed();
 
     if (prop == PlayerProperty::IdleActive && type == PropertyType::Flag)
     {
@@ -68,6 +85,18 @@ void DebugOverlay::HandleMediaEvent(const MediaEvent& event)
         duration_ = value.dbl > 0.0 ? value.dbl : 0.0;
         return;
     }
+}
+
+QString DebugOverlay::Summary() const
+{
+    QStringList rows;
+    rows << QStringLiteral("File  %1").arg(QString::fromStdString(title_.empty() ? filePath_ : title_));
+    rows << QStringLiteral("Time  %1 / %2 s").arg(timePos_, 0, 'f', 1).arg(duration_, 0, 'f', 1);
+    rows << QStringLiteral("Video  %1×%2  ·  %3").arg(videoW_).arg(videoH_).arg(QString::fromStdString(hwDec_));
+    rows << QStringLiteral("Graphics  %1").arg(QString::fromStdString(gfxBackend_));
+    rows << QStringLiteral("Dropped %1  ·  Mistimed %2  ·  Errors %3").arg(dropped_).arg(mistimed_).arg(decodeErrors_);
+    rows << QStringLiteral("Cache  %1 bytes  ·  %2 hits / %3 misses").arg(cacheUsed_).arg(cacheHits_).arg(cacheMisses_);
+    return rows.join('\n');
 }
 
 // ── Async property refresh ────────────────────────────────────────────────────

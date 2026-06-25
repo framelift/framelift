@@ -4,6 +4,8 @@
 #include <framelift/services.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QObject>
+#include <QtCore/QVariantList>
 #include <atomic>
 #include <deque>
 #include <memory>
@@ -13,8 +15,13 @@
 
 // Slide-in panel (right edge) showing recently played files with resume positions.
 // Entries are persisted to a plain-text file in the user's pref directory.
-class History : public Panel, public ModuleBase, public IHistory
+class History : public QObject, public Panel, public ModuleBase, public IHistory
 {
+    Q_OBJECT
+    Q_PROPERTY(bool open READ IsOpen NOTIFY panelStateChanged)
+    Q_PROPERTY(QString search READ Search WRITE SetSearch NOTIFY historyChanged)
+    Q_PROPERTY(QVariantList entries READ QmlEntries NOTIFY historyChanged)
+
 public:
     History();
 
@@ -38,7 +45,18 @@ public:
     void AddEntry(const char* path) noexcept;
 
     // Erase all entries and persist the empty list.
-    void Clear();
+    Q_INVOKABLE void Clear();
+
+    [[nodiscard]] QString Search() const
+    {
+        return QString::fromStdString(searchQuery_);
+    }
+
+    void SetSearch(const QString& value);
+    [[nodiscard]] QVariantList QmlEntries() const;
+    Q_INVOKABLE void togglePanel();
+    Q_INVOKABLE void activateIndex(int filteredIndex);
+    Q_INVOKABLE void publishVisibleWidth(qreal width);
 
     // IHistory
     int GetMostRecent(char* buf, int cap) const noexcept override;
@@ -78,6 +96,10 @@ protected:
     }
 
     void RenderContent(float panelW, float panelH, UIContext& ctx) override;
+
+Q_SIGNALS:
+    void historyChanged();
+    void panelStateChanged();
 
 private:
     struct Entry
@@ -126,10 +148,13 @@ private:
         unsigned published = 0; // highest seq already renamed into place
         bool any = false;       // whether `published` is meaningful yet
     };
+
     mutable std::atomic<unsigned> saveSeq_{0};
     std::shared_ptr<SaveCoordinator> saveCoord_ = std::make_shared<SaveCoordinator>();
 };
 
-FRAMELIFT_MODULE_ENTRY(History, {
-    .renderOrder = 20,
-})
+FRAMELIFT_MODULE_ENTRY(
+    History, {
+                 .renderOrder = 20,
+             }
+)

@@ -4,16 +4,26 @@
 #include <framelift/services.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QObject>
+#include <QtCore/QVariantList>
 #include <deque>
 #include <string>
 #include <vector>
+
+class QTimer;
 
 // In-app log viewer (Ctrl+L to toggle). Reads recent log lines back from the
 // host's in-memory ring buffer via the ILogBuffer service and shows them in a
 // scrolling, filterable window. Performance measurements are emitted by the host
 // as "[perf] …" log lines; the "Perf only" toggle isolates them.
-class LogViewer final : public SafeRenderable, public ModuleBase
+class LogViewer final : public QObject, public SafeRenderable, public ModuleBase
 {
+    Q_OBJECT
+    Q_PROPERTY(bool open READ IsOpen NOTIFY changed)
+    Q_PROPERTY(QVariantList lines READ QmlLines NOTIFY changed)
+    Q_PROPERTY(QString filterText READ FilterText WRITE SetFilterText NOTIFY changed)
+    Q_PROPERTY(bool perfOnly READ PerfOnly WRITE SetPerfOnly NOTIFY changed)
+
 public:
     const char* ModuleName() const override
     {
@@ -23,6 +33,46 @@ public:
     void Toggle()
     {
         open_ = !open_;
+        Q_EMIT changed();
+    }
+
+    [[nodiscard]] bool IsOpen() const
+    {
+        return open_;
+    }
+
+    [[nodiscard]] QVariantList QmlLines() const;
+
+    [[nodiscard]] QString FilterText() const
+    {
+        return QString::fromStdString(filterText_);
+    }
+
+    void SetFilterText(const QString& value)
+    {
+        filterText_ = value.toStdString();
+        Q_EMIT changed();
+    }
+
+    [[nodiscard]] bool PerfOnly() const
+    {
+        return perfOnly_;
+    }
+
+    void SetPerfOnly(bool value)
+    {
+        perfOnly_ = value;
+        Q_EMIT changed();
+    }
+
+    Q_INVOKABLE void clearLines();
+
+    Q_INVOKABLE void close()
+    {
+        if (open_)
+        {
+            Toggle();
+        }
     }
 
     void OnRender(UIContext& ctx) override;
@@ -31,6 +81,9 @@ protected:
     std::vector<framelift::Keybind> Keybinds() override;
     std::vector<framelift::SettingsField> SettingsFields() override;
     void OnInstall(IModuleContext& ctx) override;
+
+Q_SIGNALS:
+    void changed();
 
 private:
     struct Entry
@@ -64,8 +117,11 @@ private:
 
     // Runtime-only text search (not persisted).
     std::string filterText_;
+    QTimer* refreshTimer_ = nullptr;
 };
 
-FRAMELIFT_MODULE_ENTRY(LogViewer, {
-    .renderOrder = 70,
-})
+FRAMELIFT_MODULE_ENTRY(
+    LogViewer, {
+                   .renderOrder = 70,
+               }
+)

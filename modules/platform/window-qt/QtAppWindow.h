@@ -5,8 +5,10 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "IGraphicsBackend.h"
+#include "QmlCompositor.h"
 
 class QQuickWindow;
 class QEvent;
@@ -49,6 +51,7 @@ public:
     void SetPlayerWakeupHandler(std::function<void()> handler);
     // Host video draw, forwarded to the scene-graph node (App's player_->RenderFrame).
     void SetVideoRenderCallback(std::function<void(int fbW, int fbH)> cb);
+    void SetPluginViews(std::vector<QmlViewSpec> views);
     // Show the window (created hidden) and run Qt's event loop until quit. Returns the
     // QGuiApplication::exec() exit code.
     int RunEventLoop();
@@ -105,6 +108,7 @@ protected:
 private:
     QQuickWindow* window_ = nullptr; // owned via Qt parent/ownership
     VideoItem* videoItem_ = nullptr; // child of window_->contentItem()
+    std::unique_ptr<QmlCompositor> qmlCompositor_;
     std::unique_ptr<IGraphicsBackend> backend_;
     std::string title_;
 

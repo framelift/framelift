@@ -42,9 +42,9 @@
 //    before any vtable is touched. Host and plugins are built from one source tree
 //    in lockstep, so an exact match is the whole rule — a mismatch means a stale
 //    binary that must be rebuilt, not negotiated.
-//      Bump FRAMELIFT_ABI_VERSION only on a Tier-1 break: a framelift_* export
-//      signature, the FrameLiftPackageInfo/FrameLiftModuleInfo layout, a host-CALLED
-//      interface (IModule, IRenderable), or the bootstrap surface of IModuleContext.
+//      Bump FRAMELIFT_ABI_VERSION only on a Tier-1 break: IPackage or its IID,
+//      package metadata consumed before instantiation, a host-called interface
+//      (IModule), QObject/QML view-model discovery, or IModuleContext bootstrap.
 //      New host capabilities are NOT a break — they ship as new, independently
 //      discovered service interfaces (GetService<T>() returns nullptr when absent),
 //      so adding one never touches the version.

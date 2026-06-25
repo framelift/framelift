@@ -5,6 +5,7 @@
 #include <framelift/services.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QObject>
 #include <string>
 
 // Adds playback of remote network streams. This plugin is the sole handler of
@@ -18,8 +19,12 @@
 //    fetch + decryption scheme — nothing else in the app needs to change.
 //
 // UI: an "Open Network Stream…" context-menu entry opens a modal with a URL field.
-class RemoteStream final : public SafeRenderable, public ModuleBase
+class RemoteStream final : public QObject, public SafeRenderable, public ModuleBase
 {
+    Q_OBJECT
+    Q_PROPERTY(bool dialogOpen READ DialogOpen NOTIFY dialogChanged)
+    Q_PROPERTY(QString url READ Url WRITE SetUrl NOTIFY dialogChanged)
+
 public:
     RemoteStream() = default;
 
@@ -31,6 +36,25 @@ public:
     // ── IRenderable (via SafeRenderable) ──────────────────────────────────────
     void OnRender(UIContext& ctx) override;
 
+    [[nodiscard]] bool DialogOpen() const
+    {
+        return requestOpen_ || modalOpen_;
+    }
+
+    [[nodiscard]] QString Url() const
+    {
+        return QString::fromStdString(urlInput_);
+    }
+
+    void SetUrl(const QString& value)
+    {
+        urlInput_ = value.toStdString();
+        Q_EMIT dialogChanged();
+    }
+
+    Q_INVOKABLE void submit();
+    Q_INVOKABLE void cancel();
+
 protected:
     const char* ModuleName() const override
     {
@@ -38,6 +62,9 @@ protected:
     }
 
     void OnInstall(IModuleContext& ctx) override;
+
+Q_SIGNALS:
+    void dialogChanged();
 
 private:
     // Resolve `url`, hand the result to the media player, then update the window
@@ -49,6 +76,8 @@ private:
     std::string urlInput_;     // URL text-field contents
 };
 
-FRAMELIFT_MODULE_ENTRY(RemoteStream, {
-    .renderOrder = 100, // draw the modal above the panels
-})
+FRAMELIFT_MODULE_ENTRY(
+    RemoteStream, {
+                      .renderOrder = 100, // draw the modal above the panels
+                  }
+)

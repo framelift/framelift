@@ -45,6 +45,7 @@ void Overlay::OnInstall(IModuleContext& ctx)
         [this](const PanelLayoutEvent& e)
         {
             (e.side == 0 ? leftInset_ : rightInset_) = e.visibleWidth;
+            Q_EMIT layoutChanged();
         }
     );
 
@@ -53,6 +54,7 @@ void Overlay::OnInstall(IModuleContext& ctx)
         [this](const SettingsVisibilityEvent& e)
         {
             settingsOpen_ = e.open;
+            Q_EMIT layoutChanged();
         }
     );
 }
@@ -61,6 +63,23 @@ void Overlay::ShowCommand(std::string label)
 {
     commandLabel_ = std::move(label);
     hud_.Trigger();
+    Q_EMIT commandShown();
+}
+
+void Overlay::togglePause()
+{
+    if (playback_)
+    {
+        playback_->TogglePause();
+    }
+}
+
+void Overlay::seek(const double seconds)
+{
+    if (playback_)
+    {
+        playback_->SeekAbsolute(std::clamp(seconds, 0.0, duration_));
+    }
 }
 
 bool Overlay::HandleEvent(const AppEvent& e)
@@ -84,12 +103,14 @@ void Overlay::HandleMediaEvent(const MediaEvent& event)
     if (prop == PlayerProperty::IdleActive && type == PropertyType::Flag)
     {
         isIdle_ = value.flag != 0;
+        Q_EMIT playbackStateChanged();
         return;
     }
 
     if (prop == PlayerProperty::Pause && type == PropertyType::Flag)
     {
         isPaused_ = value.flag != 0;
+        Q_EMIT playbackStateChanged();
         return;
     }
 
@@ -102,10 +123,12 @@ void Overlay::HandleMediaEvent(const MediaEvent& event)
     if (prop == PlayerProperty::TimePos)
     {
         timePos_ = val >= 0.0 ? val : 0.0;
+        Q_EMIT playbackPositionChanged();
     }
     if (prop == PlayerProperty::Duration)
     {
         duration_ = val > 0.0 ? val : 0.0;
+        Q_EMIT playbackPositionChanged();
     }
 }
 

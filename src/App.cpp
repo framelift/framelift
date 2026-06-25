@@ -1,21 +1,21 @@
 #include "App.h"
 #include "Cli.h"
-#include "IconData.h"
 #include "CoreSettings.h"
+#include "DirWatcher.h"
+#include "FFmpegPlayer.h"
 #include "GraphicsApi.h"
 #include "GraphicsSettings.h"
 #include "IGraphicsBackend.h"
-#include "DirWatcher.h"
-#include "FFmpegPlayer.h"
+#include "IconData.h"
 #include "LogBuffer.h"
 #include "QtAppWindow.h"
 #if FRAMELIFT_MODULE_WIN_SHELL
 #include "WinShell.h"
 #endif
-#include <framelift/Log.h>
 #include <framelift/ContextHelpers.h>
 #include <framelift/Events.h>
 #include <framelift/IModule.h>
+#include <framelift/Log.h>
 #include <framelift/services/ILogBuffer.h>
 #include <memory>
 #include <string>
@@ -29,8 +29,7 @@
 // ── Constructor / Destructor ──────────────────────────────────────────────────
 
 App::App(const char* title, const int width, const int height, const int cliArgc, const char* const* cliArgv)
-    : cliArgc_(cliArgc), cliArgv_(cliArgv), player_(std::make_unique<FFmpegPlayer>()),
-      dirWatcher_(CreateDirWatcher())
+    : cliArgc_(cliArgc), cliArgv_(cliArgv), player_(std::make_unique<FFmpegPlayer>()), dirWatcher_(CreateDirWatcher())
 {
     FRAMELIFT_PERF_START("app-start");
 
@@ -52,7 +51,7 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     // sections on its first frame.
     LoadPackages();
 
-    BuildRenderables();
+    BuildPluginViews();
 }
 
 App::~App()
@@ -71,8 +70,9 @@ App::~App()
 
 // ── Construction phases ─────────────────────────────────────────────────────────
 
-void App::InitPlatform(const char* title, const int width, const int height, const std::string& prefDir,
-                       const std::string& settingsPath)
+void App::InitPlatform(
+    const char* title, const int width, const int height, const std::string& prefDir, const std::string& settingsPath
+)
 {
     // App owns the Settings instance; load it before any module sees it.
     settings_.Load(settingsPath);
@@ -81,7 +81,8 @@ void App::InitPlatform(const char* title, const int width, const int height, con
     packageConfig_.Load(packagesPath_);
 
     appWindow_ = std::make_unique<QtAppWindow>(
-        title, width, height, GraphicsApiFromString(settings_.Get<GraphicsSettings>().backend));
+        title, width, height, GraphicsApiFromString(settings_.Get<GraphicsSettings>().backend)
+    );
 
     (void)appWindow_->SetWindowIconFromMemory(kIconData, kIconDataSize);
 
@@ -115,10 +116,9 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
 
     // Controllers own their own event-bus wiring (settings re-apply, audio ducking,
     // theme reaction) so App holds no subscriptions.
-    playbackControls_ =
-        std::make_unique<PlaybackControls>(
-            keys_, settings_, *ffmpeg_, *appWindow_, *appWindow_, *appWindow_, fileDialogService_, *moduleCtx_
-        );
+    playbackControls_ = std::make_unique<PlaybackControls>(
+        keys_, settings_, *ffmpeg_, *appWindow_, *appWindow_, *appWindow_, fileDialogService_, *moduleCtx_
+    );
     playbackControls_->Connect();
 
     // With plugins excluded this phase, no module turns an OpenFileRequestEvent (from the
@@ -133,14 +133,30 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
             {
                 ffmpeg_->LoadFile(e.path, 0.0);
             }
-        });
+        }
+    );
 
     // Qt owns the loop: route the window's GUI-thread hooks back into App. Input/events
     // → Dispatch; player worker wakeups → OnPlayerWakeup (drain media events); the
     // scene-graph video node → RenderVideo (the host video draw).
-    appWindow_->SetEventSink([this](const AppEvent& e) { Dispatch(e); });
-    appWindow_->SetPlayerWakeupHandler([this] { OnPlayerWakeup(); });
-    appWindow_->SetVideoRenderCallback([this](int fbW, int fbH) { RenderVideo(fbW, fbH); });
+    appWindow_->SetEventSink(
+        [this](const AppEvent& e)
+        {
+            Dispatch(e);
+        }
+    );
+    appWindow_->SetPlayerWakeupHandler(
+        [this]
+        {
+            OnPlayerWakeup();
+        }
+    );
+    appWindow_->SetVideoRenderCallback(
+        [this](int fbW, int fbH)
+        {
+            RenderVideo(fbW, fbH);
+        }
+    );
 
 #if FRAMELIFT_MODULE_WIN_SHELL
     // Windows shell integration consumes the same services/events; wire it after
@@ -233,37 +249,24 @@ void App::LoadPackages()
 
 // ── Renderables ───────────────────────────────────────────────────────────────
 
-void App::BuildRenderables()
+void App::BuildPluginViews()
 {
-    // Collect (order, renderable) pairs from packages and sort. The context menu is
-    // itself a module (renderOrder 30), so it sorts in alongside the rest.
-    using OrderedR = std::pair<int, IRenderable*>;
-    std::vector<OrderedR> items;
+    std::vector<QmlViewSpec> views;
 
     for (const auto& p : packageLoader_.Packages())
     {
         for (const auto& m : p.modules)
         {
-            if (m.renderable)
+            if (m.viewModel && !m.qmlEntryUrl.empty())
             {
-                items.emplace_back(m.renderOrder, m.renderable);
+                views.push_back(
+                    {QString::fromStdString(m.moduleId), QString::fromStdString(m.qmlEntryUrl), m.viewModel,
+                     m.renderOrder}
+                );
             }
         }
     }
-
-    std::ranges::stable_sort(
-        items,
-        [](const OrderedR& a, const OrderedR& b)
-        {
-            return a.first < b.first;
-        }
-    );
-
-    renderables_.clear();
-    for (auto& r : items | std::views::values)
-    {
-        renderables_.push_back(r);
-    }
+    appWindow_->SetPluginViews(std::move(views));
 }
 
 // ── Render setup ──────────────────────────────────────────────────────────────
@@ -335,9 +338,9 @@ void App::DrainMediaEvents()
         // spinner, the pause icon, …). Position updates are excluded so steady playback
         // isn't pinned to the display refresh by a redraw it doesn't need. pendingVideoRedraw_
         // both triggers a render (it is in the gate) and refreshes the cached video layer.
-        const bool positionTick = ev.type == MediaEventType::PropertyChange &&
-                                  (ev.property.prop == PlayerProperty::TimePos ||
-                                   ev.property.prop == PlayerProperty::PercentPos);
+        const bool positionTick =
+            ev.type == MediaEventType::PropertyChange &&
+            (ev.property.prop == PlayerProperty::TimePos || ev.property.prop == PlayerProperty::PercentPos);
         if (!positionTick)
         {
             pendingVideoRedraw_ = true;
@@ -486,8 +489,9 @@ void App::ResizeToVideo() const
             }
             // Cap the auto-sized window at 80% of the usable screen.
             constexpr float kMaxDisplayRatio = 0.8f;
-            self->appWindow_->ResizeToVideo(static_cast<int>(size->width), static_cast<int>(size->height),
-                                            kMaxDisplayRatio);
+            self->appWindow_->ResizeToVideo(
+                static_cast<int>(size->width), static_cast<int>(size->height), kMaxDisplayRatio
+            );
         },
         new AsyncSelf{this}
     );

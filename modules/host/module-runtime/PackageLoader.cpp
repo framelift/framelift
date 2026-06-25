@@ -93,8 +93,10 @@ void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_
         if (!AbiCompatible(meta))
         {
             Log::Warn(
-                "Package '{}' v{}.{}.{}: ABI version {} incompatible with host version {} - rebuild against current SDK",
-                meta.packageId, meta.version[0], meta.version[1], meta.version[2], meta.abiVersion, FRAMELIFT_ABI_VERSION
+                "Package '{}' v{}.{}.{}: ABI version {} incompatible with host version {} - rebuild against current "
+                "SDK",
+                meta.packageId, meta.version[0], meta.version[1], meta.version[2], meta.abiVersion,
+                FRAMELIFT_ABI_VERSION
             );
             continue;
         }
@@ -213,8 +215,11 @@ void PackageLoader::LoadAll(const std::string& modulesDir, const std::unordered_
             }
 
             const int order = package->RenderOrder(module.id.c_str());
-            IRenderable* const renderable = package->GetRenderable(module.id.c_str(), instance);
-            loadedModules.push_back({module.id, instance, renderable, order});
+            QObject* const viewModel = package->GetViewModel(module.id.c_str(), instance);
+            const char* const qmlEntry = package->QmlEntryUrl(module.id.c_str());
+            loadedModules.push_back(
+                {module.id, instance, viewModel, qmlEntry ? std::string(qmlEntry) : std::string{}, order}
+            );
         }
 
         if (loadedModules.empty())

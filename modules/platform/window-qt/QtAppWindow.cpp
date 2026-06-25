@@ -131,8 +131,7 @@ Mod TranslateMods(Qt::KeyboardModifiers m)
 
 // ── Constructor / Destructor ──────────────────────────────────────────────────
 
-QtAppWindow::QtAppWindow(const char* title, int width, int height, GraphicsApi api)
-    : title_(title ? title : "")
+QtAppWindow::QtAppWindow(const char* title, int width, int height, GraphicsApi api) : title_(title ? title : "")
 {
     backend_ = CreateGraphicsBackend(api);
 
@@ -143,11 +142,29 @@ QtAppWindow::QtAppWindow(const char* title, int width, int height, GraphicsApi a
     window_->setTitle(QString::fromUtf8(title_.c_str()));
     window_->resize(width, height);
     window_->setColor(Qt::black);
+    // QQuickWindow normally sizes its content item when the native window is
+    // exposed. Plugin roots are created before show(), so seed the same geometry
+    // now instead of constructing every QML surface at 0x0 for the first frame.
+    window_->contentItem()->setSize(QSizeF(width, height));
 
     videoItem_ = new VideoItem(window_->contentItem());
+    videoItem_->setZ(0);
+    qmlCompositor_ = std::make_unique<QmlCompositor>(window_->contentItem());
     SyncVideoItemSize();
-    connect(window_, &QQuickWindow::widthChanged, this, [this] { SyncVideoItemSize(); });
-    connect(window_, &QQuickWindow::heightChanged, this, [this] { SyncVideoItemSize(); });
+    connect(
+        window_, &QQuickWindow::widthChanged, this,
+        [this]
+        {
+            SyncVideoItemSize();
+        }
+    );
+    connect(
+        window_, &QQuickWindow::heightChanged, this,
+        [this]
+        {
+            SyncVideoItemSize();
+        }
+    );
 
     // Worker-thread wakes → GUI-thread slots (queued). renderUpdate schedules a repaint;
     // playerWakeup drains media events (which may itself schedule a repaint).
@@ -160,7 +177,8 @@ QtAppWindow::QtAppWindow(const char* title, int width, int height, GraphicsApi a
                 window_->update();
             }
         },
-        Qt::QueuedConnection);
+        Qt::QueuedConnection
+    );
     connect(
         this, &QtAppWindow::playerWakeupRequested, this,
         [this]
@@ -170,7 +188,8 @@ QtAppWindow::QtAppWindow(const char* title, int width, int height, GraphicsApi a
                 playerWakeupHandler_();
             }
         },
-        Qt::QueuedConnection);
+        Qt::QueuedConnection
+    );
 
     window_->installEventFilter(this);
 }
@@ -211,6 +230,14 @@ void QtAppWindow::SetVideoRenderCallback(std::function<void(int, int)> cb)
     if (videoItem_)
     {
         videoItem_->SetRenderCallback(std::move(cb));
+    }
+}
+
+void QtAppWindow::SetPluginViews(std::vector<QmlViewSpec> views)
+{
+    if (qmlCompositor_)
+    {
+        qmlCompositor_->Load(std::move(views));
     }
 }
 
@@ -391,8 +418,7 @@ bool QtAppWindow::eventFilter(QObject* watched, QEvent* event)
         out.type = AppEventType::Quit;
         break;
     case QEvent::KeyPress:
-    case QEvent::KeyRelease:
-    {
+    case QEvent::KeyRelease: {
         const auto* ke = static_cast<QKeyEvent*>(event);
         out.type = event->type() == QEvent::KeyPress ? AppEventType::KeyDown : AppEventType::KeyUp;
         out.key = {TranslateKey(ke->key()), TranslateMods(ke->modifiers())};
@@ -460,7 +486,8 @@ void QtAppWindow::PushCustomEvent(uint32_t eventType, void* data1) noexcept
                 window_->update();
             }
         },
-        Qt::QueuedConnection);
+        Qt::QueuedConnection
+    );
 }
 
 void QtAppWindow::PushRenderUpdate() noexcept
@@ -475,7 +502,14 @@ void QtAppWindow::PushPlayerWakeup() noexcept
 
 void QtAppWindow::PushQuitEvent() noexcept
 {
-    QMetaObject::invokeMethod(this, [] { QGuiApplication::quit(); }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+        this,
+        []
+        {
+            QGuiApplication::quit();
+        },
+        Qt::QueuedConnection
+    );
 }
 
 void QtAppWindow::SetFrameDirty(bool videoDirty, bool uiDirty) noexcept

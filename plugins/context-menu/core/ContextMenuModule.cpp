@@ -3,6 +3,7 @@
 #include <framelift/Hotkeys.h>
 #include <framelift/services.h>
 
+#include <QtCore/QVariantMap>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -14,6 +15,7 @@
 void ContextMenuModule::AddItemRaw(const char* label, void (*action)(void*), void* ud, void (*cleanup)(void*)) noexcept
 {
     items_.push_back({label ? label : "", {}, action, ud, cleanup});
+    Q_EMIT menuChanged();
 }
 
 void ContextMenuModule::AddItemWithHotkeyRaw(
@@ -21,11 +23,13 @@ void ContextMenuModule::AddItemWithHotkeyRaw(
 ) noexcept
 {
     items_.push_back({label ? label : "", hotkey ? hotkey : "", action, ud, cleanup});
+    Q_EMIT menuChanged();
 }
 
 void ContextMenuModule::AddSeparator() noexcept
 {
     items_.push_back({}); // empty label = separator
+    Q_EMIT menuChanged();
 }
 
 void ContextMenuModule::AddDynamicSubMenuRaw(
@@ -38,6 +42,7 @@ void ContextMenuModule::AddDynamicSubMenuRaw(
     item.builderUd = ud;
     item.cleanup = cleanup;
     items_.push_back(std::move(item));
+    Q_EMIT menuChanged();
 }
 
 void ContextMenuModule::AddSectionRaw(void (*builder)(ContextMenu&, void*), void* ud, void (*cleanup)(void*)) noexcept
@@ -170,6 +175,92 @@ void ContextMenuModule::HandleMediaEvent(const MediaEvent& e)
         e.property.type == PropertyType::Flag)
     {
         playerIdle_ = e.property.value.flag != 0;
+        Q_EMIT menuChanged();
+    }
+}
+
+QVariantList ContextMenuModule::QmlExtraItems()
+{
+    if (!assembled_)
+    {
+        Assemble();
+        assembled_ = true;
+    }
+    QVariantList result;
+    for (int i = 0; i < static_cast<int>(items_.size()); ++i)
+    {
+        const Item& item = items_[i];
+        if (!item.action || item.label == "Open File" || item.label == "Open Network Stream…" ||
+            item.label == "Play / Pause" || item.label == "Toggle Fullscreen" || item.label == "Quit")
+        {
+            continue;
+        }
+        QVariantMap row;
+        row.insert(QStringLiteral("label"), QString::fromStdString(item.label));
+        row.insert(QStringLiteral("hotkey"), QString::fromStdString(item.hotkeyName));
+        row.insert(QStringLiteral("index"), i);
+        result.push_back(row);
+    }
+    return result;
+}
+
+void ContextMenuModule::openNetwork()
+{
+    if (ctx_)
+    {
+        ctx_->Publish<OpenNetworkStreamRequestEvent>({});
+    }
+}
+
+void ContextMenuModule::toggleFullscreen()
+{
+    if (appWindow_)
+    {
+        appWindow_->SetFullscreen(!appWindow_->IsFullscreen());
+    }
+}
+
+void ContextMenuModule::toggleMute()
+{
+    if (audio_)
+    {
+        audio_->ToggleMute();
+        Q_EMIT menuChanged();
+    }
+}
+
+void ContextMenuModule::toggleNormalize()
+{
+    if (audio_)
+    {
+        const bool on = !audio_->IsNormalizeEnabled();
+        audio_->SetAudioNormalize(on, on ? NormalizeParams() : AudioNormalizeParams{});
+        Q_EMIT menuChanged();
+    }
+}
+
+void ContextMenuModule::toggleSubtitles()
+{
+    if (subtitles_)
+    {
+        subtitles_->ToggleSubtitles();
+        Q_EMIT menuChanged();
+    }
+}
+
+void ContextMenuModule::invokeExtra(const int index)
+{
+    if (index >= 0 && index < static_cast<int>(items_.size()) && items_[index].action)
+    {
+        items_[index].action(items_[index].ud);
+    }
+}
+
+void ContextMenuModule::quit()
+{
+    if (events_)
+    {
+        events_->PushQuitEvent();
     }
 }
 

@@ -8,8 +8,8 @@
 #     FrameLiftSdk points at the packaged include/ + src/; no host target exists, so
 #     packages land in <build>/packages.
 #
-# The public SDK target (FrameLiftSdk) is dependency-clean: it exposes only the SDK
-# include path. No imgui/spdlog/stb/json — the host owns those.
+# The public SDK target exposes the SDK include path and Qt Core/QML/Quick. The host
+# still owns spdlog, stb, FFmpeg, and other implementation dependencies.
 
 if (NOT DEFINED FRAMELIFT_SDK_STANDALONE)
     set(FRAMELIFT_SDK_STANDALONE OFF)
@@ -35,15 +35,15 @@ list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "FRAMELIFT_MODULE_ENTRY" "FRAMELIFT_PACKAG
 
 # QPluginLoader + Q_PLUGIN_METADATA pull in QtCore. The SDK is no longer dependency-free
 # (the historical imgui/spdlog/stb/json-free rule); plugins build against Qt6::Core.
-if (NOT TARGET Qt6::Core)
-    find_package(Qt6 REQUIRED COMPONENTS Core)
+if (NOT TARGET Qt6::Quick)
+    find_package(Qt6 REQUIRED COMPONENTS Core Qml Quick QuickControls2)
 endif ()
 
 # ── Public plugin SDK (headers + QtCore) ──────────────────────────────────────
 if (NOT TARGET FrameLiftSdk)
     add_library(FrameLiftSdk INTERFACE)
     target_include_directories(FrameLiftSdk INTERFACE "${_framelift_sdk_include}")
-    target_link_libraries(FrameLiftSdk INTERFACE Qt6::Core)
+    target_link_libraries(FrameLiftSdk INTERFACE Qt6::Core Qt6::Qml Qt6::Quick Qt6::QuickControls2)
     if (NOT FRAMELIFT_SDK_STANDALONE)
         # In-tree plugins (Overlay, Updater) consume the generated Version.h.
         target_include_directories(FrameLiftSdk INTERFACE "${CMAKE_BINARY_DIR}")
@@ -62,10 +62,12 @@ set(FRAMELIFT_SDK_SOURCES
         "${_framelift_sdk_src}/KeyNames.cpp"
 )
 
-# ── Helper: add_framelift_plugin(NAME PLUGIN_JSON <file> src1 src2 ...) ─────────────
+# ── Helper: add_framelift_plugin(NAME PLUGIN_JSON <file>
+#                                  QML_URI <uri> QML_ENTRY <file>
+#                                  QML_FILES <files...> src1 src2 ...) ─────────
 # Creates a SHARED plugin library that links the SDK and outputs into packages/.
 function(add_framelift_plugin NAME)
-    cmake_parse_arguments(_FL_PLUGIN "" "PLUGIN_JSON" "" ${ARGN})
+    cmake_parse_arguments(_FL_PLUGIN "" "PLUGIN_JSON;QML_URI;QML_ENTRY" "QML_FILES" ${ARGN})
     if (NOT _FL_PLUGIN_PLUGIN_JSON)
         message(FATAL_ERROR "add_framelift_plugin(${NAME}) requires PLUGIN_JSON <file>")
     endif ()
@@ -107,6 +109,34 @@ function(add_framelift_plugin NAME)
             # generated IPackage factory only uses the Q_* macros, so plugins keep their
             # identifiers and never touch the bare keywords.
             QT_NO_KEYWORDS)
+    if (_FL_PLUGIN_QML_ENTRY)
+        if (NOT _FL_PLUGIN_QML_URI)
+            set(_FL_PLUGIN_QML_URI "FrameLift.Plugins.${NAME}")
+        endif ()
+        list(APPEND _FL_PLUGIN_QML_FILES "${_FL_PLUGIN_QML_ENTRY}")
+        list(REMOVE_DUPLICATES _FL_PLUGIN_QML_FILES)
+        foreach (_framelift_qml_file IN LISTS _FL_PLUGIN_QML_FILES)
+            get_filename_component(_framelift_qml_alias "${_framelift_qml_file}" NAME)
+            set_source_files_properties(
+                    "${_framelift_qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${_framelift_qml_alias}")
+        endforeach ()
+        string(REPLACE "." "/" _framelift_qml_uri_path "${_FL_PLUGIN_QML_URI}")
+        get_filename_component(_framelift_qml_entry_name "${_FL_PLUGIN_QML_ENTRY}" NAME)
+        target_compile_definitions(
+                ${NAME} PRIVATE
+                FRAMELIFT_QML_ENTRY_URL="qrc:/qt/qml/${_framelift_qml_uri_path}/${_framelift_qml_entry_name}")
+        qt_add_qml_module(
+                ${NAME}
+                URI "${_FL_PLUGIN_QML_URI}"
+                VERSION 1.0
+                RESOURCE_PREFIX "/qt/qml"
+                IMPORT_PATH "${CMAKE_BINARY_DIR}"
+                OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${_framelift_qml_uri_path}"
+                NO_PLUGIN
+                QML_FILES ${_FL_PLUGIN_QML_FILES})
+    else ()
+        target_compile_definitions(${NAME} PRIVATE FRAMELIFT_QML_ENTRY_URL=nullptr)
+    endif ()
     # CMAKE_CURRENT_BINARY_DIR holds the generated metadata JSON; on the target's include
     # path so moc resolves Q_PLUGIN_METADATA(... FILE "<NAME>PackageMetadata.json").
     target_include_directories(${NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")

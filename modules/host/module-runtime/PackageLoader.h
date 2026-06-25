@@ -1,7 +1,6 @@
 #pragma once
 #include "PackageMetadata.h"
 #include <framelift/IModule.h>
-#include <framelift/IRenderable.h>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -9,6 +8,7 @@
 
 class IPackage;
 class QPluginLoader;
+class QObject;
 
 // Loads every package DLL present in a directory. A package is a Qt plugin: its root
 // object is a QObject implementing IPackage (see sdk/include/framelift/IPackage.h),
@@ -24,18 +24,19 @@ public:
     {
         std::string moduleId;
         IModule* module;
-        IRenderable* renderable; // may be nullptr
+        QObject* viewModel; // may be nullptr
+        std::string qmlEntryUrl;
         int renderOrder;
     };
 
     struct LoadedPackage
     {
-        std::string name;       // package id / enabled-list entry
-        std::string moduleFile; // shipped package binary filename.
+        std::string name;                      // package id / enabled-list entry
+        std::string moduleFile;                // shipped package binary filename.
         std::unique_ptr<QPluginLoader> loader; // owns the plugin's root IPackage instance
-        IPackage* package;      // qobject_cast<IPackage*>(loader->instance())
-        PackageMetadata meta;   // owned copy of the embedded metadata
-        std::vector<LoadedModule> modules; // every module instantiated from this package
+        IPackage* package;                     // qobject_cast<IPackage*>(loader->instance())
+        PackageMetadata meta;                  // owned copy of the embedded metadata
+        std::vector<LoadedModule> modules;     // every module instantiated from this package
     };
 
     // Module identity copied out of a present-but-not-loaded package's metadata, so

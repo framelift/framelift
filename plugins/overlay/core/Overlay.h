@@ -4,6 +4,7 @@
 #include <framelift/platform.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QObject>
 #include <memory>
 #include <string>
 
@@ -16,8 +17,18 @@
 // Uses GetBackgroundDrawList() for the idle gradient so panels still render
 // on top, and GetForegroundDrawList() for the HUD so it sits above panels.
 // Route every MediaEvent through HandleMediaEvent().
-class Overlay final : public SafeRenderable, public ModuleBase
+class Overlay final : public QObject, public SafeRenderable, public ModuleBase
 {
+    Q_OBJECT
+    Q_PROPERTY(bool idle READ IsIdle NOTIFY playbackStateChanged)
+    Q_PROPERTY(bool paused READ IsPaused NOTIFY playbackStateChanged)
+    Q_PROPERTY(double position READ Position NOTIFY playbackPositionChanged)
+    Q_PROPERTY(double duration READ Duration NOTIFY playbackPositionChanged)
+    Q_PROPERTY(QString commandLabel READ CommandLabel NOTIFY commandShown)
+    Q_PROPERTY(bool settingsOpen READ SettingsOpen NOTIFY layoutChanged)
+    Q_PROPERTY(qreal leftInset READ LeftInset NOTIFY layoutChanged)
+    Q_PROPERTY(qreal rightInset READ RightInset NOTIFY layoutChanged)
+
 public:
     Overlay() = default;
 
@@ -29,6 +40,44 @@ public:
     {
         return isIdle_;
     }
+
+    [[nodiscard]] bool IsPaused() const noexcept
+    {
+        return isPaused_;
+    }
+
+    [[nodiscard]] double Position() const noexcept
+    {
+        return timePos_;
+    }
+
+    [[nodiscard]] double Duration() const noexcept
+    {
+        return duration_;
+    }
+
+    [[nodiscard]] QString CommandLabel() const
+    {
+        return QString::fromStdString(commandLabel_);
+    }
+
+    [[nodiscard]] bool SettingsOpen() const noexcept
+    {
+        return settingsOpen_;
+    }
+
+    [[nodiscard]] qreal LeftInset() const noexcept
+    {
+        return leftInset_;
+    }
+
+    [[nodiscard]] qreal RightInset() const noexcept
+    {
+        return rightInset_;
+    }
+
+    Q_INVOKABLE void togglePause();
+    Q_INVOKABLE void seek(double seconds);
 
     bool HandleEvent(const AppEvent& e) override;
     void HandleMediaEvent(const MediaEvent& event) override;
@@ -43,14 +92,20 @@ protected:
 
     void OnInstall(IModuleContext& ctx) override;
 
+Q_SIGNALS:
+    void playbackStateChanged();
+    void playbackPositionChanged();
+    void commandShown();
+    void layoutChanged();
+
 private:
     // Draw the seek bar and playback controls centred at the bottom of the window.
     void RenderControlsBar(float w, float h, UIContext& ctx);
 
-    IMediaPlayback* playback_ = nullptr;     // transport (pause/seek), from ctx_ in OnInstall()
-    IMediaProperties* props_ = nullptr;      // property observation, from ctx_ in OnInstall()
-    uintptr_t iconTex_ = 0;          // GPU handle for the icon texture (0 = not loaded)
-    bool iconLoadAttempted_ = false; // prevents repeated load attempts after failure
+    IMediaPlayback* playback_ = nullptr; // transport (pause/seek), from ctx_ in OnInstall()
+    IMediaProperties* props_ = nullptr;  // property observation, from ctx_ in OnInstall()
+    uintptr_t iconTex_ = 0;              // GPU handle for the icon texture (0 = not loaded)
+    bool iconLoadAttempted_ = false;     // prevents repeated load attempts after failure
 
     bool isIdle_ = true; // true when no file is loaded (player is in idle state)
     bool isPaused_ = false;
@@ -73,6 +128,8 @@ private:
     bool isDraggingSeek_ = false; // true while the user drags the seek bar thumb
 };
 
-FRAMELIFT_MODULE_ENTRY(Overlay, {
-    .renderOrder = 0,
-})
+FRAMELIFT_MODULE_ENTRY(
+    Overlay, {
+                 .renderOrder = 0,
+             }
+)

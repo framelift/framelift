@@ -3,10 +3,13 @@
 #include <framelift/core.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QObject>
 #include <atomic>
 #include <cstdint>
 #include <string>
 #include <thread>
+
+class QTimer;
 
 class IJson;
 
@@ -24,8 +27,13 @@ enum class UpdaterState : std::uint8_t
 };
 
 // Call ApplyUpdate() just before app exit to swap all binaries into place.
-class Updater final : public ModuleBase, public SafeRenderable
+class Updater final : public QObject, public ModuleBase, public SafeRenderable
 {
+    Q_OBJECT
+    Q_PROPERTY(QString statusText READ StatusText NOTIFY changed)
+    Q_PROPERTY(int state READ StateValue NOTIFY changed)
+    Q_PROPERTY(bool autoUpdate READ AutoUpdate WRITE SetAutoUpdate NOTIFY changed)
+
 public:
     ~Updater() override;
 
@@ -40,6 +48,29 @@ public:
 
     // Trigger a new version check; no-op if already in progress.
     void CheckNow() noexcept;
+    [[nodiscard]] QString StatusText() const;
+
+    [[nodiscard]] int StateValue() const
+    {
+        return static_cast<int>(state_.load());
+    }
+
+    [[nodiscard]] bool AutoUpdate() const
+    {
+        return autoUpdate_;
+    }
+
+    void SetAutoUpdate(bool value)
+    {
+        autoUpdate_ = value;
+        Q_EMIT changed();
+    }
+
+    Q_INVOKABLE void checkNow()
+    {
+        CheckNow();
+        Q_EMIT changed();
+    }
 
     // Write a replacement batch script and launch it; call just before app exit.
     void ApplyUpdate() const;
@@ -56,6 +87,9 @@ protected:
     void OnInstall(IModuleContext& ctx) override;
     void RenderSettings(UIContext& ctx) override;
 
+Q_SIGNALS:
+    void changed();
+
 private:
     void RunWorker();
 
@@ -65,8 +99,11 @@ private:
     IJson* json_ = nullptr; // host JSON service for parsing the release response
 
     bool autoUpdate_ = true;
+    QTimer* stateTimer_ = nullptr;
 };
 
-FRAMELIFT_MODULE_ENTRY(Updater, {
-    .renderOrder = 40,
-})
+FRAMELIFT_MODULE_ENTRY(
+    Updater, {
+                 .renderOrder = 40,
+             }
+)

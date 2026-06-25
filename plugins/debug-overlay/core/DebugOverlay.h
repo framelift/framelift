@@ -3,9 +3,12 @@
 #include <framelift/core.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QObject>
 #include <chrono>
 #include <cstdint>
 #include <string>
+
+class QTimer;
 
 // Debug statistics overlay (Tab to toggle).
 // Displays live player stats — file, title, position, video dims, HwDec, cache,
@@ -13,8 +16,12 @@
 // dark semi-transparent panel anchored to the top-left corner.
 // Polled stats refresh once per second; push-observed stats (pause, position)
 // update every frame via OnMediaEvent.
-class DebugOverlay final : public SafeRenderable, public ModuleBase
+class DebugOverlay final : public QObject, public SafeRenderable, public ModuleBase
 {
+    Q_OBJECT
+    Q_PROPERTY(bool open READ IsOpen NOTIFY changed)
+    Q_PROPERTY(QString summary READ Summary NOTIFY changed)
+
 public:
     const char* ModuleName() const override
     {
@@ -24,6 +31,17 @@ public:
     void Toggle()
     {
         open_ = !open_;
+        Q_EMIT changed();
+    }
+
+    [[nodiscard]] QString Summary() const;
+
+    Q_INVOKABLE void close()
+    {
+        if (open_)
+        {
+            Toggle();
+        }
     }
 
     [[nodiscard]] bool IsOpen() const
@@ -38,6 +56,9 @@ public:
 protected:
     std::vector<framelift::Keybind> Keybinds() override;
     void OnInstall(IModuleContext& ctx) override;
+
+Q_SIGNALS:
+    void changed();
 
 private:
     void RequestRefresh();
@@ -66,8 +87,11 @@ private:
 
     std::chrono::steady_clock::time_point lastRefresh_{};
     static constexpr double refreshInterval = 1.0; // seconds
+    QTimer* refreshTimer_ = nullptr;
 };
 
-FRAMELIFT_MODULE_ENTRY(DebugOverlay, {
-    .renderOrder = 60,
-})
+FRAMELIFT_MODULE_ENTRY(
+    DebugOverlay, {
+                      .renderOrder = 60,
+                  }
+)

@@ -9,13 +9,14 @@
 #include <framelift/core.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QVariantMap>
 #include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <ctime>
 #include <filesystem>
-#include <fstream>
 #include <framelift/JsonHelpers.h>
+#include <fstream>
 #include <iterator>
 #include <numeric>
 #include <thread>
@@ -77,9 +78,9 @@ std::vector<framelift::Keybind> History::Keybinds()
 {
     return {
         {"Toggle history", "toggleHistory", &toggleHistoryKey_, "H", [this]
-        {
-            Toggle();
-        }}
+         {
+             togglePanel();
+         }}
     };
 }
 
@@ -235,6 +236,7 @@ void History::Clear()
     searchQuery_.clear();
     filteredIndices_.clear();
     Save();
+    Q_EMIT historyChanged();
 }
 
 void History::RebuildFilter()
@@ -287,6 +289,7 @@ void History::RebuildFilter()
     {
         cursor_ = static_cast<int>(filteredIndices_.size()) - 1;
     }
+    Q_EMIT historyChanged();
 }
 
 void History::Save() const noexcept
@@ -410,6 +413,7 @@ void History::AddEntry(const char* path) noexcept
 
     RebuildFilter();
     Save();
+    Q_EMIT historyChanged();
 }
 
 void History::UpdateResumePos(const char* path, const double pos) noexcept
@@ -424,6 +428,7 @@ void History::UpdateResumePos(const char* path, const double pos) noexcept
         {
             e.resumePos = pos;
             FormatEntry(e); // refresh cached meta string with the new position
+            Q_EMIT historyChanged();
             return;
         }
     }
@@ -457,6 +462,7 @@ void History::CursorUp()
     if (cursor_ - 1 >= 0)
     {
         cursor_ -= 1;
+        Q_EMIT historyChanged();
     }
 }
 
@@ -471,6 +477,7 @@ void History::CursorDown()
     if (cursor_ + 1 < n)
     {
         cursor_ += 1;
+        Q_EMIT historyChanged();
     }
 }
 
@@ -479,6 +486,60 @@ void History::ConfirmCursor() const
     if (cursor_ >= 0 && cursor_ < static_cast<int>(filteredIndices_.size()))
     {
         ctx_->Publish<OpenFileRequestEvent>({entries_[filteredIndices_[cursor_]].path.c_str()});
+    }
+}
+
+void History::SetSearch(const QString& value)
+{
+    const std::string next = value.toStdString();
+    if (next == searchQuery_)
+    {
+        return;
+    }
+    searchQuery_ = next;
+    RebuildFilter();
+    cursor_ = filteredIndices_.empty() ? -1 : 0;
+}
+
+QVariantList History::QmlEntries() const
+{
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(filteredIndices_.size()));
+    for (int i = 0; i < static_cast<int>(filteredIndices_.size()); ++i)
+    {
+        const Entry& entry = entries_[filteredIndices_[i]];
+        QVariantMap row;
+        row.insert(QStringLiteral("label"), QString::fromStdString(entry.label));
+        row.insert(QStringLiteral("directory"), QString::fromStdString(entry.dir));
+        row.insert(QStringLiteral("meta"), QString::fromStdString(entry.meta));
+        row.insert(QStringLiteral("selected"), i == cursor_);
+        result.push_back(row);
+    }
+    return result;
+}
+
+void History::togglePanel()
+{
+    Toggle();
+    Q_EMIT panelStateChanged();
+}
+
+void History::activateIndex(const int filteredIndex)
+{
+    if (filteredIndex < 0 || filteredIndex >= static_cast<int>(filteredIndices_.size()))
+    {
+        return;
+    }
+    cursor_ = filteredIndex;
+    Q_EMIT historyChanged();
+    ConfirmCursor();
+}
+
+void History::publishVisibleWidth(const qreal width)
+{
+    if (ctx_)
+    {
+        ctx_->Publish<PanelLayoutEvent>({1, static_cast<float>(width)});
     }
 }
 

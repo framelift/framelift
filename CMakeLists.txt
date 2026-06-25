@@ -8,9 +8,8 @@ project(FrameLift VERSION ${FRAMELIFT_VERSION} LANGUAGES C CXX)
 # Forced OFF during the Qt migration (the test targets reference SDL/ImGui-era headers).
 option(FRAMELIFT_BUILD_TESTS "Build the unit tests (tests/)" OFF)
 
-# Build the runtime plugin package DLLs in plugins/. Phase 2 re-enabled this: plugins
-# load via Qt's QPluginLoader (IPackage + Q_PLUGIN_METADATA). Plugin UI (Render) is not
-# yet driven by the host — that lands with the QML UI step.
+# Build runtime plugin package DLLs in plugins/. Packages load through QPluginLoader
+# and embed their Qt Quick surfaces as QML modules.
 option(FRAMELIFT_BUILD_PLUGINS "Build the plugin package DLLs (plugins/)" ON)
 
 # Display string shown in the UI; defaults to the numeric version for local/release builds.
@@ -40,7 +39,7 @@ find_package(OpenGL REQUIRED)
 # Multimedia provides QAudioSink (replacing the SDL3 audio device). Widgets
 # provides the native QFileDialog open-file picker (replacing SDL_ShowOpenFileDialog).
 # AUTOMOC is required for the Q_OBJECT types in the window-qt module.
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Multimedia Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Multimedia Widgets)
 set(CMAKE_AUTOMOC ON)
 
 # ── Host third-party dependencies (spdlog/stb — NOT in the SDK) ───────────────
@@ -100,8 +99,8 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/FontData.h"
         "inline constexpr unsigned int kDefaultFontDataSize = sizeof(kDefaultFontData);\n")
 
 # ── Public plugin SDK ────────────────────────────────────────────────────────
-# Defines the dependency-clean FrameLiftSdk target (headers only), the
-# add_FrameLift_plugin() macro, and FRAMELIFT_SDK_SOURCES. This same module ships inside
+# Defines FrameLiftSdk (headers + Qt), add_framelift_plugin(), and helper sources.
+# This same module ships inside
 # the SDK package and is loaded by FrameLiftSdkConfig.cmake for standalone builds.
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftSdk.cmake")
 
@@ -117,6 +116,23 @@ if (WIN32)
 endif ()
 
 add_executable(FrameLift ${FRAMELIFT_SOURCES} ${FRAMELIFT_SDK_SOURCES})
+set_source_files_properties(
+        qml/FrameLift/Controls/Theme.qml
+        PROPERTIES QT_RESOURCE_ALIAS Theme.qml QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/FrameLift/Controls/GlassPanel.qml PROPERTIES QT_RESOURCE_ALIAS GlassPanel.qml)
+set_source_files_properties(qml/FrameLift/Controls/ActionButton.qml PROPERTIES QT_RESOURCE_ALIAS ActionButton.qml)
+set_source_files_properties(qml/FrameLift/Controls/Drawer.qml PROPERTIES QT_RESOURCE_ALIAS Drawer.qml)
+qt_add_qml_module(
+        FrameLift
+        URI FrameLift.Controls
+        VERSION 1.0
+        RESOURCE_PREFIX "/qt/qml"
+        NO_PLUGIN
+        QML_FILES
+        qml/FrameLift/Controls/Theme.qml
+        qml/FrameLift/Controls/GlassPanel.qml
+        qml/FrameLift/Controls/ActionButton.qml
+        qml/FrameLift/Controls/Drawer.qml)
 framelift_apply_builtin_module_definitions(FrameLift)
 
 set_target_properties(FrameLift PROPERTIES
@@ -138,7 +154,7 @@ target_include_directories(FrameLift PRIVATE
         ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS})
 target_link_libraries(FrameLift PRIVATE
         FrameLiftSdk OpenGL::GL
-        Qt6::Core Qt6::Gui Qt6::Quick Qt6::Multimedia Qt6::Widgets
+        Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Widgets
         spdlog::spdlog)
 
 # Vulkan graphics backend (OpenGL→Vulkan migration, #17). volk is the meta-loader

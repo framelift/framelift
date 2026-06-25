@@ -4,6 +4,9 @@
 #include <framelift/services.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QObject>
+#include <QtCore/QVariant>
+#include <QtCore/QVariantList>
 #include <array>
 #include <cstdint>
 #include <string>
@@ -31,14 +34,17 @@ public:
     {
         return bools_[key];
     }
+
     int& Int(const std::string& key)
     {
         return ints_[key];
     }
+
     float& Float(const std::string& key)
     {
         return floats_[key];
     }
+
     std::string& Str(const std::string& key)
     {
         return strings_[key];
@@ -53,8 +59,15 @@ private:
 
 // ── Settings dialog ───────────────────────────────────────────────────────────
 // Centered modal-like ImGui window. Call Open() to show; renders while open.
-class SettingsMenu final : public SafeRenderable, public ModuleBase
+class SettingsMenu final : public QObject, public SafeRenderable, public ModuleBase
 {
+    Q_OBJECT
+    Q_PROPERTY(bool open READ IsOpen NOTIFY qmlChanged)
+    Q_PROPERTY(bool dirty READ Dirty NOTIFY qmlChanged)
+    Q_PROPERTY(QStringList pages READ QmlPages NOTIFY qmlChanged)
+    Q_PROPERTY(QString activePage READ ActivePage WRITE SetActivePage NOTIFY qmlChanged)
+    Q_PROPERTY(QVariantList activeFields READ QmlFields NOTIFY qmlChanged)
+
 public:
     bool HandleKeyDownEvent(const AppEvent& e) override;
 
@@ -71,19 +84,55 @@ public:
         return open_;
     }
 
+    [[nodiscard]] bool Dirty() const noexcept
+    {
+        return dirty_;
+    }
+
+    [[nodiscard]] QStringList QmlPages() const;
+
+    [[nodiscard]] QString ActivePage() const
+    {
+        return QString::fromStdString(qmlActivePage_);
+    }
+
+    void SetActivePage(const QString& page);
+    [[nodiscard]] QVariantList QmlFields();
+    Q_INVOKABLE void setFieldValue(const QString& key, const QVariant& value);
+
+    Q_INVOKABLE void saveQml()
+    {
+        Save();
+        Q_EMIT qmlChanged();
+    }
+
+    Q_INVOKABLE void resetAllQml()
+    {
+        Reset();
+        Q_EMIT qmlChanged();
+    }
+
+    Q_INVOKABLE void closeQml()
+    {
+        Close();
+    }
+
     // Read the current edited value for a "section.name" key. Used by tests.
     [[nodiscard]] bool SettingBool(const std::string& key)
     {
         return model_.Bool(key);
     }
+
     [[nodiscard]] int SettingInt(const std::string& key)
     {
         return model_.Int(key);
     }
+
     [[nodiscard]] float SettingFloat(const std::string& key)
     {
         return model_.Float(key);
     }
+
     [[nodiscard]] std::string SettingString(const std::string& key)
     {
         return model_.Str(key);
@@ -99,6 +148,9 @@ protected:
 
     std::vector<framelift::Keybind> Keybinds() override;
     void OnInstall(IModuleContext& ctx) override;
+
+Q_SIGNALS:
+    void qmlChanged();
 
 private:
     // ── Core pages ──────────────────────────────────────────────────────────────
@@ -136,14 +188,17 @@ private:
     {
         return ctx_ ? ctx_->GetService<ISettingsStore>() : nullptr;
     }
+
     [[nodiscard]] ISettingsRegistry* SettingsReg() const
     {
         return ctx_ ? ctx_->GetService<ISettingsRegistry>() : nullptr;
     }
+
     [[nodiscard]] IPackageCatalog* PackageCatalog() const
     {
         return ctx_ ? ctx_->GetService<IPackageCatalog>() : nullptr;
     }
+
     [[nodiscard]] IFontCatalog* FontCatalog() const
     {
         return ctx_ ? ctx_->GetService<IFontCatalog>() : nullptr;
@@ -206,6 +261,7 @@ private:
     // live edited values keyed by "section.name".
     std::vector<FieldMeta> fields_;
     EditModel model_;
+    std::string qmlActivePage_ = "general";
 
     // ── Raw config editor (Config page) ─────────────────────────────────────────
     std::string configPath_;       // absolute settings.ini path, resolved from the host
@@ -234,6 +290,8 @@ private:
     [[nodiscard]] std::string FindKeyOwnerLabel(const std::string& canonicalKey, const char* exceptAction);
 };
 
-FRAMELIFT_MODULE_ENTRY(SettingsMenu, {
-    .renderOrder = 50,
-})
+FRAMELIFT_MODULE_ENTRY(
+    SettingsMenu, {
+                      .renderOrder = 50,
+                  }
+)

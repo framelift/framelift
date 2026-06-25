@@ -10,6 +10,7 @@
 #include <framelift/platform.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QVariantMap>
 #include <algorithm>
 #include <filesystem>
 #include <numeric>
@@ -110,7 +111,7 @@ std::vector<framelift::Keybind> Playlist::Keybinds()
         {"Toggle playlist", "togglePlaylist", &togglePlaylistKey_, "L",
          [this]
          {
-             Toggle();
+             togglePanel();
          }},
         {"Next track", "nextTrack", &nextTrackKey_, "Ctrl+Right",
          [this]
@@ -136,9 +137,9 @@ std::vector<framelift::Keybind> Playlist::Keybinds()
              Reload();
          }},
         {"Toggle shuffle", "toggleShuffle", &toggleShuffleKey_, "Shift+S", [this]
-        {
-            ToggleShuffle();
-        }}
+         {
+             ToggleShuffle();
+         }}
     };
 }
 
@@ -203,7 +204,7 @@ void Playlist::OnInstall(IModuleContext& ctx)
                     m, "Playlist", "togglePlaylist",
                     [this]
                     {
-                        Toggle();
+                        togglePanel();
                     }
                 );
             }
@@ -508,6 +509,7 @@ void Playlist::AddFile(std::string path)
 {
     auto label = FilenameOf(path);
     entries_.emplace_back(std::move(path), std::move(label));
+    Q_EMIT playlistChanged();
 }
 
 void Playlist::AddFiles(const std::vector<std::string>& paths)
@@ -524,6 +526,7 @@ void Playlist::Clear()
     entries_.clear();
     current_ = -1;
     cursor_ = -1;
+    Q_EMIT playlistChanged();
 }
 
 void Playlist::Activate(const int index)
@@ -534,6 +537,7 @@ void Playlist::Activate(const int index)
     }
     current_ = index;
     LoadFile(entries_[current_].path.c_str());
+    Q_EMIT playlistChanged();
 }
 
 void Playlist::Next()
@@ -626,12 +630,12 @@ void Playlist::RebuildEntries(std::vector<std::string>& files, const std::string
 
     // Ensure the file to keep stays in the list even if it wasn't scanned.
     const bool keepFound = !keepPath.empty() && std::ranges::any_of(
-                               entries_,
-                               [&](const Entry& e)
-                               {
-                                   return e.path == keepPath;
-                               }
-                           );
+                                                    entries_,
+                                                    [&](const Entry& e)
+                                                    {
+                                                        return e.path == keepPath;
+                                                    }
+                                                );
     if (!keepPath.empty() && !keepFound)
     {
         AddFile(keepPath);
@@ -653,6 +657,7 @@ void Playlist::RebuildEntries(std::vector<std::string>& files, const std::string
         sortedEntries_ = entries_; // refresh backup with the newly scanned sorted list
         ApplyShuffleToEntries();
     }
+    Q_EMIT playlistChanged();
 }
 
 void Playlist::ToggleShuffle()
@@ -682,6 +687,7 @@ void Playlist::ToggleShuffle()
         }
         cursor_ = current_;
     }
+    Q_EMIT playlistChanged();
 }
 
 void Playlist::ApplyShuffleToEntries()
@@ -721,6 +727,7 @@ void Playlist::ApplyShuffleToEntries()
 void Playlist::OnOpened()
 {
     cursor_ = current_ >= 0 ? current_ : 0;
+    Q_EMIT playlistChanged();
 }
 
 void Playlist::CursorUp()
@@ -733,6 +740,7 @@ void Playlist::CursorUp()
     if (cursor_ - 1 >= 0)
     {
         cursor_ -= 1;
+        Q_EMIT playlistChanged();
     }
 }
 
@@ -747,6 +755,7 @@ void Playlist::CursorDown()
     if (cursor_ + 1 < n)
     {
         cursor_ += 1;
+        Q_EMIT playlistChanged();
     }
 }
 
@@ -755,6 +764,41 @@ void Playlist::ConfirmCursor()
     if (cursor_ >= 0 && cursor_ < static_cast<int>(entries_.size()))
     {
         Activate(cursor_);
+    }
+}
+
+QVariantList Playlist::QmlEntries() const
+{
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(entries_.size()));
+    for (int i = 0; i < static_cast<int>(entries_.size()); ++i)
+    {
+        QVariantMap row;
+        row.insert(QStringLiteral("label"), QString::fromStdString(entries_[i].label));
+        row.insert(QStringLiteral("path"), QString::fromStdString(entries_[i].path));
+        row.insert(QStringLiteral("current"), i == current_);
+        row.insert(QStringLiteral("cursor"), i == cursor_);
+        result.push_back(row);
+    }
+    return result;
+}
+
+void Playlist::togglePanel()
+{
+    Toggle();
+    Q_EMIT panelStateChanged();
+}
+
+void Playlist::activateIndex(const int index)
+{
+    Activate(index);
+}
+
+void Playlist::publishVisibleWidth(const qreal width)
+{
+    if (ctx_)
+    {
+        ctx_->Publish<PanelLayoutEvent>({0, static_cast<float>(width)});
     }
 }
 

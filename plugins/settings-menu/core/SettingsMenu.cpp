@@ -1,5 +1,7 @@
 #include "SettingsMenu.h"
 #include "KeybindList.h"
+#include <QtCore/QSet>
+#include <QtCore/QVariantMap>
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
@@ -10,7 +12,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include <cstring>
 
 #include "Version.h"
 #include <IGraphicsBackend.h>
@@ -163,6 +164,7 @@ void SettingsMenu::SeedFromContext(IModuleContext& ctx)
         SettingsMenu* self;
         IModuleContext* ctx;
     };
+
     auto* registry = ctx.GetService<ISettingsRegistry>();
     if (!registry)
     {
@@ -281,9 +283,9 @@ bool SettingsMenu::HandleKeyDownEvent(const AppEvent& e)
         return true;
     }
 
-    const std::string cur = capturingBind_         ? *capturingBind_
-                            : capturingGetStr_     ? capturingGetStr_(capturingUd_)
-                                                   : std::string{};
+    const std::string cur = capturingBind_     ? *capturingBind_
+                            : capturingGetStr_ ? capturingGetStr_(capturingUd_)
+                                               : std::string{};
     if (keybinds::Contains(cur, keyStr))
     {
         // Already bound to this same action (either slot) — nothing to do.
@@ -342,12 +344,13 @@ std::string SettingsMenu::FindKeyOwnerLabel(const std::string& canonicalKey, con
         const std::string* except;
         std::string found;
     };
+
     SearchCtx sc{&canonicalKey, &except, {}};
     if (auto* reg = SettingsReg())
     {
         reg->EnumerateKeybindEntries(
-            [](const char* label, const char* actionName, const char* (*getStr)(void*),
-               void (*)(void*, const char*), void* ud, void* pv)
+            [](const char* label, const char* actionName, const char* (*getStr)(void*), void (*)(void*, const char*),
+               void* ud, void* pv)
             {
                 auto& s = *static_cast<SearchCtx*>(pv);
                 if (!s.found.empty() || (actionName && *s.except == actionName))
@@ -396,6 +399,7 @@ void SettingsMenu::Open() noexcept
     {
         ctx_->Publish<SettingsVisibilityEvent>({true});
     }
+    Q_EMIT qmlChanged();
 }
 
 void SettingsMenu::Close() noexcept
@@ -414,6 +418,105 @@ void SettingsMenu::Close() noexcept
     {
         ctx_->Publish<SettingsVisibilityEvent>({false});
     }
+    Q_EMIT qmlChanged();
+}
+
+QStringList SettingsMenu::QmlPages() const
+{
+    QStringList result;
+    QSet<QString> seen;
+    for (const FieldMeta& field : fields_)
+    {
+        const auto dot = field.key.find('.');
+        const QString section = QString::fromStdString(field.key.substr(0, dot));
+        if (!seen.contains(section))
+        {
+            seen.insert(section);
+            result.push_back(section);
+        }
+    }
+    return result;
+}
+
+void SettingsMenu::SetActivePage(const QString& page)
+{
+    const std::string next = page.toStdString();
+    if (next != qmlActivePage_)
+    {
+        qmlActivePage_ = next;
+        Q_EMIT qmlChanged();
+    }
+}
+
+QVariantList SettingsMenu::QmlFields()
+{
+    QVariantList result;
+    const std::string prefix = qmlActivePage_ + ".";
+    for (const FieldMeta& field : fields_)
+    {
+        if (!field.key.starts_with(prefix))
+        {
+            continue;
+        }
+        QVariantMap row;
+        row.insert(QStringLiteral("key"), QString::fromStdString(field.key));
+        row.insert(QStringLiteral("label"), QString::fromStdString(field.key.substr(prefix.size())));
+        row.insert(QStringLiteral("type"), field.type);
+        switch (field.type)
+        {
+        case 0:
+            row.insert(QStringLiteral("value"), model_.Bool(field.key));
+            break;
+        case 1:
+            row.insert(QStringLiteral("value"), model_.Int(field.key));
+            break;
+        case 2:
+            row.insert(QStringLiteral("value"), model_.Float(field.key));
+            break;
+        case 3:
+            row.insert(QStringLiteral("value"), QString::fromStdString(model_.Str(field.key)));
+            break;
+        default:
+            break;
+        }
+        result.push_back(row);
+    }
+    return result;
+}
+
+void SettingsMenu::setFieldValue(const QString& key, const QVariant& value)
+{
+    const std::string fieldKey = key.toStdString();
+    const auto it = std::ranges::find_if(
+        fields_,
+        [&](const FieldMeta& field)
+        {
+            return field.key == fieldKey;
+        }
+    );
+    if (it == fields_.end())
+    {
+        return;
+    }
+    switch (it->type)
+    {
+    case 0:
+        model_.Bool(fieldKey) = value.toBool();
+        break;
+    case 1:
+        model_.Int(fieldKey) = value.toInt();
+        break;
+    case 2:
+        model_.Float(fieldKey) = value.toFloat();
+        break;
+    case 3:
+        model_.Str(fieldKey) = value.toString().toStdString();
+        break;
+    default:
+        return;
+    }
+    dirty_ = true;
+    Q_EMIT qmlChanged();
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────────────
@@ -460,6 +563,7 @@ void SettingsMenu::Save()
         }
     }
     SettingsStore()->SaveSettings();
+    Q_EMIT qmlChanged();
 }
 
 void SettingsMenu::ResetValue(const FieldMeta& f)
@@ -504,6 +608,7 @@ void SettingsMenu::Reset()
         ResetValue(f);
     }
     dirty_ = true;
+    Q_EMIT qmlChanged();
 }
 
 const char* SettingsMenu::PageName() const
@@ -656,7 +761,8 @@ void SettingsMenu::RenderPageGraphics(UIContext& ctx)
 
 #if FRAMELIFT_MODULE_GRAPHICS_VULKAN
     // backend stores "vulkan" or "gl"; map to/from the combo index.
-    const bool isVulkan = model_.Str("graphics.backend") == "vulkan" || model_.Str("graphics.backend") == "vk" || model_.Str("graphics.backend") == "Vulkan";
+    const bool isVulkan = model_.Str("graphics.backend") == "vulkan" || model_.Str("graphics.backend") == "vk" ||
+                          model_.Str("graphics.backend") == "Vulkan";
     const char* const items[] = {"Vulkan", "OpenGL"};
     int idx = isVulkan ? 0 : 1;
     if (Widgets::Combo(
@@ -793,8 +899,8 @@ void SettingsMenu::RenderPageSubtitles(UIContext& ctx)
         families.push_back(fontNames_[i].c_str());
     }
     if (Widgets::Combo(
-            ctx, "Font", "Font family for subtitles. Default keeps the font chosen by the file.",
-            families.data(), static_cast<int>(families.size()), familyIdx
+            ctx, "Font", "Font family for subtitles. Default keeps the font chosen by the file.", families.data(),
+            static_cast<int>(families.size()), familyIdx
         ))
     {
         model_.Str("subtitles.fontFamily") = familyIdx == 0 ? "" : fontNames_[familyIdx];
@@ -802,7 +908,8 @@ void SettingsMenu::RenderPageSubtitles(UIContext& ctx)
     }
 
     dirty_ |= Widgets::SliderFloat(
-        ctx, "Font size", "Multiplier applied to the file's subtitle size.", model_.Float("subtitles.fontScale"), 0.5f, 3.0f
+        ctx, "Font size", "Multiplier applied to the file's subtitle size.", model_.Float("subtitles.fontScale"), 0.5f,
+        3.0f
     );
 
     colorRow("Text color", "Primary fill color of the subtitle glyphs.", model_.Str("subtitles.textColor"));
@@ -816,29 +923,37 @@ void SettingsMenu::RenderPageSubtitles(UIContext& ctx)
         model_.Int("subtitles.edgeStyle") = edgeIdx;
         dirty_ = true;
     }
-    dirty_ |= Widgets::SliderFloat(ctx, "Outline width", "Outline / box border thickness in pixels.",
-                                   model_.Float("subtitles.outlineWidth"), 0.f, 6.f);
-    dirty_ |= Widgets::SliderFloat(ctx, "Shadow depth", "Drop-shadow / box offset in pixels.", model_.Float("subtitles.shadowDepth"),
-                                   0.f, 6.f);
+    dirty_ |= Widgets::SliderFloat(
+        ctx, "Outline width", "Outline / box border thickness in pixels.", model_.Float("subtitles.outlineWidth"), 0.f,
+        6.f
+    );
+    dirty_ |= Widgets::SliderFloat(
+        ctx, "Shadow depth", "Drop-shadow / box offset in pixels.", model_.Float("subtitles.shadowDepth"), 0.f, 6.f
+    );
     colorRow("Background color", "Drop-shadow / opaque-box color.", model_.Str("subtitles.backColor"));
-    dirty_ |= Widgets::SliderFloat(ctx, "Background opacity", "Opacity of the shadow / box (0 = transparent).",
-                                   model_.Float("subtitles.backOpacity"), 0.f, 1.f);
+    dirty_ |= Widgets::SliderFloat(
+        ctx, "Background opacity", "Opacity of the shadow / box (0 = transparent).",
+        model_.Float("subtitles.backOpacity"), 0.f, 1.f
+    );
 
     Widgets::SectionHeader(ctx, "Layout");
     // Alignment combo maps the numpad value (1-9) plus a "file default" (0) entry.
-    const char* const alignItems[] = {"File default", "Bottom left", "Bottom center", "Bottom right",
-                                       "Middle left",  "Middle center", "Middle right",
-                                       "Top left",     "Top center",    "Top right"};
-    int alignIdx = (model_.Int("subtitles.alignment") >= 1 && model_.Int("subtitles.alignment") <= 9) ? model_.Int("subtitles.alignment") : 0;
+    const char* const alignItems[] = {"File default",  "Bottom left",  "Bottom center", "Bottom right", "Middle left",
+                                      "Middle center", "Middle right", "Top left",      "Top center",   "Top right"};
+    int alignIdx = (model_.Int("subtitles.alignment") >= 1 && model_.Int("subtitles.alignment") <= 9)
+                       ? model_.Int("subtitles.alignment")
+                       : 0;
     if (Widgets::Combo(ctx, "Alignment", "On-screen position of the subtitles.", alignItems, 10, alignIdx))
     {
         model_.Int("subtitles.alignment") = alignIdx; // 0 = file default, 1-9 = \an position
         dirty_ = true;
     }
-    dirty_ |= Widgets::SliderFloat(ctx, "Line spacing", "Extra space between lines, pixels.", model_.Float("subtitles.lineSpacing"),
-                                   0.f, 30.f);
-    dirty_ |= Widgets::SliderFloat(ctx, "Letter spacing", "Extra space between glyphs, pixels.",
-                                   model_.Float("subtitles.letterSpacing"), 0.f, 20.f);
+    dirty_ |= Widgets::SliderFloat(
+        ctx, "Line spacing", "Extra space between lines, pixels.", model_.Float("subtitles.lineSpacing"), 0.f, 30.f
+    );
+    dirty_ |= Widgets::SliderFloat(
+        ctx, "Letter spacing", "Extra space between glyphs, pixels.", model_.Float("subtitles.letterSpacing"), 0.f, 20.f
+    );
 
     Widgets::SectionHeader(ctx, "Track selection");
     dirty_ |= Widgets::InputText(
@@ -879,8 +994,9 @@ void SettingsMenu::RenderPageUI(UIContext& ctx)
     dirty_ |= Widgets::SliderFloat(
         ctx, "Panel width", "Width of the side panel in pixels.", model_.Float("ui.panelWidth"), 160.f, 600.f
     );
-    dirty_ |=
-        Widgets::SliderFloat(ctx, "Slide speed", "How fast the panel slides in/out.", model_.Float("ui.slideSpeed"), 1.f, 50.f);
+    dirty_ |= Widgets::SliderFloat(
+        ctx, "Slide speed", "How fast the panel slides in/out.", model_.Float("ui.slideSpeed"), 1.f, 50.f
+    );
 }
 
 void SettingsMenu::EnsureFontsQueried()
@@ -983,7 +1099,8 @@ void SettingsMenu::RenderPageTheme(UIContext& ctx)
         }
     }
 
-    dirty_ |= Widgets::SliderFloat(ctx, "Font size", "Glyph size in pixels.", model_.Float("theme.fontSize"), 10.f, 28.f);
+    dirty_ |=
+        Widgets::SliderFloat(ctx, "Font size", "Glyph size in pixels.", model_.Float("theme.fontSize"), 10.f, 28.f);
 
     ctx.Dummy({0.f, 6.f});
     ctx.TextDisabled("Theme and font changes apply when you press Save.");
@@ -992,10 +1109,12 @@ void SettingsMenu::RenderPageTheme(UIContext& ctx)
 void SettingsMenu::RenderPageFiles(UIContext& ctx)
 {
     Widgets::SectionHeader(ctx, "File extensions");
-    dirty_ |=
-        Widgets::InputText(ctx, "Video file extensions", "Semicolon-separated, no dots", model_.Str("files.videoExtensions"));
-    dirty_ |=
-        Widgets::InputText(ctx, "Image file extensions", "Semicolon-separated, no dots", model_.Str("files.imageExtensions"));
+    dirty_ |= Widgets::InputText(
+        ctx, "Video file extensions", "Semicolon-separated, no dots", model_.Str("files.videoExtensions")
+    );
+    dirty_ |= Widgets::InputText(
+        ctx, "Image file extensions", "Semicolon-separated, no dots", model_.Str("files.imageExtensions")
+    );
 }
 
 void SettingsMenu::RenderPageAudio(UIContext& ctx)
@@ -1025,6 +1144,7 @@ void SettingsMenu::RenderPageAudio(UIContext& ctx)
             std::string* selected;
             int* selectedIdx;
         };
+
         Devices devices{&deviceNames, &model_.Str("audio.outputDevice"), &deviceIdx};
         player->EnumerateAudioOutputDevices(
             [](const AudioOutputDevice* d, void* ud)
@@ -1068,8 +1188,9 @@ void SettingsMenu::RenderPageAudio(UIContext& ctx)
         }
         dirty_ = true;
     }
-    dirty_ |= Widgets::SliderInt(ctx, "Default volume", "Playback volume applied on startup and Save.",
-                                 model_.Int("audio.defaultVolume"), 0, 100);
+    dirty_ |= Widgets::SliderInt(
+        ctx, "Default volume", "Playback volume applied on startup and Save.", model_.Int("audio.defaultVolume"), 0, 100
+    );
 
     Widgets::SectionHeader(ctx, "Sync");
     dirty_ |= Widgets::SliderInt(
@@ -1091,8 +1212,10 @@ void SettingsMenu::RenderPageAudio(UIContext& ctx)
         ctx, "Enable ducking", "Temporarily reduce playback volume while app notifications are active.",
         model_.Bool("audio.duckingEnabled")
     );
-    dirty_ |= Widgets::SliderInt(ctx, "Ducking level", "Playback gain while ducked, as percent of current volume.",
-                                 model_.Int("audio.duckingLevel"), 0, 100);
+    dirty_ |= Widgets::SliderInt(
+        ctx, "Ducking level", "Playback gain while ducked, as percent of current volume.",
+        model_.Int("audio.duckingLevel"), 0, 100
+    );
 
     Widgets::SectionHeader(ctx, "Audio normalization");
     dirty_ |= Widgets::Checkbox(
@@ -1155,7 +1278,8 @@ void SettingsMenu::RenderPageKeybinds(UIContext& ctx)
             const bool thisCapturing = isCapturing_ && capturingName_ == e.name && capturingSlot_ == slot;
             ctx.PushID(e.name);
             ctx.PushID(slot);
-            const auto action = Widgets::KeybindRow(ctx, slot == 0 ? e.label : "", keybinds::Slot(list, slot), thisCapturing);
+            const auto action =
+                Widgets::KeybindRow(ctx, slot == 0 ? e.label : "", keybinds::Slot(list, slot), thisCapturing);
             ctx.PopID();
             ctx.PopID();
 
@@ -1239,8 +1363,7 @@ void SettingsMenu::RenderPageKeybinds(UIContext& ctx)
                     case Widgets::KeybindAction::CancelCapture:
                         kc.self->SetCapturing(false);
                         break;
-                    case Widgets::KeybindAction::Clear:
-                    {
+                    case Widgets::KeybindAction::Clear: {
                         const std::string next = keybinds::SetSlot(getStr ? getStr(ud) : "", slot, "");
                         if (setStr)
                         {
@@ -1291,6 +1414,7 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
         bool loaded;
         bool loadFailed;
     };
+
     struct PackageRow
     {
         std::string id;
@@ -1301,6 +1425,7 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
         bool loaded;
         std::vector<ModuleRow> modules;
     };
+
     std::vector<PackageRow> packages;
 
     catalog->EnumeratePackages(
@@ -1309,8 +1434,13 @@ void SettingsMenu::RenderPagePlugins(UIContext& ctx)
         {
             auto& out = *static_cast<std::vector<PackageRow>*>(ud);
             out.push_back(
-                {packageId, displayName ? displayName : packageId, publisher ? publisher : "",
-                 description ? description : "", {version[0], version[1], version[2]}, loaded, {}}
+                {packageId,
+                 displayName ? displayName : packageId,
+                 publisher ? publisher : "",
+                 description ? description : "",
+                 {version[0], version[1], version[2]},
+                 loaded,
+                 {}}
             );
         },
         &packages
@@ -1498,7 +1628,7 @@ void SettingsMenu::RenderPageConfig(UIContext& ctx)
                 if (ctx_)
                 {
                     SettingsStore()->ReloadSettings(); // host re-reads the file and re-applies live
-                    SeedFromContext(*ctx_); // refresh the typed pages from the new values
+                    SeedFromContext(*ctx_);            // refresh the typed pages from the new values
                 }
                 LoadConfigText(); // normalize the buffer to exactly what was persisted
             }

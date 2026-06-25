@@ -5,10 +5,13 @@
 
 #include "SysStats.h"
 
+#include <QtCore/QObject>
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <string>
+
+class QTimer;
 
 // Running min/avg/max aggregate over one sampled metric. Folded once per
 // sample while a benchmark run is recording; reset between runs.
@@ -48,8 +51,14 @@ struct Stat
 // results once playback reaches the configured length. Frame timing is sampled
 // every frame; the polled process/player stats refresh once per second; idle
 // state is pushed via OnMediaEvent.
-class Benchmark final : public SafeRenderable, public ModuleBase
+class Benchmark final : public QObject, public SafeRenderable, public ModuleBase
 {
+    Q_OBJECT
+    Q_PROPERTY(bool open READ IsOpen NOTIFY changed)
+    Q_PROPERTY(QString summary READ Summary NOTIFY changed)
+    Q_PROPERTY(bool accumulating READ Accumulating NOTIFY changed)
+    Q_PROPERTY(bool complete READ Complete NOTIFY changed)
+
 public:
     const char* ModuleName() const override
     {
@@ -62,6 +71,30 @@ public:
         if (open_)
         {
             justSeeded_ = true; // seed the window beside the app on this open
+        }
+        Q_EMIT changed();
+    }
+
+    [[nodiscard]] QString Summary() const;
+
+    [[nodiscard]] bool Accumulating() const
+    {
+        return accumulating_;
+    }
+
+    [[nodiscard]] bool Complete() const
+    {
+        return complete_;
+    }
+
+    Q_INVOKABLE void chooseFile();
+    Q_INVOKABLE void resetRun();
+
+    Q_INVOKABLE void close()
+    {
+        if (open_)
+        {
+            Toggle();
         }
     }
 
@@ -79,6 +112,9 @@ protected:
     std::vector<framelift::Keybind> Keybinds() override;
     void OnInstall(IModuleContext& ctx) override;
     void RenderSettings(UIContext& ctx) override;
+
+Q_SIGNALS:
+    void changed();
 
 private:
     void RequestRefresh();
@@ -99,7 +135,7 @@ private:
     int64_t mistimed_ = 0;
 
     // ── Benchmark run state ─────────────────────────────────────────────────────
-    Stat frameStat_;             // UI frame time (ms)
+    Stat frameStat_;               // UI frame time (ms)
     double frameMsSmoothed_ = 0.0; // EMA of frame time for the live fps readout
     Stat cpuStat_;
     Stat memStat_; // bytes
@@ -114,8 +150,12 @@ private:
 
     std::chrono::steady_clock::time_point lastRefresh_{};
     static constexpr double refreshInterval = 1.0; // seconds
+    QTimer* refreshTimer_ = nullptr;
+    std::chrono::steady_clock::time_point lastFrameTick_{};
 };
 
-FRAMELIFT_MODULE_ENTRY(Benchmark, {
-    .renderOrder = 70,
-})
+FRAMELIFT_MODULE_ENTRY(
+    Benchmark, {
+                   .renderOrder = 70,
+               }
+)

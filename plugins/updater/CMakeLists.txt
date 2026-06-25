@@ -1,5 +1,7 @@
 add_framelift_plugin(Updater
         PLUGIN_JSON "${CMAKE_CURRENT_SOURCE_DIR}/Updater.Plugin.json"
+        QML_URI FrameLift.Plugins.Updater
+        QML_ENTRY "${CMAKE_CURRENT_SOURCE_DIR}/core/Updater.qml"
         "${CMAKE_CURRENT_SOURCE_DIR}/core/Updater.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/core/Updater.h"
         ${FRAMELIFT_SDK_SOURCES}

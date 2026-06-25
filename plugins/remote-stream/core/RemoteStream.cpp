@@ -127,8 +127,30 @@ void RemoteStream::OnInstall(IModuleContext& ctx)
         [this](const OpenNetworkStreamRequestEvent&)
         {
             requestOpen_ = true;
+            modalOpen_ = true;
+            Q_EMIT dialogChanged();
         }
     );
+}
+
+void RemoteStream::submit()
+{
+    if (urlInput_.empty() || !ctx_)
+    {
+        return;
+    }
+    ctx_->Publish<OpenFileRequestEvent>({urlInput_.c_str(), false});
+    urlInput_.clear();
+    requestOpen_ = false;
+    modalOpen_ = false;
+    Q_EMIT dialogChanged();
+}
+
+void RemoteStream::cancel()
+{
+    requestOpen_ = false;
+    modalOpen_ = false;
+    Q_EMIT dialogChanged();
 }
 
 void RemoteStream::OnRender(UIContext& ctx)

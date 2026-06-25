@@ -15,7 +15,7 @@
 # enforces the same exact-version match before instantiating a plugin.
 
 include(CMakeFindDependencyMacro)
-find_dependency(Qt6 COMPONENTS Core)
+find_dependency(Qt6 COMPONENTS Core Qml Quick QuickControls2)
 
 set(FRAMELIFT_SDK_STANDALONE ON)
 include("${CMAKE_CURRENT_LIST_DIR}/FrameLiftSdk.cmake")

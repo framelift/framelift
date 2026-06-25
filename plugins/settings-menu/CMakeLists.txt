@@ -1,5 +1,7 @@
 add_framelift_plugin(SettingsMenu
         PLUGIN_JSON "${CMAKE_CURRENT_SOURCE_DIR}/SettingsMenu.Plugin.json"
+        QML_URI FrameLift.Plugins.SettingsMenu
+        QML_ENTRY "${CMAKE_CURRENT_SOURCE_DIR}/core/SettingsMenu.qml"
         "${CMAKE_CURRENT_SOURCE_DIR}/core/SettingsMenu.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/core/SettingsMenu.h"
         "${CMAKE_SOURCE_DIR}/modules/host/settings/Settings.cpp"

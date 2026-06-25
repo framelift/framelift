@@ -4,6 +4,8 @@
 #include <framelift/platform.h>
 #include <framelift/ui.h>
 
+#include <QtCore/QObject>
+#include <QtCore/QVariantList>
 #include <string>
 #include <vector>
 
@@ -15,8 +17,14 @@
 // Quit) are assembled from host services on the first frame — by then every other
 // plugin has installed and registered its section, so the final order is
 // host core items → plugin sections → Quit, matching the former host-built menu.
-class ContextMenuModule final : public ModuleBase, public SafeRenderable, public ContextMenu
+class ContextMenuModule final : public QObject, public ModuleBase, public SafeRenderable, public ContextMenu
 {
+    Q_OBJECT
+    Q_PROPERTY(QVariantList extraItems READ QmlExtraItems NOTIFY menuChanged)
+    Q_PROPERTY(bool muted READ Muted NOTIFY menuChanged)
+    Q_PROPERTY(bool normalizeEnabled READ NormalizeEnabled NOTIFY menuChanged)
+    Q_PROPERTY(bool subtitlesEnabled READ SubtitlesEnabled NOTIFY menuChanged)
+
 public:
     // ── ContextMenu service ABI ────────────────────────────────────────────────
     void AddItemRaw(const char* label, void (*action)(void*), void* ud, void (*cleanup)(void*)) noexcept override;
@@ -39,6 +47,45 @@ public:
     }
 
     void AddSectionRaw(void (*builder)(ContextMenu&, void*), void* ud, void (*cleanup)(void*)) noexcept override;
+
+    [[nodiscard]] QVariantList QmlExtraItems();
+
+    [[nodiscard]] bool Muted() const
+    {
+        return audio_ && audio_->IsMuted();
+    }
+
+    [[nodiscard]] bool NormalizeEnabled() const
+    {
+        return audio_ && audio_->IsNormalizeEnabled();
+    }
+
+    [[nodiscard]] bool SubtitlesEnabled() const
+    {
+        return subtitles_ && subtitles_->IsSubtitlesEnabled();
+    }
+
+    Q_INVOKABLE void openFile()
+    {
+        OpenFileAction();
+    }
+
+    Q_INVOKABLE void openNetwork();
+
+    Q_INVOKABLE void togglePause()
+    {
+        TogglePauseAction();
+    }
+
+    Q_INVOKABLE void toggleFullscreen();
+    Q_INVOKABLE void toggleMute();
+    Q_INVOKABLE void toggleNormalize();
+    Q_INVOKABLE void toggleSubtitles();
+    Q_INVOKABLE void invokeExtra(int index);
+    Q_INVOKABLE void quit();
+
+Q_SIGNALS:
+    void menuChanged();
 
 protected:
     const char* ModuleName() const override
@@ -90,10 +137,10 @@ private:
     std::vector<Section> sections_;
     Hotkeys* keys_ = nullptr;
 
-    IMediaPlayback* playback_ = nullptr;     // transport (pause)
-    IMediaProperties* props_ = nullptr;      // idle-state observation
-    IAudioControl* audio_ = nullptr;         // mute / normalize / device / track
-    ISubtitleControl* subtitles_ = nullptr;  // subtitle toggle / track
+    IMediaPlayback* playback_ = nullptr;    // transport (pause)
+    IMediaProperties* props_ = nullptr;     // idle-state observation
+    IAudioControl* audio_ = nullptr;        // mute / normalize / device / track
+    ISubtitleControl* subtitles_ = nullptr; // subtitle toggle / track
     IAppWindow* appWindow_ = nullptr;
     IEventPump* events_ = nullptr;
     IFileDialog* fileDialog_ = nullptr;
@@ -102,6 +149,8 @@ private:
     bool playerIdle_ = true;
 };
 
-FRAMELIFT_MODULE_ENTRY(ContextMenuModule, {
-    .renderOrder = 30,
-})
+FRAMELIFT_MODULE_ENTRY(
+    ContextMenuModule, {
+                           .renderOrder = 30,
+                       }
+)

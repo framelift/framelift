@@ -4,15 +4,16 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#include <QtCore/QTimer>
 #include <algorithm>
-#include <windows.h>
-#include <winhttp.h>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
+#include <windows.h>
+#include <winhttp.h>
 
 #include <framelift/JsonHelpers.h>
 
@@ -264,6 +265,16 @@ void Updater::OnInstall(IModuleContext& ctx)
     SetupSettingsPage(ctx);
 
     json_ = ctx.GetService<IJson>();
+    stateTimer_ = new QTimer(this);
+    stateTimer_->setInterval(250);
+    connect(
+        stateTimer_, &QTimer::timeout, this,
+        [this]
+        {
+            Q_EMIT changed();
+        }
+    );
+    stateTimer_->start();
 
     // Only run in production
     if (std::string(FRAMELIFT_VERSION_STRING) == "0.0.0")
@@ -281,6 +292,25 @@ void Updater::OnInstall(IModuleContext& ctx)
     {
         Log::Debug("[Updater] Auto-update disabled");
     }
+}
+
+QString Updater::StatusText() const
+{
+    switch (state_.load())
+    {
+    case UpdaterState::Idle:
+    case UpdaterState::UpToDate:
+        return QStringLiteral("Up to date");
+    case UpdaterState::Checking:
+        return QStringLiteral("Checking for updates…");
+    case UpdaterState::Downloading:
+        return QStringLiteral("Downloading update…");
+    case UpdaterState::ReadyToInstall:
+        return QStringLiteral("Update ready — installs on exit");
+    case UpdaterState::Failed:
+        return QStringLiteral("Update check failed");
+    }
+    return {};
 }
 
 void Updater::RenderSettings(UIContext& ctx)
