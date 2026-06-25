@@ -4,6 +4,7 @@
 #include <QtGui/QSurfaceFormat>
 #include <QtQuick/QQuickWindow>
 #include <QtWidgets/QApplication>
+#include <exception>
 
 int main(int argc, char* argv[])
 {
@@ -11,10 +12,6 @@ int main(int argc, char* argv[])
     // adopted context and our raw-GL video node — stays on the GUI thread (the GL video
     // renderer / FFmpeg RenderFrame assume single-threaded main-thread GL).
     qputenv("QSG_RENDER_LOOP", "basic");
-
-    // Force the OpenGL RHI so Qt creates a GL context our GlGraphicsBackend can adopt
-    // (Qt6 otherwise defaults to D3D11 on Windows). Must be set before any QQuickWindow.
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
     // QApplication (not QGuiApplication) so the native QFileDialog open-file picker —
     // a QWidget — has the widgets application it requires. QApplication is a
@@ -27,6 +24,14 @@ int main(int argc, char* argv[])
     QApplication::setQuitOnLastWindowClosed(false);
 
     Log::Init();
-    App app("FrameLift", 1280, 720, argc, argv);
-    return app.Run();
+    try
+    {
+        App app("FrameLift", 1280, 720, argc, argv);
+        return app.Run();
+    }
+    catch (const std::exception& e)
+    {
+        Log::Error("FrameLift startup failed: {}", e.what());
+        return 1;
+    }
 }

@@ -15,9 +15,9 @@
 
 #include "IGraphicsBackend.h"
 
-#include "CacheSettings.h"           // ToReadAheadCacheOptions (host/read-ahead)
-#include "FFmpegSettingsMapping.h"   // To{PlaybackOptions,VideoDecodeMode,...}
-#include "Settings.h"                // host aggregate settings
+#include "CacheSettings.h"         // ToReadAheadCacheOptions (host/read-ahead)
+#include "FFmpegSettingsMapping.h" // To{PlaybackOptions,VideoDecodeMode,...}
+#include "Settings.h"              // host aggregate settings
 
 #include <framelift/Log.h>
 
@@ -66,8 +66,8 @@ static_assert(kAvErrAccess == AVERROR(EACCES), "AVERROR(EACCES) mirror drifted")
 #ifndef NOMINMAX
 #define NOMINMAX // keep std::min/std::max usable below
 #endif
-#include <windows.h>
 #include <timeapi.h> // timeBeginPeriod / timeEndPeriod (winmm)
+#include <windows.h>
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002 // Win10 1803+; define for older SDK headers
 #endif
@@ -142,7 +142,12 @@ FFmpegPlayer::FFmpegPlayer()
     audioQ_->SetBudget(&cache_);
     videoQ_->SetBudget(&cache_);
     subQ_->SetBudget(&cache_);
-    cache_.SetStallCallback([this](bool stalling) { EmitFlag(PlayerProperty::PausedForCache, stalling); });
+    cache_.SetStallCallback(
+        [this](bool stalling)
+        {
+            EmitFlag(PlayerProperty::PausedForCache, stalling);
+        }
+    );
     decodeThread_ = std::thread(&FFmpegPlayer::DecodeThreadMain, this);
 }
 
@@ -212,7 +217,13 @@ void FFmpegPlayer::DecodeThreadMain()
         double resume = 0.0;
         {
             std::unique_lock lock(mutex_);
-            cv_.wait(lock, [this] { return shutdown_.load() || hasPendingLoad_; });
+            cv_.wait(
+                lock,
+                [this]
+                {
+                    return shutdown_.load() || hasPendingLoad_;
+                }
+            );
             if (shutdown_.load())
             {
                 return;
@@ -386,8 +397,7 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
     {
         std::lock_guard lock(mutex_);
         currentPath_ = path;
-        mediaTitle_ =
-            titleTag && titleTag->value ? titleTag->value : std::filesystem::path(path).filename().string();
+        mediaTitle_ = titleTag && titleTag->value ? titleTag->value : std::filesystem::path(path).filename().string();
     }
     QueueEvent(MakeLifecycle(MediaEventType::FileLoaded));
     EmitDouble(PlayerProperty::Duration, durationSec);
@@ -635,12 +645,18 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
         else if (isImage)
         {
             // Slideshow still: hold the configured duration unless interrupted.
-            const auto until = std::chrono::steady_clock::now() +
-                               std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-                                   std::chrono::duration<double>(imageDisplayDuration_.load()));
+            const auto until =
+                std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                                                       std::chrono::duration<double>(imageDisplayDuration_.load())
+                                                   );
             std::unique_lock lock(mutex_);
-            if (cv_.wait_until(lock, until,
-                               [this] { return shutdown_.load() || hasPendingLoad_ || hasPendingSeek_; }))
+            if (cv_.wait_until(
+                    lock, until,
+                    [this]
+                    {
+                        return shutdown_.load() || hasPendingLoad_ || hasPendingSeek_;
+                    }
+                ))
             {
                 emitEnd = false; // a seek/stop arrived first — handle it below
             }
@@ -657,7 +673,13 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
         // advances on EndFile arrives as a new load (Stop); a manual seek resumes.
         {
             std::unique_lock lock(mutex_);
-            cv_.wait(lock, [this] { return shutdown_.load() || hasPendingLoad_ || hasPendingSeek_; });
+            cv_.wait(
+                lock,
+                [this]
+                {
+                    return shutdown_.load() || hasPendingLoad_ || hasPendingSeek_;
+                }
+            );
         }
         if (StopRequested())
         {
@@ -767,9 +789,10 @@ void FFmpegPlayer::AudioWorker(AVCodecContext* dec, AVStream* stream, double sta
                     std::lock_guard lock(mutex_);
                     params = normalizeParams_;
                 }
-                filterActive = normalizeEnabled_.load() &&
-                               filter.Configure(dec->sample_rate, dec->ch_layout, dec->sample_fmt, tb,
-                                                BuildAudioNormalizeGraph(params));
+                filterActive = normalizeEnabled_.load() && filter.Configure(
+                                                               dec->sample_rate, dec->ch_layout, dec->sample_fmt, tb,
+                                                               BuildAudioNormalizeGraph(params)
+                                                           );
                 if (!filterActive)
                 {
                     filter.Close();
@@ -841,11 +864,13 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
     struct WinTimerScope
     {
         HANDLE timer = nullptr;
+
         WinTimerScope()
         {
             timeBeginPeriod(1);
             timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
         }
+
         ~WinTimerScope()
         {
             if (timer)
@@ -854,6 +879,7 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
             }
             timeEndPeriod(1);
         }
+
         WinTimerScope(const WinTimerScope&) = delete;
         WinTimerScope& operator=(const WinTimerScope&) = delete;
     } winTimer;
@@ -931,10 +957,14 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
                 std::unique_lock lock(mutex_);
                 // Hold while paused, but let a post-seek refresh present one frame so
                 // the seek target is shown even when paused.
-                cv_.wait(lock, [this] {
-                    return !paused_.load() || seekRefresh_.load() || shutdown_.load() || hasPendingLoad_ ||
-                           hasPendingSeek_;
-                });
+                cv_.wait(
+                    lock,
+                    [this]
+                    {
+                        return !paused_.load() || seekRefresh_.load() || shutdown_.load() || hasPendingLoad_ ||
+                               hasPendingSeek_;
+                    }
+                );
                 if (shutdown_.load() || hasPendingLoad_ || hasPendingSeek_)
                 {
                     return true;
@@ -981,11 +1011,16 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
 #endif
             {
                 const auto slice = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-                    std::chrono::duration<double>(diff));
+                    std::chrono::duration<double>(diff)
+                );
                 std::unique_lock lock(mutex_);
-                cv_.wait_for(lock, slice, [this] {
-                    return shutdown_.load() || hasPendingLoad_ || hasPendingSeek_ || paused_.load();
-                });
+                cv_.wait_for(
+                    lock, slice,
+                    [this]
+                    {
+                        return shutdown_.load() || hasPendingLoad_ || hasPendingSeek_ || paused_.load();
+                    }
+                );
             }
             if (shutdown_.load() || hasPendingLoad_ || hasPendingSeek_)
             {
@@ -1019,8 +1054,10 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
         else
 #endif
         {
-            sws = sws_getCachedContext(sws, f->width, f->height, static_cast<AVPixelFormat>(f->format), dstW, dstH,
-                                       AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
+            sws = sws_getCachedContext(
+                sws, f->width, f->height, static_cast<AVPixelFormat>(f->format), dstW, dstH, AV_PIX_FMT_RGBA,
+                SWS_BILINEAR, nullptr, nullptr, nullptr
+            );
             if (!sws)
             {
                 return false;
@@ -1170,7 +1207,8 @@ void FFmpegPlayer::ScanExternalSources(const std::string& mediaPath)
         return;
     }
 
-    const auto lower = [](std::string s) {
+    const auto lower = [](std::string s)
+    {
         for (char& c : s)
         {
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -1200,8 +1238,15 @@ void FFmpegPlayer::ScanExternalSources(const std::string& mediaPath)
             continue; // fuzzy match: sidecar name must contain the media stem
         }
         const std::string ext = lower(p.extension().string());
-        const auto matches = [&ext](const auto& list) {
-            return std::find_if(list.begin(), list.end(), [&](const char* e) { return ext == e; }) != list.end();
+        const auto matches = [&ext](const auto& list)
+        {
+            return std::find_if(
+                       list.begin(), list.end(),
+                       [&](const char* e)
+                       {
+                           return ext == e;
+                       }
+                   ) != list.end();
         };
         if (subAutoLoad_ && matches(kSubExt))
         {
@@ -1457,8 +1502,7 @@ bool FFmpegPlayer::OpenAudioBinding(int64_t id, AVFormatContext* mainFmt, AudioB
     }
     avcodec_parameters_to_context(dec, st->codecpar);
     dec->pkt_timebase = st->time_base;
-    if (avcodec_open2(dec, codec, nullptr) != 0 ||
-        !audioOut_->Open(dec->sample_rate, dec->ch_layout, dec->sample_fmt))
+    if (avcodec_open2(dec, codec, nullptr) != 0 || !audioOut_->Open(dec->sample_rate, dec->ch_layout, dec->sample_fmt))
     {
         Log::Warn("FFmpegPlayer: audio decoder/output unavailable for track {}", id);
         avcodec_free_context(&dec);
@@ -1477,8 +1521,9 @@ bool FFmpegPlayer::OpenAudioBinding(int64_t id, AVFormatContext* mainFmt, AudioB
     aud.stream = st;
     aud.streamIndex = streamIdx;
     aud.external = e.external;
-    aud.startOffset =
-        e.external && st->start_time != AV_NOPTS_VALUE ? static_cast<double>(st->start_time) * av_q2d(st->time_base) : 0.0;
+    aud.startOffset = e.external && st->start_time != AV_NOPTS_VALUE
+                          ? static_cast<double>(st->start_time) * av_q2d(st->time_base)
+                          : 0.0;
 
     {
         std::lock_guard lock(tracksMutex_);
@@ -1488,8 +1533,10 @@ bool FFmpegPlayer::OpenAudioBinding(int64_t id, AVFormatContext* mainFmt, AudioB
     return true;
 }
 
-void FFmpegPlayer::OpenSubtitleBinding(int64_t id, const std::string& mediaPath, AVFormatContext* mainFmt, int& subIdx,
-                                       AVCodecContext*& sDec, AVStream*& sStream)
+void FFmpegPlayer::OpenSubtitleBinding(
+    int64_t id, const std::string& mediaPath, AVFormatContext* mainFmt, int& subIdx, AVCodecContext*& sDec,
+    AVStream*& sStream
+)
 {
     if (sDec)
     {
@@ -1906,8 +1953,8 @@ void FFmpegPlayer::SetAudioPreferences(const AudioPreferences& prefs) noexcept
     }
 
     audioSyncOffsetMs_ = prefs.syncOffsetMs;
-    const bool outputChanged = std::strcmp(old.outputDevice, prefs.outputDevice) != 0 ||
-                               old.channelMode != prefs.channelMode;
+    const bool outputChanged =
+        std::strcmp(old.outputDevice, prefs.outputDevice) != 0 || old.channelMode != prefs.channelMode;
     volume_ = std::clamp(prefs.defaultVolume, 0, 100);
     audioOut_->SetPreferences(prefs);
     audioOut_->SetVolume(volume_);
@@ -2317,6 +2364,19 @@ void FFmpegPlayer::InitRender(void* graphicsBackend) noexcept
 #endif
 }
 
+void FFmpegPlayer::ReleaseRender() noexcept
+{
+    rendererReady_ = false;
+    renderer_.reset();
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
+    vulkanZeroCopyAvailable_ = false;
+    if (vkHwDevice_)
+    {
+        av_buffer_unref(&vkHwDevice_);
+    }
+#endif
+}
+
 void FFmpegPlayer::SetRenderUpdateCallback(void (*cb)(void*), void* ud) noexcept
 {
     std::lock_guard lock(mutex_);
@@ -2329,6 +2389,12 @@ bool FFmpegPlayer::HasNewFrame() noexcept
 }
 
 void FFmpegPlayer::RenderFrame(int w, int h) noexcept
+{
+    PrepareRenderFrame(w, h);
+    DrawPreparedFrame(w, h);
+}
+
+void FFmpegPlayer::PrepareRenderFrame(int w, int h) noexcept
 {
     bool haveNew = false;
 #if FRAMELIFT_MODULE_GRAPHICS_VULKAN
@@ -2400,7 +2466,7 @@ void FFmpegPlayer::RenderFrame(int w, int h) noexcept
 
         // Render the libass subtitle overlay at the on-screen video size so it stays
         // crisp regardless of the source resolution, then composite it in Draw.
-        overlayActive_ = false;
+        preparedOverlayActive_ = false;
         const int videoW = static_cast<int>(displayWidth_.load());
         const int videoH = static_cast<int>(displayHeight_.load());
         if (subtitlesEnabled_ && subtitles_ && subtitles_->Ok() && videoW > 0 && videoH > 0)
@@ -2413,16 +2479,20 @@ void FFmpegPlayer::RenderFrame(int w, int h) noexcept
             if (res == FFmpegSubtitles::RenderResult::Updated)
             {
                 renderer_->UploadOverlay(overlayScratch_.data(), vp.w, vp.h);
-                overlayActive_ = true;
+                preparedOverlayActive_ = true;
             }
             else if (res == FFmpegSubtitles::RenderResult::Unchanged)
             {
-                overlayActive_ = true; // reuse the already-uploaded overlay texture
+                preparedOverlayActive_ = true; // reuse the already-uploaded overlay texture
             }
         }
-
-        renderer_->Draw(w, h, overlayActive_);
     }
-    // When the renderer failed to initialise there is nothing to draw; the graphics
-    // backend's BeginFrame() has already cleared the target to black.
+}
+
+void FFmpegPlayer::DrawPreparedFrame(int w, int h) noexcept
+{
+    if (rendererReady_)
+    {
+        renderer_->Draw(w, h, preparedOverlayActive_);
+    }
 }

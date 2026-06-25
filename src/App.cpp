@@ -65,6 +65,10 @@ App::~App()
     }
     keys_.Clear();
 
+    if (appWindow_)
+    {
+        appWindow_->SetGraphicsInvalidatedHandler({});
+    }
     player_.reset(); // destroy the player's render context before the GL context is torn down
 }
 
@@ -151,7 +155,18 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
             OnPlayerWakeup();
         }
     );
-    appWindow_->SetVideoRenderCallback(
+    appWindow_->SetGraphicsInvalidatedHandler(
+        [this]
+        {
+            player_->ReleaseRender();
+            renderInit_ = false;
+        }
+    );
+    appWindow_->SetVideoRenderCallbacks(
+        [this](int fbW, int fbH)
+        {
+            PrepareVideo(fbW, fbH);
+        },
         [this](int fbW, int fbH)
         {
             RenderVideo(fbW, fbH);
@@ -293,22 +308,34 @@ void App::SetupPlayerCallbacks()
 
 // ── Frame rendering ───────────────────────────────────────────────────────────
 
-void App::RenderVideo(const int fbW, const int fbH)
+void App::PrepareVideo(const int fbW, const int fbH)
 {
-    // Qt's scene-graph GL context is current here (inside the render node). On the first
-    // frame, adopt it into the backend and build the player's video renderer against it.
+    // The first scene-graph frame exposes the native graphics objects. Adopt Qt's
+    // OpenGL context or Vulkan frame resources, then build the matching video renderer.
     if (!renderInit_)
     {
         if (auto* backend = static_cast<IGraphicsBackend*>(appWindow_->GetGraphicsBackend()))
         {
-            backend->OnQtWindowCreated();
+            backend->OnQtWindowCreated(static_cast<QQuickWindow*>(appWindow_->GetNativeHandle()));
         }
         player_->InitRender(appWindow_->GetGraphicsBackend());
         renderInit_ = true;
     }
 
-    // Clears to black and draws the current frame letterboxed into Qt's bound framebuffer.
-    player_->RenderFrame(fbW, fbH);
+    if (auto* backend = static_cast<IGraphicsBackend*>(appWindow_->GetGraphicsBackend()))
+    {
+        backend->PrepareQtFrame(static_cast<QQuickWindow*>(appWindow_->GetNativeHandle()));
+    }
+    player_->PrepareRenderFrame(fbW, fbH);
+}
+
+void App::RenderVideo(const int fbW, const int fbH)
+{
+    if (auto* backend = static_cast<IGraphicsBackend*>(appWindow_->GetGraphicsBackend()))
+    {
+        backend->PrepareQtFrame(static_cast<QQuickWindow*>(appWindow_->GetNativeHandle()));
+    }
+    player_->DrawPreparedFrame(fbW, fbH);
 }
 
 void App::OnPlayerWakeup()

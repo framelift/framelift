@@ -13,10 +13,20 @@ class QOpenGLContext;
 class GlGraphicsBackend final : public IGraphicsBackend
 {
 public:
-    void OnQtWindowCreated() override;
+    void ConfigureQtWindow(QQuickWindow* window) override;
+    void OnQtWindowCreated(QQuickWindow* window) override;
+    void PrepareQtFrame(QQuickWindow* window) override;
     void Shutdown() override;
-    [[nodiscard]] const char* Name() const override { return "OpenGL"; }
-    [[nodiscard]] bool HasNvidiaAdapter() const noexcept override { return nvidiaAdapter_; }
+
+    [[nodiscard]] const char* Name() const override
+    {
+        return "OpenGL";
+    }
+
+    [[nodiscard]] bool HasNvidiaAdapter() const noexcept override
+    {
+        return nvidiaAdapter_;
+    }
 
     [[nodiscard]] std::unique_ptr<IVideoRenderer> CreateVideoRenderer() override;
     [[nodiscard]] uintptr_t CreateUiTexture(const unsigned char* rgba, int w, int h) override;

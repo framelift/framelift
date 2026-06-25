@@ -49,8 +49,11 @@ public:
     void SetEventSink(std::function<void(const AppEvent&)> sink);
     // Drain handler invoked (GUI thread) when a player worker posts a wakeup.
     void SetPlayerWakeupHandler(std::function<void()> handler);
+    void SetGraphicsInvalidatedHandler(std::function<void()> handler);
     // Host video draw, forwarded to the scene-graph node (App's player_->RenderFrame).
-    void SetVideoRenderCallback(std::function<void(int fbW, int fbH)> cb);
+    void SetVideoRenderCallbacks(
+        std::function<void(int fbW, int fbH)> prepareCb, std::function<void(int fbW, int fbH)> renderCb
+    );
     void SetPluginViews(std::vector<QmlViewSpec> views);
     // Show the window (created hidden) and run Qt's event loop until quit. Returns the
     // QGuiApplication::exec() exit code.
@@ -114,6 +117,7 @@ private:
 
     std::function<void(const AppEvent&)> eventSink_;
     std::function<void()> playerWakeupHandler_;
+    std::function<void()> graphicsInvalidatedHandler_;
 
     // Custom-event payloads delivered via PushCustomEvent → a queued signal would need a
     // registered metatype; instead we keep a tiny monotonic counter for type ids only.

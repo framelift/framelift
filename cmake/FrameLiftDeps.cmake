@@ -35,13 +35,15 @@ FetchContent_MakeAvailable(spdlog)
 # Vulkan-Headers — the API headers + the Vulkan::Headers interface target that volk
 # and VMA consume. Declared first so the others detect and reuse it.
 if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
-FetchContent_Declare(
-        vulkan_headers
-        GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
-        GIT_TAG v1.4.354
-        GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(vulkan_headers)
+if (NOT TARGET Vulkan::Headers)
+    FetchContent_Declare(
+            vulkan_headers
+            GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+            GIT_TAG v1.4.354
+            GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(vulkan_headers)
+endif ()
 
 # volk — Vulkan meta-loader. Builds the `volk` static lib (the global entry-point
 # pointers, linked once into the exe) and the `volk_headers` interface (include-only,

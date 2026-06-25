@@ -19,7 +19,11 @@
 #define GL_CLAMP_TO_EDGE 0x812F
 #endif
 
-void GlGraphicsBackend::OnQtWindowCreated()
+void GlGraphicsBackend::ConfigureQtWindow(QQuickWindow* /*window*/)
+{
+}
+
+void GlGraphicsBackend::OnQtWindowCreated(QQuickWindow* /*window*/)
 {
     // Adopt Qt's scene-graph GL context (current on this thread when the first
     // VideoRenderNode::render() runs). Qt creates, owns, makes-current, and presents it;
@@ -31,6 +35,10 @@ void GlGraphicsBackend::OnQtWindowCreated()
         nvidiaAdapter_ = std::strstr(vendor, "NVIDIA") != nullptr || std::strstr(vendor, "Nvidia") != nullptr ||
                          std::strstr(vendor, "nvidia") != nullptr;
     }
+}
+
+void GlGraphicsBackend::PrepareQtFrame(QQuickWindow* /*window*/)
+{
 }
 
 void GlGraphicsBackend::Shutdown()

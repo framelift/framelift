@@ -6,11 +6,11 @@
 #define FRAMELIFT_MODULE_GRAPHICS_VULKAN 1
 #endif
 
-// The graphics presentation backend the host renders through. Selected at startup
-// from the [graphics] backend setting. OpenGL is the only backend implemented today;
-// Vulkan is planned (see the OpenGL→Vulkan migration, issues #15–#18).
+// The graphics presentation backend the host renders through. Auto prefers Vulkan and
+// falls back to OpenGL; explicit selections never switch APIs silently.
 enum class GraphicsApi
 {
+    Auto,
     OpenGL,
     Vulkan,
 };
@@ -46,12 +46,19 @@ inline GraphicsApi GraphicsApiFromString(std::string_view name)
     };
 
 #if FRAMELIFT_MODULE_GRAPHICS_VULKAN
+    if (name.empty() || iequals(name, "auto"))
+    {
+        return GraphicsApi::Auto;
+    }
     if (iequals(name, "vulkan") || iequals(name, "vk"))
     {
         return GraphicsApi::Vulkan;
     }
 #else
-    (void)name;
+    if (name.empty() || iequals(name, "auto"))
+    {
+        return GraphicsApi::OpenGL;
+    }
 #endif
     return GraphicsApi::OpenGL;
 }
@@ -61,6 +68,12 @@ inline const char* GraphicsApiName(GraphicsApi api)
 {
     switch (api)
     {
+    case GraphicsApi::Auto:
+#if FRAMELIFT_MODULE_GRAPHICS_VULKAN
+        return "auto";
+#else
+        break;
+#endif
     case GraphicsApi::Vulkan:
 #if FRAMELIFT_MODULE_GRAPHICS_VULKAN
         return "vulkan";

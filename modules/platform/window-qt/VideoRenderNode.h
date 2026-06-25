@@ -22,21 +22,38 @@ public:
     using RenderCallback = std::function<void(int fbW, int fbH)>;
 
     // Per-update state pushed from VideoItem::updatePaintNode().
-    void SetRenderCallback(RenderCallback cb) { renderCb_ = std::move(cb); }
-    void SetWindow(QQuickWindow* window) { window_ = window; }
+    void SetPrepareCallback(RenderCallback cb)
+    {
+        prepareCb_ = std::move(cb);
+    }
+
+    void SetRenderCallback(RenderCallback cb)
+    {
+        renderCb_ = std::move(cb);
+    }
+
+    void SetWindow(QQuickWindow* window)
+    {
+        window_ = window;
+    }
+
     void SetItemSize(int logicalW, int logicalH)
     {
         itemW_ = logicalW;
         itemH_ = logicalH;
     }
 
+    void prepare() override;
     void render(const RenderState* state) override;
     StateFlags changedStates() const override;
     RenderingFlags flags() const override;
 
 private:
+    RenderCallback prepareCb_;
     RenderCallback renderCb_;
     QQuickWindow* window_ = nullptr;
     int itemW_ = 0;
     int itemH_ = 0;
+
+    [[nodiscard]] std::pair<int, int> FramebufferSize() const;
 };

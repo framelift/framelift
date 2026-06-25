@@ -2,9 +2,9 @@
 
 #include <framelift/platform/IMediaPlayer.h>
 
-#include "ReadAheadCache.h"
-#include "IVideoRenderer.h"
 #include "FFmpegSubtitles.h"
+#include "IVideoRenderer.h"
+#include "ReadAheadCache.h"
 #include "VideoDecodeMode.h"
 
 #include <array>
@@ -122,9 +122,12 @@ public:
     void EnumerateAudioOutputDevices(void (*visit)(const AudioOutputDevice*, void*), void* ud) const noexcept override;
 
     void InitRender(void* graphicsBackend) noexcept override;
+    void ReleaseRender() noexcept;
     void SetRenderUpdateCallback(void (*cb)(void*), void* ud) noexcept override;
     [[nodiscard]] bool HasNewFrame() noexcept override;
     void RenderFrame(int w, int h) noexcept override;
+    void PrepareRenderFrame(int w, int h) noexcept;
+    void DrawPreparedFrame(int w, int h) noexcept;
 
 private:
     // Background decode/playback thread: waits for a load request, then drives the
@@ -226,8 +229,10 @@ private:
     bool OpenAudioBinding(int64_t id, AVFormatContext* mainFmt, AudioBinding& aud);
     // Apply subtitle selection `id` (-1 == off): open/rebuild the embedded subtitle
     // decoder (out via sDec/sStream/subIdx) or pre-load an external file into libass.
-    void OpenSubtitleBinding(int64_t id, const std::string& mediaPath, AVFormatContext* mainFmt, int& subIdx,
-                             AVCodecContext*& sDec, AVStream*& sStream);
+    void OpenSubtitleBinding(
+        int64_t id, const std::string& mediaPath, AVFormatContext* mainFmt, int& subIdx, AVCodecContext*& sDec,
+        AVStream*& sStream
+    );
     // Resolve a track id to its entry (copy) under tracksMutex_; returns false if absent.
     bool FindTrack(int64_t id, TrackEntry& out) const;
 
@@ -310,6 +315,7 @@ private:
     bool pendingIsVulkan_ = false;
     bool displayIsVulkan_ = false; // render-thread-owned: last frame handed to the renderer
 #endif
+    bool preparedOverlayActive_ = false;
 
     // Observable / queryable state.
     std::atomic<int64_t> displayWidth_{0};
@@ -322,8 +328,8 @@ private:
     std::atomic<bool> eofReached_{false};
     std::atomic<bool> coreIdle_{true};
     std::atomic<double> duration_{0.0};
-    double speed_ = 1.0;   // read-only: no setter exists in IMediaPlayer (yet)
-    int volume_ = 100;     // canonical 0–100 volume, mirrored to the audio device
+    double speed_ = 1.0;    // read-only: no setter exists in IMediaPlayer (yet)
+    int volume_ = 100;      // canonical 0–100 volume, mirrored to the audio device
     bool hasVideo_ = false; // set by PlayFile; audio worker drives TimePos when false
 
     // Seeking. seekTarget_/hasPendingSeek_ are a request from the main thread to
@@ -334,12 +340,12 @@ private:
     double seekTarget_ = 0.0;
     double seekSkipPts_ = -1e18;
     std::atomic<bool> seekRefresh_{false};
-    std::atomic<bool> hrSeek_{true};                 // PlaybackOptions.hrSeek (exact vs keyframe)
-    std::atomic<bool> hwdec_{true};                  // PlaybackOptions.hwdec (try hardware decode on load)
+    std::atomic<bool> hrSeek_{true}; // PlaybackOptions.hrSeek (exact vs keyframe)
+    std::atomic<bool> hwdec_{true};  // PlaybackOptions.hwdec (try hardware decode on load)
     std::atomic<VideoDecodeMode> videoDecodeMode_{VideoDecodeMode::Auto};
-    std::atomic<double> imageDisplayDuration_{0.0};  // <= 0 ⇒ hold a still image indefinitely
-    std::string mediaTitle_;                         // metadata title (guarded by mutex_)
-    std::string hwDecName_ = "no";                   // active hw decoder name / "no" (guarded by mutex_)
+    std::atomic<double> imageDisplayDuration_{0.0}; // <= 0 ⇒ hold a still image indefinitely
+    std::string mediaTitle_;                        // metadata title (guarded by mutex_)
+    std::string hwDecName_ = "no";                  // active hw decoder name / "no" (guarded by mutex_)
 
     // Which properties the host/plugins have subscribed to (indexed by enum value).
     std::array<std::atomic<bool>, kPropCount> observed_{};
@@ -385,11 +391,11 @@ private:
     bool hasPendingSubSwitch_ = false;
 
     // Subtitle rendering state.
-    std::atomic<double> subtitleDelay_{0.0}; // seconds; positive delays subtitles
-    std::vector<unsigned char> overlayScratch_; // render-thread-owned overlay pixels
-    bool overlayActive_ = false;                // render-thread-owned: draw overlay this frame
+    std::atomic<double> subtitleDelay_{0.0};       // seconds; positive delays subtitles
+    std::vector<unsigned char> overlayScratch_;    // render-thread-owned overlay pixels
+    bool overlayActive_ = false;                   // render-thread-owned: draw overlay this frame
     bool subtitleSeekClockOverrideActive_ = false; // guarded by mutex_
-    double subtitleSeekClockOverride_ = 0.0;        // guarded by mutex_
+    double subtitleSeekClockOverride_ = 0.0;       // guarded by mutex_
 
     // User subtitle preferences. Styling is forwarded to libass on change; the
     // behavior fields (preferredLang/preferForced) drive BuildTrackList. Guarded by

@@ -2,6 +2,8 @@
 #include "VideoItem.h"
 #include "util.h"
 
+#include <framelift/Log.h>
+
 #include <QtCore/QDir>
 #include <QtCore/QEvent>
 #include <QtCore/QStandardPaths>
@@ -15,6 +17,7 @@
 #include <QtQuick/QQuickWindow>
 
 #include <cstring>
+#include <exception>
 
 namespace
 {
@@ -135,10 +138,35 @@ QtAppWindow::QtAppWindow(const char* title, int width, int height, GraphicsApi a
 {
     backend_ = CreateGraphicsBackend(api);
 
+    QQuickWindow::setGraphicsApi(
+        std::strcmp(backend_->Name(), "Vulkan") == 0 ? QSGRendererInterface::Vulkan : QSGRendererInterface::OpenGL
+    );
+
     // Created hidden (shown on the first painted frame in RunEventLoop) so the user never
     // sees an unpainted black framebuffer while settings/packages load. The GL RHI and the
     // "basic" render loop are forced in main() before any QQuickWindow exists.
     window_ = new QQuickWindow();
+    try
+    {
+        backend_->ConfigureQtWindow(window_);
+    }
+    catch (const std::exception& e)
+    {
+        if (api != GraphicsApi::Auto || std::strcmp(backend_->Name(), "Vulkan") != 0)
+        {
+            delete window_;
+            window_ = nullptr;
+            throw;
+        }
+        Log::Warn("Vulkan device/window setup failed in auto mode ({}); using OpenGL.", e.what());
+        delete window_;
+        window_ = nullptr;
+        backend_.reset();
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+        backend_ = CreateGraphicsBackend(GraphicsApi::OpenGL);
+        window_ = new QQuickWindow();
+        backend_->ConfigureQtWindow(window_);
+    }
     window_->setTitle(QString::fromUtf8(title_.c_str()));
     window_->resize(width, height);
     window_->setColor(Qt::black);
@@ -164,6 +192,17 @@ QtAppWindow::QtAppWindow(const char* title, int width, int height, GraphicsApi a
         {
             SyncVideoItemSize();
         }
+    );
+    connect(
+        window_, &QQuickWindow::sceneGraphInvalidated, this,
+        [this]
+        {
+            if (graphicsInvalidatedHandler_)
+            {
+                graphicsInvalidatedHandler_();
+            }
+        },
+        Qt::DirectConnection
     );
 
     // Worker-thread wakes → GUI-thread slots (queued). renderUpdate schedules a repaint;
@@ -196,12 +235,12 @@ QtAppWindow::QtAppWindow(const char* title, int width, int height, GraphicsApi a
 
 QtAppWindow::~QtAppWindow()
 {
+    delete window_; // deletes the content-item tree (videoItem_) with it
+    window_ = nullptr;
     if (backend_)
     {
         backend_->Shutdown();
     }
-    delete window_; // deletes the content-item tree (videoItem_) with it
-    window_ = nullptr;
 }
 
 void QtAppWindow::SyncVideoItemSize()
@@ -225,11 +264,18 @@ void QtAppWindow::SetPlayerWakeupHandler(std::function<void()> handler)
     playerWakeupHandler_ = std::move(handler);
 }
 
-void QtAppWindow::SetVideoRenderCallback(std::function<void(int, int)> cb)
+void QtAppWindow::SetGraphicsInvalidatedHandler(std::function<void()> handler)
+{
+    graphicsInvalidatedHandler_ = std::move(handler);
+}
+
+void QtAppWindow::SetVideoRenderCallbacks(
+    std::function<void(int, int)> prepareCb, std::function<void(int, int)> renderCb
+)
 {
     if (videoItem_)
     {
-        videoItem_->SetRenderCallback(std::move(cb));
+        videoItem_->SetRenderCallbacks(std::move(prepareCb), std::move(renderCb));
     }
 }
 

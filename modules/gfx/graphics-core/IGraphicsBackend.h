@@ -9,6 +9,8 @@
 #include "VulkanDeviceInfo.h"
 #endif
 
+class QQuickWindow;
+
 // Host-internal abstraction over the graphics presentation API (OpenGL today, Vulkan
 // planned). It owns everything API-specific behind the window: the GL context / Vulkan
 // device, buffer presentation, and vsync. Under Qt the window is a QQuickWindow owned by
@@ -27,7 +29,14 @@ public:
     // Called once Qt's scene-graph OpenGL context exists and is current (from the first
     // VideoRenderNode::render()): adopt that context and resolve the GL entry points the
     // backend needs. The backend does NOT create or own the context — Qt does.
-    virtual void OnQtWindowCreated() = 0;
+    // Configure a newly-created QQuickWindow before its scene graph initializes.
+    // Vulkan uses this to hand FrameLift's instance/device to Qt; OpenGL is a no-op.
+    virtual void ConfigureQtWindow(QQuickWindow* window) = 0;
+
+    // Called from QSGRenderNode::prepare()/render() once the scene graph is active.
+    // Backends adopt or refresh Qt-owned per-frame resources here.
+    virtual void OnQtWindowCreated(QQuickWindow* window) = 0;
+    virtual void PrepareQtFrame(QQuickWindow* window) = 0;
 
     // Release any GL resources the backend created. Called while Qt's GL context is still
     // current (before the QQuickWindow is torn down).
