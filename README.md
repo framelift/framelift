@@ -195,7 +195,6 @@ CMake via `FetchContent`.
 | libass           | vcpkg / system    | vcpkg/system  |
 | Dear ImGui       | 1.92.8-docking    | FetchContent  |
 | nlohmann/json    | 3.11.3            | FetchContent  |
-| stb              | master            | FetchContent  |
 | Vulkan-Headers   | 1.4.354           | FetchContent  |
 | VulkanMemoryAllocator | 3.4.0        | FetchContent  |
 | glslang          | 15.0.0 (build-time, fallback) | PATH / FetchContent |

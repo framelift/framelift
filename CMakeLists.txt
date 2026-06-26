@@ -35,7 +35,7 @@ include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftPlatformLibs.cmake")
 # ── OpenGL (opengl32 on Windows, libGL on Linux) ──────────────────────────────
 find_package(OpenGL REQUIRED)
 
-# ── Host third-party dependencies (stb/Vulkan stack — NOT in the SDK) ─────────
+# ── Host third-party dependencies (Vulkan stack — NOT in the SDK) ─────────────
 # Run before finding Qt so Qt's WrapVulkanHeaders helper can see FrameLift's
 # fetched Vulkan-Headers when the system does not provide Vulkan_INCLUDE_DIR.
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftDeps.cmake")
@@ -120,16 +120,6 @@ include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftOptimize.cmake")
 configure_file("${CMAKE_SOURCE_DIR}/src/Version.h.in"
         "${CMAKE_CURRENT_BINARY_DIR}/Version.h")
 
-# ── Embed Icon.png as a C byte array ─────────────────────────────────────────
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        "${CMAKE_SOURCE_DIR}/assets/img/Icon.png")
-file(READ "${CMAKE_SOURCE_DIR}/assets/img/Icon.png" ICON_HEX HEX)
-string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," ICON_C_ARRAY "${ICON_HEX}")
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/IconData.h"
-        "// Auto-generated from assets/img/Icon.png — do not edit\n"
-        "inline constexpr unsigned char kIconData[] = {${ICON_C_ARRAY}};\n"
-        "inline constexpr unsigned int kIconDataSize = sizeof(kIconData);\n")
-
 # ── Public plugin SDK ────────────────────────────────────────────────────────
 # Defines FrameLiftSdk (headers + Qt), add_framelift_plugin(), and helper sources.
 # This same module ships inside
@@ -165,6 +155,11 @@ qt_add_qml_module(
         qml/FrameLift/Controls/GlassPanel.qml
         qml/FrameLift/Controls/ActionButton.qml
         qml/FrameLift/Controls/Drawer.qml)
+set_source_files_properties("${CMAKE_SOURCE_DIR}/assets/img/Icon.png" PROPERTIES QT_RESOURCE_ALIAS Icon.png)
+qt_add_resources(
+        FrameLift framelift_assets
+        PREFIX "/framelift/assets"
+        FILES "${CMAKE_SOURCE_DIR}/assets/img/Icon.png")
 framelift_apply_builtin_module_definitions(FrameLift)
 
 set_target_properties(FrameLift PROPERTIES
@@ -177,9 +172,9 @@ set_target_properties(FrameLift PROPERTIES
         OUTPUT_NAME "framelift"
 )
 
-# FrameLiftSdk now carries only the public headers; the host links Qt and uses
-# stb headers directly, since they no longer cross the plugin boundary.
-target_include_directories(FrameLift PRIVATE "${CMAKE_SOURCE_DIR}/src" "${stb_SOURCE_DIR}")
+# FrameLiftSdk carries only the public headers; the host links Qt and keeps
+# implementation dependencies private.
+target_include_directories(FrameLift PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_include_directories(FrameLift PRIVATE
         ${FRAMELIFT_GRAPHICS_INCLUDE_DIRS}
         ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS})

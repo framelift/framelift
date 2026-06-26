@@ -22,18 +22,22 @@ Item {
         Column {
             anchors.centerIn: parent
             spacing: 12
+            Image {
+                anchors.horizontalCenter: parent.horizontalCenter
+                source: "Icon.png"
+                sourceSize.width: 96
+                sourceSize.height: 96
+                width: 96
+                height: 96
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+            }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "FrameLift"
                 color: Theme.text
                 font.pixelSize: 34
                 font.weight: Font.DemiBold
-            }
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "Drop a video here or use the context menu"
-                color: Theme.textMuted
-                font.pixelSize: 14
             }
         }
     }

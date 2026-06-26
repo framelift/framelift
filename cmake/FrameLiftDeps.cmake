@@ -2,7 +2,7 @@
 #
 # These are NOT part of the public plugin SDK — after the COM-like ABI redesign,
 # nothing crosses the host↔plugin boundary as a third-party type, so plugins do
-# not need stb/Vulkan dependencies. JSON is a host capability too: Qt's QJson backs
+# not need Vulkan dependencies. JSON is a host capability too: Qt's QJson backs
 # the host IJson service (modules/host/services/JsonServiceImpl), and plugins reach
 # it via ctx.GetService<IJson>() — no plugin links a JSON library.
 # FFmpeg and libass are set up by FrameLiftPlatformLibs.cmake as the external
@@ -70,15 +70,6 @@ if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
     )
     FetchContent_MakeAvailable(vma)
 endif ()
-
-# ── stb (header-only) ─────────────────────────────────────────────────────────
-FetchContent_Declare(
-        stb
-        GIT_REPOSITORY https://github.com/nothings/stb.git
-        GIT_TAG master
-        GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(stb)
 
 # JSON: the IJson service (JsonServiceImpl) is backed by Qt6::Core's QJson — no
 # third-party JSON library is fetched or linked.

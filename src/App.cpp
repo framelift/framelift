@@ -6,7 +6,6 @@
 #include "GraphicsApi.h"
 #include "GraphicsSettings.h"
 #include "IGraphicsBackend.h"
-#include "IconData.h"
 #include "LogBuffer.h"
 #include "QtAppWindow.h"
 #if FRAMELIFT_MODULE_WIN_SHELL
@@ -88,7 +87,7 @@ void App::InitPlatform(
         title, width, height, GraphicsApiFromString(settings_.Get<GraphicsSettings>().backend)
     );
 
-    (void)appWindow_->SetWindowIconFromMemory(kIconData, kIconDataSize);
+    (void)appWindow_->SetWindowIcon(":/framelift/assets/Icon.png");
 
     SetupPlayerCallbacks();
 

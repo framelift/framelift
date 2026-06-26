@@ -158,7 +158,7 @@ function(add_framelift_plugin_test name)
             ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
                 ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
             "${FRAMELIFT_ROOT}/tests/support"
-            "${FRAMELIFT_ROOT}/tests/support/stubs"  # stub IconData.h / Version.h for plugins that need generated headers
+            "${FRAMELIFT_ROOT}/tests/support/stubs"  # stub Version.h for plugins that need generated headers
             "${FRAMELIFT_ROOT}/plugins/playlist/core"
             "${FRAMELIFT_ROOT}/plugins/history/core"
             "${FRAMELIFT_ROOT}/plugins/settings-menu/core"
