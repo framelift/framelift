@@ -1,4 +1,4 @@
-// Unit tests for graphics-backend selection parsing (OpenGL→Vulkan migration, #16).
+// Unit tests for graphics-backend selection parsing.
 // GraphicsApi.h is free of SDL/GL so it builds in the standalone native suite.
 
 #include "GraphicsApi.h"

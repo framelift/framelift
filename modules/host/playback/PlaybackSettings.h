@@ -52,7 +52,7 @@ inline void RegisterPlaybackSettings(SettingsRegistry& reg, PlaybackSettings& s)
     reg.AddBool("playback.audioFileAutoLoad", s.audioFileAutoLoad,
                 "Auto-load external audio files matching the opened media.");
 
-    // Reconcile hwdec/hwdecMode after load, mirroring the legacy defaults: an
+    // Reconcile hwdec/hwdecMode after load: an
     // explicit mode wins; a bare hwdec=0 forces "off"; otherwise default to auto.
     reg.AddPostLoad(
         [&s](const std::set<std::string>& seen)

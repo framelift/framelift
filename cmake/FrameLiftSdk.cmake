@@ -33,8 +33,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/FrameLiftPluginMetadata.cmake")
 # the macro names — files using them then get moc'd (moc's own preprocessor expands the rest).
 list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "FRAMELIFT_MODULE_ENTRY")
 
-# QPluginLoader + Q_PLUGIN_METADATA pull in QtCore. The SDK is no longer dependency-free
-# (the historical imgui/json-free rule); plugins build against Qt6::Core.
+# QPluginLoader + Q_PLUGIN_METADATA pull in QtCore; plugins build against Qt.
 if (NOT TARGET Qt6::Quick)
     find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 endif ()

@@ -69,9 +69,7 @@ set(_FRAMELIFT_HOST_READ_AHEAD_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/read-ahead/ReadAheadCache.h"
 )
 
-# The legacy Dear ImGui host UI translation units were removed during the Qt/QML
-# migration. Keep only the ImGui-free settings/theme headers still consumed by
-# Qt-era settings code.
+# Host UI settings/theme helpers consumed by Qt settings code.
 set(_FRAMELIFT_HOST_UI_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeSettings.h"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeUtil.h"

@@ -12,7 +12,6 @@ namespace Theme
 // from s.accentColor. Cheap; safe to call every time the style changes.
 void ApplyStyle(const ThemeSettings& s);
 
-// Rebuild the font atlas using Dear ImGui's default font. This legacy ImGui path
-// is dormant during the Qt migration.
+// Rebuild the font atlas using Dear ImGui's default font.
 void RebuildFonts(const ThemeSettings& s);
 } // namespace Theme

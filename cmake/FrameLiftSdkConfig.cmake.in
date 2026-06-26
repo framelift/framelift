@@ -9,8 +9,7 @@
 #       MyPlugin.cpp ${FRAMELIFT_SDK_SOURCES})
 #
 # A runtime plugin DLL/SO is a Qt plugin (QPluginLoader + Q_PLUGIN_METADATA via IPlugin), so
-# the SDK requires Qt6::Core — the historical imgui/json-free rule no longer
-# implies Qt-free. find_package compatibility is gated on the ABI version via the
+# the SDK requires Qt. find_package compatibility is gated on the ABI version via the
 # accompanying FrameLiftSdkConfigVersion.cmake (ExactVersion); the runtime loader
 # enforces the same exact-version match before instantiating a plugin.
 

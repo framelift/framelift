@@ -39,7 +39,7 @@ public:
     }
 
     // Set the file path for persistence and immediately load any saved data.
-    // Must be called before AddEntry(). Replaces the old SDL_GetPrefPath logic.
+    // Must be called before AddEntry().
     void SetStoragePath(std::string path);
 
     // Push a path to the front; deduplicates, caps, and persists.

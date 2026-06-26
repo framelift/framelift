@@ -10,11 +10,10 @@
 #include <memory>
 #include <string>
 
-// Qt native open-file picker (replaces the removed SDL_ShowOpenFileDialog). The
-// modal QFileDialog runs synchronously on the GUI thread, then the chosen path is
-// posted back through the queued custom-event round-trip so the caller's callback
-// fires on a later turn — never reentrantly inside OpenFile, matching the contract
-// the rest of the host (and plugins) were written against.
+// Qt native open-file picker. The modal QFileDialog runs synchronously on the GUI
+// thread, then the chosen path is posted back through the queued custom-event
+// round-trip so the caller's callback fires on a later turn — never reentrantly
+// inside OpenFile, matching the host/plugin contract.
 
 namespace
 {

@@ -30,8 +30,7 @@ namespace
 {
 // The QAudioSink's internal buffer adds latency our ring-fill measure doesn't see (the
 // sink pulls ahead of playback). We keep that buffer small and treat it as ~full when
-// computing the clock; this is the fixed-latency tuning value flagged in the migration
-// plan — verify lip-sync on a long file and adjust if audio leads/lags consistently.
+// computing the clock. Verify lip-sync on a long file before changing this value.
 constexpr double kSinkBufferSeconds = 0.10;
 
 // Thread-safe byte FIFO bridging the audio worker (writer) and the QAudioSink pull

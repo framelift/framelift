@@ -11,7 +11,7 @@
 
 include(FetchContent)
 
-# ── Vulkan stack (second graphics backend — OpenGL→Vulkan migration, #17) ───────
+# ── Vulkan stack ──────────────────────────────────────────────────────────────
 # Resolved here so the SAME setup works identically on the Windows MinGW cross-build
 # and the native-Linux build (vcpkg only runs on Windows here). FrameLift links the
 # official Vulkan loader when the Vulkan backend is enabled, while VMA compiles
@@ -70,6 +70,3 @@ if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
     )
     FetchContent_MakeAvailable(vma)
 endif ()
-
-# JSON: the IJson service (JsonServiceImpl) is backed by Qt6::Core's QJson — no
-# third-party JSON library is fetched or linked.

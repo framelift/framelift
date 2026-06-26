@@ -242,10 +242,6 @@ surface of `IModuleContext`. New host capabilities are **not**
 breaks — they ship as new service interfaces a plugin discovers with `ctx.GetService<T>()`, so
 they never bump the version.
 
-The legacy Dear ImGui SDK surface and old package terminology were removed during the Qt/QML
-migration without changing the ABI integer, because FrameLift host and plugins are rebuilt together
-from this tree.
-
 `find_package(FrameLiftSdk)` is gated on the ABI version (`ExactVersion`), so a mismatched SDK
 fails at configure time. Settings, logging, and all cross-plugin data are exchanged through the
 discoverable service interfaces and POD types — never by sharing C++ standard-library types

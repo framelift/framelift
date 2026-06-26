@@ -38,7 +38,6 @@ public:
 
 // Interface id used by Q_PLUGIN_METADATA on the plugin side and qobject_cast on the
 // host side. Bump the trailing version only if IPlugin's own signature changes
-// (a Tier-1 break; this Qt migration branch intentionally keeps
-// FRAMELIFT_ABI_VERSION at 1 while host/plugins rebuild together).
+// (a Tier-1 break). FRAMELIFT_ABI_VERSION stays at 1 while host/plugins rebuild together.
 #define FrameLiftPlugin_IID "org.framelift.IPlugin/2"
 Q_DECLARE_INTERFACE(IPlugin, FrameLiftPlugin_IID)

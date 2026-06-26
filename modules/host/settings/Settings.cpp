@@ -80,7 +80,7 @@ void Settings::ResetToDefaults()
 
 // ── Registry assembly ─────────────────────────────────────────────────────────
 // Each module registers the fields it owns. Section order here fixes the order of
-// sections written to settings.ini, so it matches the historical layout.
+// sections written to settings.ini.
 SettingsRegistry BuildSettingsRegistry(Settings& s)
 {
     SettingsRegistry reg;

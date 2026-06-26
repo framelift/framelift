@@ -13,8 +13,8 @@
 #include <string>
 #include <vector>
 
-// Host JSON service backed by Qt's QJson (replaces nlohmann). The ABI contract is
-// that navigated read nodes stay valid until FreeDocument — but QJson is value-
+// Host JSON service backed by Qt's QJson. The ABI contract is that navigated read
+// nodes stay valid until FreeDocument — but QJson is value-
 // semantic (QJsonValue/Object/Array are copies, with no stable internal addresses).
 // So the document owns a pool of heap-allocated nodes: navigation (Member/ArrayItem)
 // allocates a JsonNode copy registered with the owning JsonDoc and hands back its

@@ -5,7 +5,6 @@ project(FrameLift VERSION ${FRAMELIFT_VERSION} LANGUAGES C CXX)
 
 # Build the native unit-test suite (tests/) as part of this project so it shows up
 # in IDEs. Disabled for the Windows app/CI build, which can't run native test exes.
-# Forced OFF during the Qt migration (the test targets reference SDL/ImGui-era headers).
 option(FRAMELIFT_BUILD_TESTS "Build the unit tests (tests/)" OFF)
 
 # Build runtime plugin DLLs/SOs in plugins/. Plugins load through QPluginLoader
@@ -45,7 +44,7 @@ include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftDeps.cmake")
 # Multimedia is linked only for QAudioSink/QMediaDevices raw PCM output. Do not
 # use Qt media playback classes here: compressed media stays on FFmpegPlayer and
 # the external `ffmpeg` target above. Widgets provides the native QFileDialog
-# open-file picker (replacing SDL_ShowOpenFileDialog).
+# open-file picker.
 # AUTOMOC is required for the Q_OBJECT types in the window-qt module.
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Multimedia Widgets)
 set(CMAKE_AUTOMOC ON)
@@ -181,8 +180,8 @@ target_link_libraries(FrameLift PRIVATE
         FrameLiftSdk OpenGL::GL
         Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Widgets)
 
-# Vulkan graphics backend (OpenGL→Vulkan migration, #17). FrameLift owns the
-# instance/device setup and links the official Vulkan loader; VMA is header-only.
+# Vulkan graphics backend. FrameLift owns the instance/device setup and links the
+# official Vulkan loader; VMA is header-only.
 if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
     target_link_libraries(FrameLift PRIVATE
             Vulkan::Vulkan Vulkan::Headers GPUOpen::VulkanMemoryAllocator)
@@ -225,8 +224,7 @@ add_custom_command(TARGET FrameLift PRE_BUILD
 )
 
 # Discover plugin source folders automatically. Each plugin CMakeLists
-# registers its target through add_framelift_plugin(). Skipped entirely during the
-# Qt migration with FRAMELIFT_BUILD_PLUGINS=OFF.
+# registers its target through add_framelift_plugin().
 if (FRAMELIFT_BUILD_PLUGINS)
     set_property(GLOBAL PROPERTY FRAMELIFT_PLUGIN_TARGETS)
     file(GLOB FRAMELIFT_PLUGIN_DIRS CONFIGURE_DEPENDS LIST_DIRECTORIES TRUE
