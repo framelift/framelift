@@ -2,9 +2,9 @@
     "version": 8,
     "configurePresets": [
         {
-            "name": "FrameLift",
+            "name": "debug",
             "displayName": "FrameLift (Linux / system deps)",
-            "description": "Ninja generator; FFmpeg/libass/Qt6 from system packages (no vcpkg).",
+            "description": "Ninja generator; FFmpeg/libass/Qt6 from system packages.",
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
@@ -13,13 +13,25 @@
             }
         },
         {
-            "name": "FrameLift-windows",
+            "name": "debug-win",
             "displayName": "FrameLift (Windows / vcpkg)",
             "description": "Inherits FrameLift; resolves deps through the vcpkg toolchain.",
-            "inherits": "FrameLift",
+            "inherits": "debug",
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
             }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "debug",
+            "displayName": "Build FrameLift (Linux / system deps)",
+            "configurePreset": "debug"
+        },
+        {
+            "name": "debug-win",
+            "displayName": "Build FrameLift (Windows / vcpkg)",
+            "configurePreset": "debug-win"
         }
     ]
 }
