@@ -15,8 +15,8 @@ enum class GraphicsApi
     Vulkan,
 };
 
-// Parse a backend name (case-insensitive) from the settings file. Unknown / empty
-// values fall back to OpenGL. Pure (no SDL/GL) so it is unit-testable.
+// Parse a backend name (case-insensitive) from the settings file. Empty/auto
+// selects auto mode when Vulkan is built; unknown values fall back to OpenGL.
 inline GraphicsApi GraphicsApiFromString(std::string_view name)
 {
     // Tiny case-insensitive compare against the known names; the set is fixed and small.

@@ -28,6 +28,7 @@ class Playlist : public QObject, public ModuleBase
     Q_PROPERTY(QVariantList entries READ QmlEntries NOTIFY playlistChanged)
 
 public:
+    Playlist();
     ~Playlist();
 
     // ── IModule ───────────────────────────────────────────────

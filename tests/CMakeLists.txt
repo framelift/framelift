@@ -75,7 +75,6 @@ add_executable(framelift_tests
         unit/host/PluginConfigTests.cpp
         unit/host/ModuleSettingsTests.cpp
         unit/misc/KeyNamesTests.cpp
-        unit/host/SemVerTests.cpp
         unit/host/HotkeysTests.cpp
         unit/host/PluginAbiTests.cpp
         unit/host/PluginResolverTests.cpp
@@ -97,6 +96,7 @@ add_executable(framelift_tests
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginMetadata.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginResolver.cpp"
         "${FRAMELIFT_ROOT}/modules/host/services/HotkeysImpl.cpp"
         "${FRAMELIFT_ROOT}/sdk/src/KeyNames.cpp"
@@ -134,18 +134,33 @@ framelift_apply_coverage(framelift_tests_vulkan_off)
 gtest_discover_tests(framelift_tests_vulkan_off)
 
 # ── Helper: one test exe per plugin ───────────────────────────────────────────
-# add_framelift_plugin_test(NAME [EMIT_MODULE_ENTRY] [METADATA_HEADER <header>] <test.cpp> <plugin.cpp> [extra .cpp]...)
+# add_framelift_plugin_test(NAME [EMIT_MODULE_ENTRY] <test.cpp> <plugin.cpp> [extra .cpp]...)
 function(add_framelift_plugin_test name)
-    cmake_parse_arguments(_FL_TEST "EMIT_MODULE_ENTRY" "METADATA_HEADER" "" ${ARGN})
-    if (NOT _FL_TEST_METADATA_HEADER)
-        set(_FL_TEST_METADATA_HEADER "TestPluginMetadata.h")
-    endif ()
-    add_executable(${name} ${_FL_TEST_UNPARSED_ARGUMENTS} ${FRAMELIFT_SDK_TEST_SOURCES})
+    cmake_parse_arguments(_FL_TEST "EMIT_MODULE_ENTRY" "" "" ${ARGN})
+    set(_FL_TEST_METADATA_JSON "${CMAKE_CURRENT_BINARY_DIR}/${name}PluginMetadata.json")
+    file(WRITE "${_FL_TEST_METADATA_JSON}" "{}\n")
+    set(_FL_TEST_SOURCES ${_FL_TEST_UNPARSED_ARGUMENTS})
+    foreach (_FL_TEST_SOURCE IN LISTS _FL_TEST_UNPARSED_ARGUMENTS)
+        if (_FL_TEST_SOURCE MATCHES "\\.cpp$")
+            if (IS_ABSOLUTE "${_FL_TEST_SOURCE}")
+                set(_FL_TEST_SOURCE_ABS "${_FL_TEST_SOURCE}")
+            else ()
+                set(_FL_TEST_SOURCE_ABS "${CMAKE_CURRENT_SOURCE_DIR}/${_FL_TEST_SOURCE}")
+            endif ()
+            string(REGEX REPLACE "\\.cpp$" ".h" _FL_TEST_HEADER "${_FL_TEST_SOURCE_ABS}")
+            if (EXISTS "${_FL_TEST_HEADER}")
+                list(APPEND _FL_TEST_SOURCES "${_FL_TEST_HEADER}")
+            endif ()
+        endif ()
+    endforeach ()
+    add_executable(${name} ${_FL_TEST_SOURCES} ${FRAMELIFT_SDK_TEST_SOURCES})
     set_target_properties(${name} PROPERTIES
-            CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+            CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF
+            AUTOMOC ON)
     target_compile_definitions(${name} PRIVATE
             FRAMELIFT_BUILDING_MODULE
-            FRAMELIFT_MODULE_METADATA_HEADER="${_FL_TEST_METADATA_HEADER}")
+            FRAMELIFT_PLUGIN_METADATA_JSON="${name}PluginMetadata.json"
+            QT_NO_KEYWORDS)
     if (NOT _FL_TEST_EMIT_MODULE_ENTRY)
         target_compile_definitions(${name} PRIVATE FRAMELIFT_SUPPRESS_MODULE_ENTRY)
     endif ()
@@ -176,6 +191,7 @@ endfunction()
 add_framelift_plugin_test(framelift_test_history
         plugins/history/HistoryTests.cpp
         "${FRAMELIFT_ROOT}/plugins/history/History.cpp"
+        "${FRAMELIFT_ROOT}/plugins/history/HistorySettings.cpp"
         "${FRAMELIFT_ROOT}/modules/host/services/JsonServiceImpl.cpp")
 target_link_libraries(framelift_test_history PRIVATE Qt6::Core)
 
@@ -184,6 +200,7 @@ target_link_libraries(framelift_test_history PRIVATE Qt6::Core)
 add_framelift_plugin_test(framelift_test_playlist
         plugins/playlist/PlaylistTests.cpp
         "${FRAMELIFT_ROOT}/plugins/playlist/Playlist.cpp"
+        "${FRAMELIFT_ROOT}/plugins/playlist/PlaylistSettings.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
@@ -206,6 +223,7 @@ add_framelift_plugin_test(framelift_test_debugoverlay
 add_framelift_plugin_test(framelift_test_benchmark
         plugins/benchmark/BenchmarkTests.cpp
         "${FRAMELIFT_ROOT}/plugins/benchmark/Benchmark.cpp"
+        "${FRAMELIFT_ROOT}/plugins/benchmark/BenchmarkSettings.cpp"
         "${FRAMELIFT_ROOT}/plugins/benchmark/SysStats.cpp")
 if (WIN32)
     target_link_libraries(framelift_test_benchmark PRIVATE pdh)

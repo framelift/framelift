@@ -97,6 +97,8 @@ static void CollectWatchDirectories(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+Playlist::Playlist() = default;
+
 Playlist::~Playlist()
 {
     // Tell any in-flight scan worker not to touch the event pump after we're gone.

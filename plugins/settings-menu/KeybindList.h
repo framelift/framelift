@@ -79,16 +79,16 @@ inline std::string Slot(const std::string& list, int index)
     return index >= 0 && index < static_cast<int>(keys.size()) ? keys[index] : std::string{};
 }
 
-// Set slot `index` to `key` (empty clears it). The UI supports `slots` keys per
+// Set slot `index` to `key` (empty clears it). The UI supports `slotCount` keys per
 // action (2). If `key` already sits in the other slot it's removed there so the
 // same key never lands twice. Returns the compacted ';'-list.
-inline std::string SetSlot(const std::string& list, int index, const std::string& key, int slots = 2)
+inline std::string SetSlot(const std::string& list, int index, const std::string& key, int slotCount = 2)
 {
     std::vector<std::string> keys = Split(list);
-    keys.resize(static_cast<std::size_t>(slots));
+    keys.resize(static_cast<std::size_t>(slotCount));
     if (!key.empty())
     {
-        for (int i = 0; i < slots; ++i)
+        for (int i = 0; i < slotCount; ++i)
         {
             if (i != index && keys[static_cast<std::size_t>(i)] == key)
             {
@@ -96,7 +96,7 @@ inline std::string SetSlot(const std::string& list, int index, const std::string
             }
         }
     }
-    if (index >= 0 && index < slots)
+    if (index >= 0 && index < slotCount)
     {
         keys[static_cast<std::size_t>(index)] = key;
     }

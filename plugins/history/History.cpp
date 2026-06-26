@@ -24,6 +24,10 @@
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+History::History() = default;
+
+History::~History() = default;
+
 std::string History::FilenameOf(const std::string& path)
 {
     try

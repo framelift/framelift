@@ -14,6 +14,7 @@
 
 #include <QSettings>
 #include <QString>
+#include <QStringList>
 
 #include <filesystem>
 #include <set>
@@ -32,6 +33,19 @@ QString ToQtKey(const std::string& dotted)
         k[dot] = '/';
     }
     return k;
+}
+
+std::string ToSettingString(const QVariant& value, SettingType type)
+{
+    if (type == SettingType::String)
+    {
+        const QStringList list = value.toStringList();
+        if (list.size() > 1)
+        {
+            return list.join(';').toStdString();
+        }
+    }
+    return value.toString().toStdString();
 }
 } // namespace
 
@@ -110,7 +124,7 @@ void Settings::Load(const std::string& path)
         seen.insert(field.key);
         try
         {
-            field.load(qs.value(qkey).toString().toStdString());
+            field.load(ToSettingString(qs.value(qkey), field.type));
         }
         catch (...)
         {

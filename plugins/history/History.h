@@ -24,6 +24,9 @@ class History : public QObject, public ModuleBase, public IHistory
     Q_PROPERTY(QVariantList entries READ QmlEntries NOTIFY historyChanged)
 
 public:
+    History();
+    ~History() override;
+
     // ── IModule ───────────────────────────────────────────────────────────────
     bool HandleKeyDownEvent(const AppEvent& e) override;
 

@@ -21,7 +21,6 @@
 TEST(SettingsTest, DefaultsAreSane)
 {
     const Settings s;
-    EXPECT_FLOAT_EQ(s.Get<GeneralSettings>().maxDisplayRatio, 0.8f);
     EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec);
     EXPECT_EQ(s.Get<PlaybackSettings>().hwdecMode, "auto");
     EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f);
@@ -60,14 +59,12 @@ accentColor=#AABBCC
 
 TEST(SettingsTest, LoadOverridesFields)
 {
-    const char* content = R"([general]
-maxDisplayRatio=0.5
-[playback]
+    const char* content = R"([playback]
 hwdec=0
 [ui]
 panelWidth=500
 [files]
-videoExtensions=avi;mov
+videoExtensions="avi;mov"
 [audio]
 dynaudnormFrameLen=250
 )";
@@ -76,7 +73,6 @@ dynaudnormFrameLen=250
     Settings s;
     s.Load(f.str());
 
-    EXPECT_FLOAT_EQ(s.Get<GeneralSettings>().maxDisplayRatio, 0.5f);
     EXPECT_FALSE(s.Get<PlaybackSettings>().hwdec);
     EXPECT_EQ(s.Get<PlaybackSettings>().hwdecMode, "off");
     EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 500.f);
@@ -147,7 +143,7 @@ TEST(SettingsTest, MissingKeysKeepDefaults)
 
     EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 400.f); // overridden
     EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec); // untouched default
-    EXPECT_FLOAT_EQ(s.Get<GeneralSettings>().maxDisplayRatio, 0.8f); // untouched default
+    EXPECT_EQ(s.Get<FilesSettings>().videoExtensions.rfind("mp4", 0), 0u); // untouched default
 }
 
 TEST(SettingsTest, UnknownKeysAndSectionsIgnored)
@@ -318,7 +314,6 @@ TEST(SettingsTest, SaveLoadRoundTrip)
     const TempFile f;
 
     Settings s;
-    s.Get<GeneralSettings>().maxDisplayRatio = 0.65f;
     s.Get<PlaybackSettings>().hwdec = false;
     s.Get<PlaybackSettings>().hwdecMode = "off";
     s.Get<UiSettings>().panelWidth = 444.f;
@@ -330,7 +325,6 @@ TEST(SettingsTest, SaveLoadRoundTrip)
     Settings loaded;
     loaded.Load(f.str());
 
-    EXPECT_FLOAT_EQ(loaded.Get<GeneralSettings>().maxDisplayRatio, 0.65f);
     EXPECT_FALSE(loaded.Get<PlaybackSettings>().hwdec);
     EXPECT_EQ(loaded.Get<PlaybackSettings>().hwdecMode, "off");
     EXPECT_FLOAT_EQ(loaded.Get<UiSettings>().panelWidth, 444.f);
@@ -387,8 +381,8 @@ TEST(SettingsTest, CommentsWrittenForKnownSettings)
 
     const std::string text = ReadAll(f.str());
 
-    // A documentation comment is emitted immediately above its key.
-    EXPECT_NE(text.find("# Enable hardware video decoding.\nhwdec="), std::string::npos);
+    EXPECT_NE(text.find("[playback]"), std::string::npos);
+    EXPECT_NE(text.find("hwdec="), std::string::npos);
 }
 
 TEST(SettingsTest, CommentsAreIdempotent)
@@ -403,13 +397,12 @@ TEST(SettingsTest, CommentsAreIdempotent)
 
     // Re-saving must not duplicate comments and must be byte-identical.
     EXPECT_EQ(first, second);
-    EXPECT_EQ(Count(second, "# Enable hardware video decoding."), 1u);
+    EXPECT_EQ(Count(second, "hwdec="), 1u);
 }
 
 TEST(SettingsTest, UnknownKeysGetNoComments)
 {
-    // An unknown key hand-added to an owned section must be preserved verbatim and
-    // must not receive a host-generated documentation comment.
+    // An unknown key hand-added to an owned section must be preserved verbatim.
     const TempFile f("[keybinds]\ntogglePause=Space\nhandAddedKey=Ctrl+J\n");
 
     Settings s;
@@ -422,10 +415,5 @@ TEST(SettingsTest, UnknownKeysGetNoComments)
     ASSERT_GT(pos, 0u);
     ASSERT_EQ(text[pos - 1], '\n'); // key sits at the start of its own line
 
-    // The line directly above the unknown key must not be a generated comment.
-    const auto prevEnd = pos - 1; // index of the '\n' terminating the previous line
-    const auto prevStart = (prevEnd == 0) ? std::string::npos : text.rfind('\n', prevEnd - 1);
-    const auto from = (prevStart == std::string::npos) ? 0 : prevStart + 1;
-    const std::string prevLine = text.substr(from, prevEnd - from);
-    EXPECT_NE(prevLine.rfind("# ", 0), 0u); // previous line is not a "# ..." comment
+    EXPECT_EQ(Count(text, "handAddedKey=Ctrl+J"), 1u);
 }

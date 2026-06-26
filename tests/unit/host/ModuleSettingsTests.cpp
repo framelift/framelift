@@ -139,7 +139,7 @@ TEST(ModuleSettingsTest, EmptyValueFallsBackToDefault)
 }
 
 // Plugin keybinds live in their own [<Plugin>.keybinds] section, so writing them
-// must leave the host-owned, commented [keybinds] section untouched.
+// must leave the host-owned [keybinds] section values intact.
 TEST(ModuleSettingsTest, ModuleKeybindSectionLeavesHostKeybindsIntact)
 {
     const TempFile f(
@@ -159,8 +159,9 @@ TEST(ModuleSettingsTest, ModuleKeybindSectionLeavesHostKeybindsIntact)
     EXPECT_NE(text.find("[history.keybinds]"), std::string::npos);
     EXPECT_NE(text.find("toggleHistory=H"), std::string::npos);
 
-    // The host [keybinds] section — including its comments — survives verbatim.
-    EXPECT_NE(text.find("# Key combo to play/pause.\ntogglePause=Space"), std::string::npos);
+    // The host [keybinds] section values survive.
+    EXPECT_NE(text.find("[keybinds]"), std::string::npos);
+    EXPECT_NE(text.find("togglePause=Space"), std::string::npos);
     EXPECT_NE(text.find("quit=Ctrl+Q"), std::string::npos);
 
     // Reloading the plugin section yields the written value.

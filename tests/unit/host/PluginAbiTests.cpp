@@ -1,4 +1,9 @@
+#include "PluginMetadata.h"
+
 #include <framelift/ModuleABI.h>
+
+#include <QJsonArray>
+#include <QJsonObject>
 
 #include <gtest/gtest.h>
 
@@ -13,53 +18,50 @@ TEST(PluginAbiTest, MismatchedEpochRejectedEitherDirection)
     EXPECT_FALSE(FrameLiftAbiCompatible(FRAMELIFT_ABI_VERSION + 1, FRAMELIFT_ABI_VERSION));
 }
 
-TEST(PluginAbiTest, MetadataCarriesPackageAndModules)
+TEST(PluginAbiTest, MetadataParsesCurrentPluginShape)
 {
-    static constexpr const char* const kFeatures[] = {"playlist.panel", "playlist.navigation"};
-    static constexpr FrameLiftModuleInfo kModules[] = {
-        {"framelift.playlist.core",
-         "Playlist Core",
-         "Directory scanning",
-         {kFeatures, 2},
-         {nullptr, 0},
-         {nullptr, 0},
-         {nullptr, 0},
-         {nullptr, 0},
-         {nullptr, 0}},
-    };
-    static constexpr FrameLiftPackageInfo info{FRAMELIFT_ABI_VERSION,
-                                              "framelift.playlist",
-                                              "framelift.playlist.core",
-                                              "Playlist",
-                                              {1, 2, 3},
-                                              "FrameLift",
-                                              "Folder playlist",
-                                              kModules,
-                                              1};
+    const PluginMetadata info = ParsePluginMetadata(QJsonObject{
+        {"abi", FRAMELIFT_ABI_VERSION},
+        {"pluginId", "framelift.playlist"},
+        {"pluginFile", "framelift.playlist"},
+        {"name", "Playlist"},
+        {"version", QJsonArray{1, 2, 3}},
+        {"publisher", "FrameLift"},
+        {"description", "Folder playlist"},
+        {"providesFeatures", QJsonArray{"playlist.panel", "playlist.navigation"}},
+        {"requiresPlugins", QJsonArray{"framelift.history"}},
+        {"requiresFeatures", QJsonArray{"history.service"}},
+        {"optionalPlugins", QJsonArray{"framelift.context-menu"}},
+        {"optionalFeatures", QJsonArray{"ui.context_menu"}},
+        {"platforms", QJsonArray{"linux", "windows"}},
+    });
 
-    EXPECT_STREQ(info.packageId, "framelift.playlist");
-    EXPECT_STREQ(info.moduleFile, "framelift.playlist.core");
-    ASSERT_EQ(info.moduleCount, 1);
-    EXPECT_STREQ(info.modules[0].id, "framelift.playlist.core");
-    ASSERT_EQ(info.modules[0].providesFeatures.count, 2);
-    EXPECT_STREQ(info.modules[0].providesFeatures.items[1], "playlist.navigation");
+    ASSERT_TRUE(info.valid);
+    EXPECT_EQ(info.abiVersion, FRAMELIFT_ABI_VERSION);
+    EXPECT_EQ(info.pluginId, "framelift.playlist");
+    EXPECT_EQ(info.pluginFile, "framelift.playlist");
+    EXPECT_EQ(info.name, "Playlist");
+    EXPECT_EQ(info.version[0], 1);
+    EXPECT_EQ(info.version[1], 2);
+    EXPECT_EQ(info.version[2], 3);
+    EXPECT_EQ(info.publisher, "FrameLift");
+    EXPECT_EQ(info.description, "Folder playlist");
+    ASSERT_EQ(info.providesFeatures.size(), 2u);
+    EXPECT_EQ(info.providesFeatures[1], "playlist.navigation");
+    ASSERT_EQ(info.requiresPlugins.size(), 1u);
+    EXPECT_EQ(info.requiresPlugins[0], "framelift.history");
+    ASSERT_EQ(info.requiresFeatures.size(), 1u);
+    EXPECT_EQ(info.requiresFeatures[0], "history.service");
+    ASSERT_EQ(info.optionalPlugins.size(), 1u);
+    EXPECT_EQ(info.optionalPlugins[0], "framelift.context-menu");
+    ASSERT_EQ(info.optionalFeatures.size(), 1u);
+    EXPECT_EQ(info.optionalFeatures[0], "ui.context_menu");
+    ASSERT_EQ(info.platforms.size(), 2u);
+    EXPECT_EQ(info.platforms[0], "linux");
 }
 
-TEST(PluginAbiTest, MetadataCarriesMultipleModules)
+TEST(PluginAbiTest, MetadataWithoutPluginIdIsInvalid)
 {
-    static constexpr FrameLiftModuleInfo kModules[] = {
-        {"framelift.overlay.core", "Overlay Core", nullptr, {nullptr, 0}, {nullptr, 0}, {nullptr, 0}, {nullptr, 0},
-         {nullptr, 0}, {nullptr, 0}},
-        {"framelift.overlay.settings", "Overlay Settings", nullptr, {nullptr, 0}, {nullptr, 0}, {nullptr, 0},
-         {nullptr, 0}, {nullptr, 0}, {nullptr, 0}},
-    };
-    // A multi-module package: no module suffix in the binary name (Publisher.Package).
-    static constexpr FrameLiftPackageInfo info{
-        FRAMELIFT_ABI_VERSION, "framelift.overlay", "framelift.overlay", "Overlay", {1, 0, 0}, "FrameLift",
-        "Overlay package", kModules, 2};
-
-    ASSERT_EQ(info.moduleCount, 2);
-    EXPECT_STREQ(info.moduleFile, "framelift.overlay");
-    EXPECT_STREQ(info.modules[0].id, "framelift.overlay.core");
-    EXPECT_STREQ(info.modules[1].id, "framelift.overlay.settings");
+    const PluginMetadata info = ParsePluginMetadata(QJsonObject{{"abi", FRAMELIFT_ABI_VERSION}});
+    EXPECT_FALSE(info.valid);
 }

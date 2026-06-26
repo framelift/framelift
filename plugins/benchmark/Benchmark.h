@@ -61,6 +61,9 @@ class Benchmark final : public QObject, public ModuleBase
     Q_PROPERTY(bool complete READ Complete NOTIFY changed)
 
 public:
+    Benchmark();
+    ~Benchmark() override;
+
     const char* ModuleName() const override
     {
         return "Benchmark";

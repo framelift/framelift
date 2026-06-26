@@ -24,9 +24,9 @@ TEST(GraphicsApiTests, IsCaseInsensitive)
     EXPECT_EQ(GraphicsApiFromString("VK"), GraphicsApi::Vulkan);
 }
 
-TEST(GraphicsApiTests, UnknownAndEmptyFallBackToOpenGL)
+TEST(GraphicsApiTests, UnknownFallsBackToOpenGLAndEmptyUsesAuto)
 {
-    EXPECT_EQ(GraphicsApiFromString(""), GraphicsApi::OpenGL);
+    EXPECT_EQ(GraphicsApiFromString(""), GraphicsApi::Auto);
     EXPECT_EQ(GraphicsApiFromString("metal"), GraphicsApi::OpenGL);
     EXPECT_EQ(GraphicsApiFromString("d3d12"), GraphicsApi::OpenGL);
 }

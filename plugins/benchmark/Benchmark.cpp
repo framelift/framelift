@@ -10,6 +10,10 @@
 #include "Version.h"
 #include <framelift/platform.h>
 
+Benchmark::Benchmark() = default;
+
+Benchmark::~Benchmark() = default;
+
 std::vector<framelift::Keybind> Benchmark::Keybinds()
 {
     return {

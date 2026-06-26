@@ -1,55 +1,52 @@
-#include "PackageResolver.h"
+#include "PluginResolver.h"
+
+#include <framelift/ModuleABI.h>
 
 #include <gtest/gtest.h>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace
 {
-constexpr FrameLiftStringList EmptyList()
+std::vector<std::string> EmptyList()
 {
-    return {nullptr, 0};
+    return {};
 }
 
-template <int N>
-constexpr FrameLiftStringList List(const char* const (&items)[N])
+std::vector<std::string> List(std::initializer_list<const char*> items)
 {
-    return {items, N};
+    return {items.begin(), items.end()};
 }
 
-struct PackageFixture
+struct PluginFixture
 {
-    FrameLiftModuleInfo module{};
-    FrameLiftPackageInfo info{};
+    PluginMetadata info{};
 
-    PackageFixture(
-        const char* packageId, const char* moduleId, FrameLiftStringList provides, FrameLiftStringList reqModules,
-        FrameLiftStringList reqFeatures, FrameLiftStringList optional, FrameLiftStringList platformList
+    PluginFixture(
+        std::string pluginId, std::vector<std::string> provides, std::vector<std::string> reqPlugins,
+        std::vector<std::string> reqFeatures, std::vector<std::string> optional, std::vector<std::string> platformList
     )
-        : module{moduleId, "Module", nullptr, provides, reqModules, reqFeatures, EmptyList(), optional, platformList},
-          info{FRAMELIFT_ABI_VERSION,
-               packageId,
-               packageId,
-               packageId,
-               {1, 0, 0},
-               nullptr,
-               nullptr,
-               &module,
-               1}
     {
+        info.valid = true;
+        info.abiVersion = FRAMELIFT_ABI_VERSION;
+        info.pluginId = std::move(pluginId);
+        info.name = info.pluginId;
+        info.providesFeatures = std::move(provides);
+        info.requiresPlugins = std::move(reqPlugins);
+        info.requiresFeatures = std::move(reqFeatures);
+        info.optionalFeatures = std::move(optional);
+        info.platforms = std::move(platformList);
     }
 };
 } // namespace
 
 TEST(PluginResolverTest, AcceptsValidDependencyGraph)
 {
-    static constexpr const char* const providerFeatures[] = {"history.service"};
-    static constexpr const char* const consumerRequires[] = {"history.service"};
-    PackageFixture provider{
-        "framelift.history", "framelift.history.core", List(providerFeatures), EmptyList(), EmptyList(), EmptyList(),
-        EmptyList()};
-    PackageFixture consumer{
-        "framelift.playlist", "framelift.playlist.core", EmptyList(), EmptyList(), List(consumerRequires), EmptyList(),
-        EmptyList()};
+    PluginFixture provider{"framelift.history", List({"history.service"}), EmptyList(), EmptyList(), EmptyList(),
+                           EmptyList()};
+    PluginFixture consumer{"framelift.playlist", EmptyList(), EmptyList(), List({"history.service"}), EmptyList(),
+                           EmptyList()};
 
     const auto decisions = ResolvePlugins({{&provider.info}, {&consumer.info}}, "linux");
 
@@ -58,26 +55,22 @@ TEST(PluginResolverTest, AcceptsValidDependencyGraph)
     EXPECT_TRUE(decisions[1].accepted);
 }
 
-TEST(PluginResolverTest, RejectsMissingRequiredModule)
+TEST(PluginResolverTest, RejectsMissingRequiredPlugin)
 {
-    static constexpr const char* const requiredModules[] = {"framelift.history.core"};
-    PackageFixture consumer{
-        "framelift.playlist", "framelift.playlist.core", EmptyList(), List(requiredModules), EmptyList(), EmptyList(),
-        EmptyList()};
+    PluginFixture consumer{"framelift.playlist", EmptyList(), List({"framelift.history"}), EmptyList(), EmptyList(),
+                           EmptyList()};
 
     const auto decisions = ResolvePlugins({{&consumer.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 1u);
     EXPECT_FALSE(decisions[0].accepted);
-    EXPECT_NE(decisions[0].reason.find("framelift.history.core"), std::string::npos);
+    EXPECT_NE(decisions[0].reason.find("framelift.history"), std::string::npos);
 }
 
 TEST(PluginResolverTest, RejectsMissingRequiredFeature)
 {
-    static constexpr const char* const requiredFeatures[] = {"history.service"};
-    PackageFixture consumer{
-        "framelift.playlist", "framelift.playlist.core", EmptyList(), EmptyList(), List(requiredFeatures), EmptyList(),
-        EmptyList()};
+    PluginFixture consumer{"framelift.playlist", EmptyList(), EmptyList(), List({"history.service"}), EmptyList(),
+                           EmptyList()};
 
     const auto decisions = ResolvePlugins({{&consumer.info}}, "linux");
 
@@ -88,29 +81,22 @@ TEST(PluginResolverTest, RejectsMissingRequiredFeature)
 
 TEST(PluginResolverTest, CascadesRejectedDependencies)
 {
-    static constexpr const char* const windowsOnly[] = {"windows"};
-    static constexpr const char* const requiresModule[] = {"framelift.provider.core"};
-    PackageFixture provider{
-        "framelift.provider", "framelift.provider.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(),
-        List(windowsOnly)};
-    PackageFixture consumer{
-        "framelift.consumer", "framelift.consumer.core", EmptyList(), List(requiresModule), EmptyList(), EmptyList(),
-        EmptyList()};
+    PluginFixture provider{"framelift.provider", EmptyList(), EmptyList(), EmptyList(), EmptyList(), List({"windows"})};
+    PluginFixture consumer{"framelift.consumer", EmptyList(), List({"framelift.provider"}), EmptyList(), EmptyList(),
+                           EmptyList()};
 
     const auto decisions = ResolvePlugins({{&provider.info}, {&consumer.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 2u);
     EXPECT_FALSE(decisions[0].accepted);
     EXPECT_FALSE(decisions[1].accepted);
-    EXPECT_NE(decisions[1].reason.find("framelift.provider.core"), std::string::npos);
+    EXPECT_NE(decisions[1].reason.find("framelift.provider"), std::string::npos);
 }
 
 TEST(PluginResolverTest, OptionalFeaturesDoNotGateLoading)
 {
-    static constexpr const char* const optional[] = {"missing.optional"};
-    PackageFixture package{
-        "framelift.optional", "framelift.optional.core", EmptyList(), EmptyList(), EmptyList(), List(optional),
-        EmptyList()};
+    PluginFixture package{"framelift.optional", EmptyList(), EmptyList(), EmptyList(), List({"missing.optional"}),
+                          EmptyList()};
 
     const auto decisions = ResolvePlugins({{&package.info}}, "linux");
 
@@ -120,14 +106,10 @@ TEST(PluginResolverTest, OptionalFeaturesDoNotGateLoading)
 
 TEST(PluginResolverTest, OrdersProviderBeforeOptionalConsumer)
 {
-    static constexpr const char* const provides[] = {"ui.context_menu"};
-    static constexpr const char* const optional[] = {"ui.context_menu"};
-    PackageFixture provider{
-        "framelift.context_menu", "framelift.context_menu.core", List(provides), EmptyList(), EmptyList(), EmptyList(),
-        EmptyList()};
-    PackageFixture consumer{
-        "framelift.playlist", "framelift.playlist.core", EmptyList(), EmptyList(), EmptyList(), List(optional),
-        EmptyList()};
+    PluginFixture provider{"framelift.context_menu", List({"ui.context_menu"}), EmptyList(), EmptyList(), EmptyList(),
+                           EmptyList()};
+    PluginFixture consumer{"framelift.playlist", EmptyList(), EmptyList(), EmptyList(), List({"ui.context_menu"}),
+                           EmptyList()};
 
     // Consumer listed first in the input; ordering must still load the provider first.
     const auto order = OrderPlugins({{&consumer.info}, {&provider.info}});
@@ -138,10 +120,8 @@ TEST(PluginResolverTest, OrdersProviderBeforeOptionalConsumer)
 
 TEST(PluginResolverTest, OrdersIndependentPackagesByPackageId)
 {
-    PackageFixture zzz{
-        "framelift.zzz", "framelift.zzz.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
-    PackageFixture aaa{
-        "framelift.aaa", "framelift.aaa.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
+    PluginFixture zzz{"framelift.zzz", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
+    PluginFixture aaa{"framelift.aaa", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
 
     const auto order = OrderPlugins({{&zzz.info}, {&aaa.info}});
     ASSERT_EQ(order.size(), 2u);
