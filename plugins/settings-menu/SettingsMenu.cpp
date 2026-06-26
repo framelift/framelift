@@ -1,7 +1,6 @@
 #include "SettingsMenu.h"
 
 #include "KeybindList.h"
-#include <framelift/FocusManager.h>
 #include <framelift/Hotkeys.h>
 
 #include <QtCore/QSet>
@@ -500,10 +499,6 @@ void SettingsMenu::Open() noexcept
 {
     SeedFromContext();
     open_ = true;
-    if (auto* fm = ctx_ ? ctx_->GetService<FocusManager>() : nullptr)
-    {
-        fm->Acquire(this);
-    }
     if (ctx_)
     {
         ctx_->Publish<SettingsVisibilityEvent>({true});
@@ -518,10 +513,6 @@ void SettingsMenu::Close() noexcept
     if (isCapturing_)
     {
         SetCapturing(false);
-    }
-    if (auto* fm = ctx_ ? ctx_->GetService<FocusManager>() : nullptr)
-    {
-        fm->Release(this);
     }
     if (ctx_)
     {

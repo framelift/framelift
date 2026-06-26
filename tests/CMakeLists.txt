@@ -75,7 +75,6 @@ add_executable(framelift_tests
         unit/host/ModuleContextTests.cpp
         unit/host/PluginConfigTests.cpp
         unit/host/ModuleSettingsTests.cpp
-        unit/host/FocusManagerTests.cpp
         unit/misc/KeyNamesTests.cpp
         unit/host/SemVerTests.cpp
         unit/host/HotkeysTests.cpp

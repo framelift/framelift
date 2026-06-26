@@ -168,7 +168,6 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
     moduleCtx_->RegisterService<IEventPump>(appWindow_.get());
     moduleCtx_->RegisterService<IDirWatcher>(dirWatcher_.get());
     moduleCtx_->RegisterService<Hotkeys>(&keys_);
-    moduleCtx_->RegisterService<FocusManager>(&focus_);
     moduleCtx_->RegisterService<IFileDialog>(&fileDialogService_);
     moduleCtx_->RegisterService<IJson>(&jsonService_);
     moduleCtx_->RegisterService<ILogBuffer>(&HostLogBuffer());
@@ -504,15 +503,9 @@ void App::Dispatch(const AppEvent& e)
 
     if (e.type == AppEventType::KeyDown || e.type == AppEventType::KeyUp)
     {
-        if (auto* f = focus_.Focused())
+        if (registry_.OnEvent(e))
         {
-            if (auto* handler = static_cast<IEventHandler*>(f->QueryInterface(IEventHandler::InterfaceId)))
-            {
-                if (handler->OnEvent(e))
-                {
-                    return;
-                }
-            }
+            return;
         }
         keys_.Handle(e);
         return;

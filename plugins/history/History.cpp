@@ -535,17 +535,9 @@ void History::SetOpen(const bool value)
     if (open_)
     {
         cursor_ = filteredIndices_.empty() ? -1 : 0;
-        if (auto* focus = ctx_ ? ctx_->GetService<FocusManager>() : nullptr)
-        {
-            focus->Acquire(this);
-        }
     }
     else
     {
-        if (auto* focus = ctx_ ? ctx_->GetService<FocusManager>() : nullptr)
-        {
-            focus->Release(this);
-        }
         if (ctx_)
         {
             ctx_->Publish<PanelLayoutEvent>({1, 0.f});

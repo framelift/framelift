@@ -7,7 +7,6 @@
 #include <framelift/ContextMenu.h>
 #include <framelift/ContextMenuHelpers.h>
 #include <framelift/Events.h>
-#include <framelift/FocusManager.h>
 #include <framelift/Guard.h>
 #include <framelift/HotkeyHelpers.h>
 #include <framelift/Hotkeys.h>

@@ -2,7 +2,6 @@
 
 #include "KeybindList.h"
 
-#include "FocusManagerImpl.h"
 #include "ModuleContext.h"
 #include "Settings.h"
 #include "TempIni.h"
@@ -14,7 +13,6 @@
 
 #include <cstring>
 #include <gtest/gtest.h>
-#include <framelift/FocusManager.h>
 
 TEST(SettingsMenuTest, SeedsEditingModelFromContextOnInstall)
 {
@@ -70,15 +68,13 @@ TEST(SettingsMenuTest, OpenSetsVisible)
     EXPECT_TRUE(sm.IsOpen());
 }
 
-// Regression for #13: while the dialog is open it must hold keyboard focus and
-// swallow key presses so global hotkeys don't fire underneath it.
-TEST(SettingsMenuTest, BlocksKeybindsWhileOpen)
+// Regression for #13: while the dialog is open it swallows key presses so global
+// hotkeys don't fire underneath it.
+TEST(SettingsMenuTest, SwallowsKeybindsWhileOpen)
 {
     Settings settings;
     const TempFile ini;
     ModuleContext ctx("pref/", &settings, ini.str());
-    FocusManagerImpl fm;
-    ctx.RegisterService<FocusManager>(&fm);
 
     SettingsMenu sm;
     sm.Install(ctx);
@@ -87,19 +83,16 @@ TEST(SettingsMenuTest, BlocksKeybindsWhileOpen)
     key.type = AppEventType::KeyDown;
     key.AsKey() = {Keys::Space, Mod::None};
 
-    // Closed: no focus held, key passes through to the global hotkey layer.
-    EXPECT_EQ(fm.Focused(), nullptr);
+    // Closed: key passes through to the global hotkey layer.
     EXPECT_FALSE(sm.HandleKeyDownEvent(key));
 
-    // Open: focus acquired, key swallowed.
+    // Open: key swallowed.
     sm.Open();
-    EXPECT_EQ(fm.Focused(), static_cast<IModule*>(&sm));
     EXPECT_TRUE(sm.HandleKeyDownEvent(key));
 
-    // Closed again: focus released, key passes through once more.
+    // Closed again: key passes through once more.
     sm.Close();
     EXPECT_FALSE(sm.IsOpen());
-    EXPECT_EQ(fm.Focused(), nullptr);
     EXPECT_FALSE(sm.HandleKeyDownEvent(key));
 }
 

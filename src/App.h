@@ -1,7 +1,6 @@
 #pragma once
 
 #include "FileDialogServiceImpl.h"
-#include "FocusManagerImpl.h"
 #include "HotkeysImpl.h"
 #include "JsonServiceImpl.h"
 #include "ModuleContext.h"
@@ -95,7 +94,6 @@ private:
     PluginConfig pluginConfig_;
     std::string pluginsPath_;
     FileDialogServiceImpl fileDialogService_{&settings_};
-    FocusManagerImpl focus_;
     HotkeysImpl keys_;
     JsonServiceImpl jsonService_;
 
