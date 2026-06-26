@@ -48,7 +48,6 @@ set(FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/host/read-ahead"
         "${FRAMELIFT_ROOT}/modules/host/ui"
         "${FRAMELIFT_ROOT}/modules/platform/window-sdl"
-        "${FRAMELIFT_ROOT}/modules/platform/dir-watch"
         "${FRAMELIFT_ROOT}/modules/platform/win-shell"
 )
 

@@ -11,7 +11,6 @@
 #include "Settings.h"
 #include <chrono>
 #include <framelift/platform/IAppWindow.h>
-#include <framelift/platform/IDirWatcher.h>
 #include <framelift/platform/IMediaPlayer.h>
 #include <memory>
 #include <string>
@@ -76,7 +75,6 @@ private:
     // playback interfaces, and it registers each of those interfaces as a service.
     std::unique_ptr<FFmpegPlayer> player_;
     FFmpegPlayer* ffmpeg_ = nullptr; // alias of player_.get(), kept for readability at call sites
-    std::unique_ptr<IDirWatcher> dirWatcher_;
 
     bool pendingResize_ = false;
 

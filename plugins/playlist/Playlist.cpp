@@ -9,6 +9,7 @@
 #include <framelift/core.h>
 #include <framelift/platform.h>
 
+#include <QtCore/QStringList>
 #include <QtCore/QVariantMap>
 #include <algorithm>
 #include <filesystem>
@@ -64,6 +65,36 @@ static void ScanVideos(
     }
 }
 
+static void CollectWatchDirectories(
+    const std::filesystem::path& dir, const int depth, const int maxDepth, QStringList& out
+)
+{
+    if (maxDepth >= 0 && depth > maxDepth)
+    {
+        return;
+    }
+
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dir, ec))
+    {
+        return;
+    }
+
+    out.push_back(QString::fromStdString(dir.string()));
+    if (maxDepth >= 0 && depth >= maxDepth)
+    {
+        return;
+    }
+
+    for (auto& entry : std::filesystem::directory_iterator(dir, ec))
+    {
+        if (entry.is_directory(ec))
+        {
+            CollectWatchDirectories(entry.path(), depth + 1, maxDepth, out);
+        }
+    }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 Playlist::~Playlist()
 {
@@ -72,10 +103,7 @@ Playlist::~Playlist()
     {
         scanShared_->alive = false;
     }
-    if (auto* dw = ctx_ ? ctx_->GetService<IDirWatcher>() : nullptr)
-    {
-        dw->Unwatch();
-    }
+    ClearDirectoryWatcher();
 }
 
 std::string Playlist::FilenameOf(const std::string& path)
@@ -151,6 +179,17 @@ void Playlist::OnInstall(IModuleContext& ctx)
         scanShared_->events = events;
         scanShared_->doneEventType = scanDoneEventType_;
     }
+
+    QObject::connect(
+        &dirWatcher_, &QFileSystemWatcher::directoryChanged, this,
+        [this](const QString&)
+        {
+            if (autoReload_ && dirChangedEventType_ != 0 && scanShared_ && scanShared_->events)
+            {
+                scanShared_->events->PushCustomEvent(dirChangedEventType_);
+            }
+        }
+    );
 
     framelift::Subscribe<OpenFileRequestEvent>(
         ctx,
@@ -469,27 +508,7 @@ void Playlist::ApplyScanResult()
 
     // (Re)arm the directory watcher for the now-listed directory.
     watchedDir_ = dir;
-    auto* dw = ctx_ ? ctx_->GetService<IDirWatcher>() : nullptr;
-    auto* events = ctx_ ? ctx_->GetService<IEventPump>() : nullptr;
-    if (dw && events)
-    {
-        struct Ctx
-        {
-            Playlist* self;
-            IEventPump* events;
-        };
-
-        static const auto cb = [](void* ud)
-        {
-            auto* c = static_cast<Ctx*>(ud);
-            if (c->self->autoReload_)
-            {
-                c->events->PushCustomEvent(c->self->dirChangedEventType_);
-            }
-        };
-        watchCbCtx_ = {this, events};
-        dw->Watch(watchedDir_.c_str(), cb, &watchCbCtx_, scanSubdirs_ ? scanMaxDepth_ : 0);
-    }
+    ArmDirectoryWatcher();
 }
 
 // ── Entry management ──────────────────────────────────────────────────────────
@@ -602,6 +621,36 @@ void Playlist::Reload()
     std::vector<std::string> files;
     ScanVideos(std::filesystem::path(watchedDir_), 0, maxDepth, scanExt, files);
     RebuildEntries(files, currentPath);
+    ArmDirectoryWatcher();
+}
+
+void Playlist::ArmDirectoryWatcher()
+{
+    ClearDirectoryWatcher();
+    if (watchedDir_.empty())
+    {
+        return;
+    }
+    if (dirChangedEventType_ == 0 || !scanShared_ || !scanShared_->events)
+    {
+        return;
+    }
+
+    QStringList paths;
+    CollectWatchDirectories(std::filesystem::path(watchedDir_), 0, scanSubdirs_ ? scanMaxDepth_ : 0, paths);
+    if (!paths.empty())
+    {
+        dirWatcher_.addPaths(paths);
+    }
+}
+
+void Playlist::ClearDirectoryWatcher()
+{
+    const QStringList dirs = dirWatcher_.directories();
+    if (!dirs.empty())
+    {
+        dirWatcher_.removePaths(dirs);
+    }
 }
 
 void Playlist::RebuildEntries(std::vector<std::string>& files, const std::string& keepPath)

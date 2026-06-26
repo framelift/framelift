@@ -104,7 +104,6 @@ set(FRAMELIFT_HOST_MODULE_INCLUDE_DIRS
         "${CMAKE_SOURCE_DIR}/modules/host/read-ahead"
         "${CMAKE_SOURCE_DIR}/modules/host/ui"
         "${CMAKE_SOURCE_DIR}/modules/platform/window-qt"
-        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch"
         "${CMAKE_SOURCE_DIR}/modules/platform/win-shell"
 )
 

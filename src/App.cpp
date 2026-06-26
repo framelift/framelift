@@ -1,7 +1,6 @@
 #include "App.h"
 #include "Cli.h"
 #include "CoreSettings.h"
-#include "DirWatcher.h"
 #include "FFmpegPlayer.h"
 #include "GraphicsApi.h"
 #include "GraphicsSettings.h"
@@ -77,7 +76,7 @@ void MigrateLegacyPluginConfig(const std::string& legacyPath, PluginConfig& plug
 // ── Constructor / Destructor ──────────────────────────────────────────────────
 
 App::App(const char* title, const int width, const int height, const int cliArgc, const char* const* cliArgv)
-    : cliArgc_(cliArgc), cliArgv_(cliArgv), player_(std::make_unique<FFmpegPlayer>()), dirWatcher_(CreateDirWatcher())
+    : cliArgc_(cliArgc), cliArgv_(cliArgv), player_(std::make_unique<FFmpegPlayer>())
 {
     FRAMELIFT_PERF_START("app-start");
 
@@ -166,7 +165,6 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
     moduleCtx_->RegisterService<IAppWindow>(appWindow_.get());
     moduleCtx_->RegisterService<IGraphicsSurface>(appWindow_.get());
     moduleCtx_->RegisterService<IEventPump>(appWindow_.get());
-    moduleCtx_->RegisterService<IDirWatcher>(dirWatcher_.get());
     moduleCtx_->RegisterService<Hotkeys>(&keys_);
     moduleCtx_->RegisterService<IFileDialog>(&fileDialogService_);
     moduleCtx_->RegisterService<IJson>(&jsonService_);

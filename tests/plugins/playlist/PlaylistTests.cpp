@@ -85,7 +85,7 @@ TEST(PlaylistTest, OpenFileScansDirectoryForVideosOnly)
 {
     const TempDir dir({"a.mp4", "b.mkv", "c.txt", "readme"});
 
-    Playlist pl; // no ctx → uses default extension lists, dir-watch skipped
+    Playlist pl; // no ctx -> uses default extension lists; watcher arming is skipped
     pl.OpenFile((dir.path / "a.mp4").string().c_str());
 
     // Non-mixed playlist: only the two video files are picked up (.txt/readme excluded).

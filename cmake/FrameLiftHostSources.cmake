@@ -90,15 +90,6 @@ set(_FRAMELIFT_HOST_WINDOW_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/platform/window-qt/util.h"
 )
 
-set(_FRAMELIFT_HOST_WATCH_SOURCES
-        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/DirWatcher.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/DirWatcher.h"
-        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/LinuxDirWatcher.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/LinuxDirWatcher.h"
-        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/Win32DirWatcher.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/platform/dir-watch/Win32DirWatcher.h"
-)
-
 set(_FRAMELIFT_HOST_WIN_SHELL_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/WinShell.cpp"
         "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/WinShell.h"
@@ -165,7 +156,6 @@ set(FRAMELIFT_HOST_SOURCES
         ${_FRAMELIFT_HOST_READ_AHEAD_SOURCES}
         ${_FRAMELIFT_HOST_UI_SOURCES}
         ${_FRAMELIFT_HOST_WINDOW_SOURCES}
-        ${_FRAMELIFT_HOST_WATCH_SOURCES}
         ${_FRAMELIFT_HOST_PLAYBACK_SOURCES}
         ${_FRAMELIFT_HOST_GRAPHICS_SOURCES}
         ${_FRAMELIFT_HOST_GRAPHICS_OPENGL_SOURCES}

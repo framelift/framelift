@@ -121,7 +121,7 @@ add_framelift_plugin(MyPlugin
 | `<framelift/core.h>`     | module entry macro, module lifecycle, `ModuleBase`, context, ABI, events, hotkeys, `Log` |
 | Qt/QML                   | QObject view models and plugin-embedded Qt Quick components |
 | `<framelift/services.h>` | host + cross-plugin service interfaces (`IHistory`, `ISettingsStore`, `ISettingsRegistry`, `IPluginCatalog`, `IAppPaths`) |
-| `<framelift/platform.h>` | media playback family (`IMediaPlayback`, `IMediaProperties`, `IVideoOutput`, `IAudioControl`, `ISubtitleControl`), window family (`IAppWindow`, `IGraphicsSurface`, `IEventPump`), `IDirWatcher`, `IFileDialog` |
+| `<framelift/platform.h>` | media playback family (`IMediaPlayback`, `IMediaProperties`, `IVideoOutput`, `IAudioControl`, `ISubtitleControl`), window family (`IAppWindow`, `IGraphicsSurface`, `IEventPump`), `IFileDialog` |
 
 ### Module Entry
 

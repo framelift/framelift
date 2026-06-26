@@ -97,7 +97,7 @@ FrameLift/
 │   ├── include/framelift/  # Public headers (include path: sdk/include)
 │   │   ├── core.h          # Umbrella: module lifecycle, package entry, context, ABI, events, hotkeys
 │   │   ├── services.h      # Umbrella: cross-plugin service interfaces
-│   │   ├── platform.h      # Umbrella: media playback + window interface families, IDirWatcher, IFileDialog
+│   │   ├── platform.h      # Umbrella: media playback + window interface families, IFileDialog
 │   │   ├── services/       # Per-plugin service interfaces (IHistory, …)
 │   │   ├── platform/       # Platform service interfaces
 │   └── src/                # SDK helper sources compiled into each plugin
@@ -108,7 +108,7 @@ FrameLift/
 ├── modules/                # Built-in modules compiled into the host (not shipped as DLLs)
 │   ├── host/               # playback, audio, settings, services, controls, fonts, read-ahead, ui, module-runtime
 │   ├── gfx/                # Graphics backends (graphics-core, opengl, vulkan) and video renderers
-│   └── platform/           # SDL3 window (window-sdl) and per-OS dir watchers (dir-watch)
+│   └── platform/           # Qt window integration and platform shell services
 │
 ├── plugins/                # Plugins — each builds one package (DLL) emitted into packages/
 │   ├── overlay/            # Playback controls, idle screen, notifications

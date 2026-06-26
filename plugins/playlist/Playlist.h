@@ -4,6 +4,7 @@
 #include <framelift/platform.h>
 #include <framelift/services.h>
 
+#include <QtCore/QFileSystemWatcher>
 #include <QtCore/QObject>
 #include <QtCore/QVariantList>
 #include <atomic>
@@ -160,6 +161,9 @@ private:
     // ── Directory watching ─────────────────────────────────────────────
     std::string watchedDir_;
     uint32_t dirChangedEventType_ = 0;
+    QFileSystemWatcher dirWatcher_;
+    void ArmDirectoryWatcher();
+    void ClearDirectoryWatcher();
 
     // ── Async directory scan ───────────────────────────────────────────────────
     // OpenFile() starts playback immediately and offloads the recursive directory
@@ -204,13 +208,6 @@ private:
     std::string prevTrackKey_ = "Ctrl+Left";
     std::string reloadPlaylistKey_ = "Ctrl+R";
     std::string toggleShuffleKey_ = "Shift+S";
-
-    // Held across Watch() calls — must outlive the watcher callback.
-    struct WatchCbCtx
-    {
-        Playlist* self;
-        IEventPump* events;
-    } watchCbCtx_{};
 
     void SetOpen(bool value);
 };
