@@ -4,6 +4,7 @@
 #include <framelift/IModuleContext.h>
 #include <framelift/services/IAppPaths.h>
 #include <framelift/services/IPluginCatalog.h>
+#include <framelift/services/ISettingsPageRegistry.h>
 #include <framelift/services/ISettingsRegistry.h>
 #include <framelift/services/ISettingsStore.h>
 #include <memory>
@@ -13,6 +14,7 @@
 
 class Settings;
 class PluginConfig;
+class QObject;
 
 struct KeybindEntryRec
 {
@@ -32,6 +34,15 @@ struct ModuleSettingRec
     const char* (*getValue)(void*) = nullptr;
     void (*setValue)(void*, const char*) = nullptr;
     void* ud = nullptr;
+};
+
+struct SettingsPageRec
+{
+    std::string id;
+    std::string title;
+    std::string qmlUrl;
+    QObject* viewModel = nullptr;
+    int order = 0;
 };
 
 struct SubscriptionRec
@@ -56,6 +67,7 @@ struct ChangeCallbackRec
 class ModuleContext final : public IModuleContext,
                             public ISettingsStore,
                             public ISettingsRegistry,
+                            public ISettingsPageRegistry,
                             public IPluginCatalog,
                             public IAppPaths
 {
@@ -126,6 +138,14 @@ public:
         void (*visit)(const FrameLiftModuleSettingDesc*, void*), void* visitUd
     ) const noexcept override;
 
+    void RegisterSettingsPage(
+        const char* id, const char* title, const char* qmlUrl, QObject* viewModel, int order
+    ) noexcept override;
+
+    void EnumerateSettingsPages(
+        void (*visit)(const FrameLiftSettingsPageDesc*, void*), void* visitUd
+    ) const noexcept override;
+
     void RegisterKeybindEntry(
         const char* label, const char* actionName, const char* (*getStr)(void*), void (*setStr)(void*, const char*),
         void* ud
@@ -173,6 +193,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<ModuleSettingsImpl>> moduleSettings_;
     std::vector<KeybindEntryRec> keybindEntries_;
     std::vector<ModuleSettingRec> moduleSettingEntries_;
+    std::vector<SettingsPageRec> settingsPages_;
 
     // One catalogue entry per available plugin (loaded or merely present). loadFailed
     // is computed once in AddPlugin and snapshots startup state, so a freshly toggled

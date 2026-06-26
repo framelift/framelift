@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <QtCore/QObject>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -233,25 +234,63 @@ TEST(ModuleContextTest, NestedPublishDispatches)
     EXPECT_EQ(st.otherCalls, 1); // published from inside the outer dispatch
 }
 
-// ── Package catalogue ─────────────────────────────────────────────────────────
+namespace
+{
+struct CollectedSettingsPage
+{
+    std::string id;
+    std::string title;
+    std::string qmlUrl;
+    QObject* viewModel = nullptr;
+    int order = 0;
+};
+
+void CollectSettingsPage(const FrameLiftSettingsPageDesc* desc, void* ud)
+{
+    auto& out = *static_cast<std::vector<CollectedSettingsPage>*>(ud);
+    out.push_back(
+        {desc->id ? desc->id : "", desc->title ? desc->title : "", desc->qmlUrl ? desc->qmlUrl : "",
+         desc->viewModel, desc->order}
+    );
+}
+} // namespace
+
+TEST(ModuleContextTest, SettingsPagesRegisterEnumerateAndClear)
+{
+    Ctx c;
+    QObject first;
+    QObject second;
+
+    c.ctx.RegisterSettingsPage("playlist", "Playlist", "qrc:/PlaylistSettings.qml", &first, 20);
+    c.ctx.RegisterSettingsPage("audio", "Audio", "qrc:/AudioSettings.qml", &second, 10);
+
+    std::vector<CollectedSettingsPage> pages;
+    c.ctx.EnumerateSettingsPages(&CollectSettingsPage, &pages);
+
+    ASSERT_EQ(pages.size(), 2u);
+    EXPECT_EQ(pages[0].id, "playlist");
+    EXPECT_EQ(pages[0].title, "Playlist");
+    EXPECT_EQ(pages[0].qmlUrl, "qrc:/PlaylistSettings.qml");
+    EXPECT_EQ(pages[0].viewModel, &first);
+    EXPECT_EQ(pages[0].order, 20);
+    EXPECT_EQ(pages[1].id, "audio");
+
+    c.ctx.ClearSubscriptions();
+    pages.clear();
+    c.ctx.EnumerateSettingsPages(&CollectSettingsPage, &pages);
+    EXPECT_TRUE(pages.empty());
+}
+
+// ── Plugin catalogue ──────────────────────────────────────────────────────────
 
 namespace
 {
-struct CollectedPackage
+struct CollectedPlugin
 {
     std::string id;
     std::string displayName;
     int version[3];
     std::string publisher;
-    std::string description;
-    bool loaded;
-};
-
-struct CollectedModule
-{
-    std::string packageId;
-    std::string id;
-    std::string name;
     std::string description;
     bool enabled;
     bool loaded;
@@ -260,49 +299,31 @@ struct CollectedModule
 
 // Copy every string out *during* the callback — the visitor contract is that the
 // pointers are valid only for this call.
-void CollectPackage(
+void CollectPlugin(
     const char* id, const char* displayName, const int* version, const char* publisher, const char* description,
-    bool loaded, void* ud
+    bool enabled, bool loaded, bool loadFailed, void* ud
 )
 {
-    auto& out = *static_cast<std::vector<CollectedPackage>*>(ud);
+    auto& out = *static_cast<std::vector<CollectedPlugin>*>(ud);
     out.push_back(
         {id, displayName ? displayName : "", {version[0], version[1], version[2]}, publisher ? publisher : "",
-         description ? description : "", loaded}
+         description ? description : "", enabled, loaded, loadFailed}
     );
 }
 
-void CollectModule(
-    const char* packageId, const char* moduleId, const char* name, const char* description, bool enabled, bool loaded,
-    bool loadFailed, void* ud
-)
+std::vector<CollectedPlugin> EnumeratePlugins(ModuleContext& ctx)
 {
-    auto& out = *static_cast<std::vector<CollectedModule>*>(ud);
-    out.push_back(
-        {packageId, moduleId, name ? name : "", description ? description : "", enabled, loaded, loadFailed}
-    );
-}
-
-std::vector<CollectedPackage> EnumeratePkgs(ModuleContext& ctx)
-{
-    std::vector<CollectedPackage> out;
-    ctx.EnumeratePackages(&CollectPackage, &out);
-    return out;
-}
-
-std::vector<CollectedModule> EnumerateMods(ModuleContext& ctx)
-{
-    std::vector<CollectedModule> out;
-    ctx.EnumerateModules(&CollectModule, &out);
+    std::vector<CollectedPlugin> out;
+    ctx.EnumeratePlugins(&CollectPlugin, &out);
     return out;
 }
 } // namespace
 
-TEST(ModuleContextTest, EnumeratePackagesAndModulesReportsLoadedAndDisabledEntries)
+TEST(ModuleContextTest, EnumeratePluginsReportsLoadedAndDisabledEntries)
 {
     Ctx c;
 
-    ModuleContext::PackageCatalogEntry alpha;
+    ModuleContext::PluginCatalogEntry alpha;
     alpha.id = "framelift.alpha";
     alpha.displayName = "Alpha";
     alpha.version[0] = 2;
@@ -311,89 +332,73 @@ TEST(ModuleContextTest, EnumeratePackagesAndModulesReportsLoadedAndDisabledEntri
     alpha.publisher = "Acme";
     alpha.description = "First plugin";
     alpha.loaded = true;
-    alpha.modules.push_back({"framelift.alpha.core", "Alpha Core", "", true, true});
-    c.ctx.AddPackage(std::move(alpha));
+    c.ctx.AddPlugin(std::move(alpha));
 
-    ModuleContext::PackageCatalogEntry beta; // present but its module is disabled
+    ModuleContext::PluginCatalogEntry beta; // present but disabled
     beta.id = "framelift.beta";
+    beta.enabled = false;
     beta.loaded = false;
-    beta.modules.push_back({"framelift.beta.core", "Beta Core", "", false, false});
-    c.ctx.AddPackage(std::move(beta));
+    c.ctx.AddPlugin(std::move(beta));
 
-    ModuleContext::PackageCatalogEntry gamma; // module enabled yet not loaded → failed
+    ModuleContext::PluginCatalogEntry gamma; // enabled yet not loaded -> failed
     gamma.id = "framelift.gamma";
     gamma.loaded = false;
-    gamma.modules.push_back({"framelift.gamma.core", "Gamma Core", "", true, false});
-    c.ctx.AddPackage(std::move(gamma));
+    c.ctx.AddPlugin(std::move(gamma));
 
-    const auto pkgs = EnumeratePkgs(c.ctx);
-    ASSERT_EQ(pkgs.size(), 3u);
-    EXPECT_EQ(pkgs[0].id, "framelift.alpha");
-    EXPECT_EQ(pkgs[0].displayName, "Alpha");
-    EXPECT_EQ(pkgs[0].version[0], 2);
-    EXPECT_EQ(pkgs[0].publisher, "Acme");
-    EXPECT_TRUE(pkgs[0].loaded);
-    EXPECT_FALSE(pkgs[1].loaded);
+    const auto plugins = EnumeratePlugins(c.ctx);
+    ASSERT_EQ(plugins.size(), 3u);
+    EXPECT_EQ(plugins[0].id, "framelift.alpha");
+    EXPECT_EQ(plugins[0].displayName, "Alpha");
+    EXPECT_EQ(plugins[0].version[0], 2);
+    EXPECT_EQ(plugins[0].publisher, "Acme");
+    EXPECT_TRUE(plugins[0].enabled);
+    EXPECT_TRUE(plugins[0].loaded);
+    EXPECT_FALSE(plugins[0].loadFailed);
 
-    const auto mods = EnumerateMods(c.ctx);
-    ASSERT_EQ(mods.size(), 3u);
+    EXPECT_EQ(plugins[1].id, "framelift.beta");
+    EXPECT_FALSE(plugins[1].enabled);
+    EXPECT_FALSE(plugins[1].loaded);
+    EXPECT_FALSE(plugins[1].loadFailed);
 
-    EXPECT_EQ(mods[0].packageId, "framelift.alpha");
-    EXPECT_EQ(mods[0].id, "framelift.alpha.core");
-    EXPECT_TRUE(mods[0].enabled);
-    EXPECT_TRUE(mods[0].loaded);
-    EXPECT_FALSE(mods[0].loadFailed);
-
-    EXPECT_EQ(mods[1].id, "framelift.beta.core");
-    EXPECT_FALSE(mods[1].enabled);
-    EXPECT_FALSE(mods[1].loaded);
-    EXPECT_FALSE(mods[1].loadFailed); // disabled, never attempted
-
-    EXPECT_EQ(mods[2].id, "framelift.gamma.core");
-    EXPECT_TRUE(mods[2].enabled);
-    EXPECT_FALSE(mods[2].loaded);
-    EXPECT_TRUE(mods[2].loadFailed); // enabled but missing from the loaded set
+    EXPECT_EQ(plugins[2].id, "framelift.gamma");
+    EXPECT_TRUE(plugins[2].enabled);
+    EXPECT_FALSE(plugins[2].loaded);
+    EXPECT_TRUE(plugins[2].loadFailed);
 }
 
-TEST(ModuleContextTest, EnumeratePackagesEmptyByDefault)
+TEST(ModuleContextTest, EnumeratePluginsEmptyByDefault)
 {
     Ctx c;
-    EXPECT_TRUE(EnumeratePkgs(c.ctx).empty());
-    EXPECT_TRUE(EnumerateMods(c.ctx).empty());
+    EXPECT_TRUE(EnumeratePlugins(c.ctx).empty());
 }
 
-TEST(ModuleContextTest, SetModuleEnabledUpdatesCatalogueAndPersists)
+TEST(ModuleContextTest, SetPluginEnabledUpdatesCatalogueAndPersists)
 {
     Settings settings;
-    PluginConfig packageConfig;
-    const std::string packagesIni =
-        (std::filesystem::temp_directory_path() / "framelift_test_packagesini.ini").string();
-    std::filesystem::remove(packagesIni);
-    ModuleContext ctx{"pref/", &settings, "unused.ini", &packageConfig, packagesIni};
+    PluginConfig pluginConfig;
+    const std::string pluginsIni =
+        (std::filesystem::temp_directory_path() / "framelift_test_pluginsini.ini").string();
+    std::filesystem::remove(pluginsIni);
+    ModuleContext ctx{"pref/", &settings, "unused.ini", &pluginConfig, pluginsIni};
 
-    // One package carrying two modules — the multi-module case: disable just one.
-    ModuleContext::PackageCatalogEntry pkg;
-    pkg.id = "framelift.media";
-    pkg.loaded = true;
-    pkg.modules.push_back({"framelift.media.core", "Core", "", true, true});
-    pkg.modules.push_back({"framelift.media.extra", "Extra", "", true, true});
-    ctx.AddPackage(std::move(pkg));
+    ModuleContext::PluginCatalogEntry plugin;
+    plugin.id = "framelift.media";
+    plugin.loaded = true;
+    ctx.AddPlugin(std::move(plugin));
 
-    ctx.SetModuleEnabled("framelift.media.extra", false); // disable one module
-    ctx.SetModuleEnabled("unknown.module", false);        // no-op for unknown ids
+    ctx.SetPluginEnabled("framelift.media", false);
+    ctx.SetPluginEnabled("unknown.plugin", false);
 
     // Catalogue reflects the toggle immediately (drives the live checkbox state).
-    const auto mods = EnumerateMods(ctx);
-    ASSERT_EQ(mods.size(), 2u);
-    EXPECT_TRUE(mods[0].enabled);  // framelift.media.core
-    EXPECT_FALSE(mods[1].enabled); // framelift.media.extra
+    const auto plugins = EnumeratePlugins(ctx);
+    ASSERT_EQ(plugins.size(), 1u);
+    EXPECT_FALSE(plugins[0].enabled);
 
     // The opt-out manifest persisted the disable and nothing else.
     PluginConfig reloaded;
-    reloaded.Load(packagesIni);
-    EXPECT_FALSE(reloaded.IsEnabled("framelift.media.extra"));
-    EXPECT_TRUE(reloaded.IsEnabled("framelift.media.core"));
-    EXPECT_TRUE(reloaded.IsEnabled("unknown.module")); // never written
+    reloaded.Load(pluginsIni);
+    EXPECT_FALSE(reloaded.IsEnabled("framelift.media"));
+    EXPECT_TRUE(reloaded.IsEnabled("unknown.plugin"));
 
-    std::filesystem::remove(packagesIni);
+    std::filesystem::remove(pluginsIni);
 }

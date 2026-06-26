@@ -118,8 +118,7 @@ FrameLift/
 │   ├── debug-overlay/      # Live playback stats
 │   ├── benchmark/          # Performance / system-stats benchmark overlay
 │   ├── remote-stream/      # Remote network streams (http/https/rtsp + encrypted)
-│   ├── context-menu/       # Shared right-click context-menu service
-│   └── updater/            # Auto-update (Windows-only)
+│   └── context-menu/       # Shared right-click context-menu service
 │
 ├── cmake/                  # Dependency fetch, shader compile, and SDK packaging modules
 ├── vcpkg.json              # Windows native libs (SDL3, FFmpeg, libass) — vcpkg manifest
@@ -165,7 +164,6 @@ cmake --build build --config Debug
 Output: `cmake-build-debug/framelift` (`.exe` on Windows). On Windows the required shared libraries
 are copied next to the executable; on Linux SDL3/FFmpeg/libass are resolved from the system. Package
 DLLs are placed under `cmake-build-debug/packages/` (`.dll` on Windows, `.so` on Linux).
-The auto-updater package declares Windows-only platform support and is disabled automatically elsewhere.
 The Vulkan backend links the official Vulkan loader when enabled; a Vulkan runtime
 (`libvulkan.so.1` / `vulkan-1.dll`) is required for Vulkan-enabled builds.
 

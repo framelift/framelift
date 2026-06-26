@@ -1,4 +1,5 @@
 #include "History.h"
+#include "HistorySettings.h"
 #include <cstddef>
 #include <cstdio>
 #include <string>
@@ -62,11 +63,6 @@ void History::FormatEntry(Entry& e)
 
 // ── ModuleBase hooks ───────────────────────────────────────────────────────
 
-std::vector<framelift::SettingsField> History::SettingsFields()
-{
-    return {{"maxEntries", &maxEntries_, 200}};
-}
-
 std::vector<framelift::Keybind> History::Keybinds()
 {
     return {
@@ -75,6 +71,16 @@ std::vector<framelift::Keybind> History::Keybinds()
              togglePanel();
          }}
     };
+}
+
+void History::LoadSettings(IModuleSettings& ps)
+{
+    maxEntries_ = ps.GetInt("maxEntries", 200);
+}
+
+void History::SaveSettings(IModuleSettings& ps)
+{
+    ps.SetInt("maxEntries", maxEntries_);
 }
 
 void History::OnInstall(IModuleContext& ctx)
@@ -90,6 +96,14 @@ void History::OnInstall(IModuleContext& ctx)
         {
             SetStoragePath(prefPath + "history.json");
         }
+    }
+
+    if (auto* pages = ctx.GetService<ISettingsPageRegistry>())
+    {
+        settingsPage_ = std::make_unique<HistorySettings>(*this);
+        pages->RegisterSettingsPage(
+            "history", "History", "qrc:/qt/qml/FrameLift/Plugins/History/HistorySettings.qml", settingsPage_.get(), 310
+        );
     }
 
     framelift::Subscribe<FileOpenedEvent>(
@@ -127,6 +141,24 @@ void History::OnInstall(IModuleContext& ctx)
             }
         );
     }
+}
+
+void History::ApplySettings(int maxEntries)
+{
+    maxEntries_ = maxEntries;
+    while (static_cast<int>(entries_.size()) > MaxEntries())
+    {
+        entries_.pop_back();
+    }
+    RebuildFilter();
+    if (auto* store = ctx_ ? ctx_->GetService<ISettingsStore>() : nullptr)
+    {
+        IModuleSettings& ps = store->GetModuleSettings(SettingsSection().c_str());
+        SaveSettings(ps);
+        ps.Save();
+    }
+    Save();
+    Q_EMIT historyChanged();
 }
 
 // ── IModule ──────────────────────────────────────────────────────────────────

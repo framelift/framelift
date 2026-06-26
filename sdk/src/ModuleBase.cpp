@@ -14,8 +14,8 @@ void ModuleBase::Install(IModuleContext& ctx) noexcept
         ModuleName(), "Install",
         [&]
         {
-            // Cache the declarative tables once; the default hooks below consume them.
-            fields_ = SettingsFields();
+            // Cache the declarative keybind table once; settings are now explicit
+            // per module so complex QML settings pages can own their view models.
             keybinds_ = Keybinds();
 
             if (auto* store = ctx.GetService<ISettingsStore>())
@@ -40,7 +40,6 @@ void ModuleBase::Install(IModuleContext& ctx) noexcept
                 }
             }
 
-            RegisterSettingsFields(ctx);
             RegisterKeybinds(ctx);
             OnInstall(ctx);
         }
@@ -143,12 +142,10 @@ bool ModuleBase::HandleEvent(const AppEvent& e)
 
 void ModuleBase::LoadSettings(IModuleSettings& ps)
 {
-    framelift::LoadFields(ps, fields_);
 }
 
 void ModuleBase::SaveSettings(IModuleSettings& ps)
 {
-    framelift::SaveFields(ps, fields_);
 }
 
 void ModuleBase::LoadKeybinds(IModuleSettings& kps)
@@ -183,52 +180,6 @@ void ModuleBase::OnBindHotkeys(Hotkeys& keys)
         {
             framelift::Bind(keys, kb.action, *kb.storage, kb.onPress);
         }
-    }
-}
-
-void ModuleBase::RegisterSettingsFields(IModuleContext& ctx)
-{
-    auto* registry = ctx.GetService<ISettingsRegistry>();
-    if (!registry)
-    {
-        return;
-    }
-    registeredFields_.clear();
-    registeredFields_.reserve(fields_.size());
-    for (auto& field : fields_)
-    {
-        auto& rec = registeredFields_.emplace_back();
-        rec.owner = this;
-        rec.field = &field;
-        rec.key = SettingsSection() + "." + field.Key();
-        rec.defaultValue = field.DefaultValue();
-
-        FrameLiftModuleSettingDesc desc{
-            rec.key.c_str(),
-            field.TypeId(),
-            rec.desc.c_str(),
-            rec.defaultValue.c_str(),
-            [](void* ud) -> const char*
-            {
-                auto* rec = static_cast<RegisteredSettingField*>(ud);
-                rec->currentValue = rec->field->CurrentValue();
-                return rec->currentValue.c_str();
-            },
-            [](void* ud, const char* value)
-            {
-                framelift::Guard(
-                    "module setting update",
-                    [&]
-                    {
-                        auto* rec = static_cast<RegisteredSettingField*>(ud);
-                        rec->field->SetFromString(value);
-                        rec->owner->PersistSettings();
-                    }
-                );
-            },
-            &rec
-        };
-        registry->RegisterModuleSetting(&desc);
     }
 }
 

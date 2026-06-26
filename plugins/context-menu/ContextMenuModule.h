@@ -122,6 +122,7 @@ private:
     void OpenFileAction();
     void TogglePauseAction();
     AudioNormalizeParams NormalizeParams() const;
+    [[nodiscard]] std::string ShortcutFor(const std::string& hotkeyName) const;
 
     std::vector<Item> items_;
     std::vector<Section> sections_;

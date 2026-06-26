@@ -9,5 +9,6 @@
 #include <framelift/services/IJson.h>
 #include <framelift/services/ILogBuffer.h>
 #include <framelift/services/IPluginCatalog.h>
+#include <framelift/services/ISettingsPageRegistry.h>
 #include <framelift/services/ISettingsRegistry.h>
 #include <framelift/services/ISettingsStore.h>

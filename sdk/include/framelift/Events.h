@@ -62,6 +62,12 @@ struct SettingsVisibilityEvent
     bool open = false;
 };
 
+struct OpenSettingsPageEvent
+{
+    static constexpr const char* EventId = "framelift.OpenSettingsPageEvent";
+    const char* pageId = nullptr;
+};
+
 // Published once by the host at startup (after all plugins are loaded and
 // subscribed) carrying the process command line verbatim. The host itself only
 // consumes the first positional argument as a file/URL to open; this event lets

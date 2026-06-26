@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -34,6 +35,60 @@ constexpr CoreBindEntry kCoreKeybinds[] = {
     {"Toggle subtitles", "toggleSubtitles", "keybinds.toggleSubtitles"},
     {"Open file dialog", "openFileDialog", "keybinds.openFileDialog"},
 };
+
+constexpr const char* kPluginsPageQml = "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/SettingsPluginsPage.qml";
+
+const char* SettingsPageQmlForSection(const std::string& id)
+{
+    if (id == "audio")
+    {
+        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/AudioSettings.qml";
+    }
+    if (id == "cache")
+    {
+        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/CacheSettings.qml";
+    }
+    if (id == "files")
+    {
+        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/FilesSettings.qml";
+    }
+    if (id == "graphics")
+    {
+        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/GraphicsSettings.qml";
+    }
+    if (id == "keybinds")
+    {
+        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/KeybindSettings.qml";
+    }
+    if (id == "playback")
+    {
+        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/PlaybackSettings.qml";
+    }
+    if (id == "subtitle")
+    {
+        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/SubtitleSettings.qml";
+    }
+    if (id == "theme")
+    {
+        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/ThemeSettings.qml";
+    }
+    if (id == "ui")
+    {
+        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/UiSettings.qml";
+    }
+    return nullptr;
+}
+
+QString PageTitleFromId(const std::string& id)
+{
+    QString title = QString::fromStdString(id);
+    if (title.isEmpty())
+    {
+        return title;
+    }
+    title[0] = title[0].toUpper();
+    return title;
+}
 } // namespace
 
 void EditModel::Clear()
@@ -64,6 +119,77 @@ std::string& EditModel::Str(const std::string& key)
     return strings_[key];
 }
 
+SettingsSectionPageModel::SettingsSectionPageModel(SettingsMenu& owner, QString id, QString title)
+    : owner_(owner), id_(std::move(id)), title_(std::move(title))
+{
+}
+
+QString SettingsSectionPageModel::Title() const
+{
+    return title_;
+}
+
+QVariantList SettingsSectionPageModel::Fields()
+{
+    return owner_.fieldsForPage(id_);
+}
+
+bool SettingsSectionPageModel::Dirty() const
+{
+    return owner_.Dirty();
+}
+
+void SettingsSectionPageModel::setFieldValue(const QString& key, const QVariant& value)
+{
+    owner_.setFieldValue(key, value);
+    Q_EMIT changed();
+}
+
+void SettingsSectionPageModel::save()
+{
+    owner_.saveActivePage();
+    Q_EMIT changed();
+}
+
+void SettingsSectionPageModel::reset()
+{
+    owner_.resetActivePage();
+    Q_EMIT changed();
+}
+
+SettingsPluginsPageModel::SettingsPluginsPageModel(SettingsMenu& owner) : owner_(owner)
+{
+}
+
+QString SettingsPluginsPageModel::Title() const
+{
+    return QStringLiteral("Plugins");
+}
+
+QVariantList SettingsPluginsPageModel::Plugins() const
+{
+    return owner_.pluginsModel();
+}
+
+bool SettingsPluginsPageModel::Dirty() const
+{
+    return false;
+}
+
+void SettingsPluginsPageModel::setPluginEnabled(const QString& pluginId, bool enabled)
+{
+    owner_.setPluginEnabled(pluginId, enabled);
+    Q_EMIT changed();
+}
+
+void SettingsPluginsPageModel::save()
+{
+}
+
+void SettingsPluginsPageModel::reset()
+{
+}
+
 const char* SettingsMenu::ModuleName() const
 {
     return "SettingsMenu";
@@ -79,9 +205,50 @@ std::vector<framelift::Keybind> SettingsMenu::Keybinds()
     };
 }
 
-void SettingsMenu::OnInstall(IModuleContext&)
+void SettingsMenu::OnInstall(IModuleContext& ctx)
 {
     SeedFromContext();
+    RegisterBuiltInPages();
+
+    framelift::Subscribe<OpenSettingsPageEvent>(
+        ctx,
+        [this](const OpenSettingsPageEvent& e)
+        {
+            OpenPage(e.pageId);
+        }
+    );
+
+    if (auto* menu = ctx.GetService<ContextMenu>())
+    {
+        framelift::AddSection(
+            *menu,
+            [this](ContextMenu& m)
+            {
+                m.AddSeparator();
+                framelift::AddItem(
+                    m, "Settings", "openSettings",
+                    [this]
+                    {
+                        OpenPage(nullptr);
+                    }
+                );
+                framelift::AddItem(
+                    m, "Audio Settings",
+                    [this]
+                    {
+                        OpenPage("audio");
+                    }
+                );
+                framelift::AddItem(
+                    m, "Subtitle Settings",
+                    [this]
+                    {
+                        OpenPage("subtitle");
+                    }
+                );
+            }
+        );
+    }
 }
 
 ISettingsStore* SettingsMenu::SettingsStore() const
@@ -92,6 +259,11 @@ ISettingsStore* SettingsMenu::SettingsStore() const
 ISettingsRegistry* SettingsMenu::SettingsReg() const
 {
     return ctx_ ? ctx_->GetService<ISettingsRegistry>() : nullptr;
+}
+
+ISettingsPageRegistry* SettingsMenu::SettingsPageReg() const
+{
+    return ctx_ ? ctx_->GetService<ISettingsPageRegistry>() : nullptr;
 }
 
 IPluginCatalog* SettingsMenu::PluginCatalog() const
@@ -168,7 +340,9 @@ void SettingsMenu::SeedFromContext()
         [](const FrameLiftSettingDesc* d, void* ud)
         {
             auto* self = static_cast<SettingsMenu*>(ud);
-            FieldMeta field{d->key ? d->key : "", d->type, d->defaultValue ? d->defaultValue : ""};
+            FieldMeta field{
+                d->key ? d->key : "", d->type, d->desc ? d->desc : "", d->defaultValue ? d->defaultValue : ""
+            };
             self->SeedHostValue(field);
             self->fields_.push_back(std::move(field));
         },
@@ -179,8 +353,14 @@ void SettingsMenu::SeedFromContext()
         [](const FrameLiftModuleSettingDesc* d, void* ud)
         {
             auto* self = static_cast<SettingsMenu*>(ud);
-            FieldMeta field{d->key ? d->key : "", d->type, d->defaultValue ? d->defaultValue : "", true, d->getValue,
-                            d->setValue,          d->ud};
+            FieldMeta field{d->key ? d->key : "",
+                            d->type,
+                            d->desc ? d->desc : "",
+                            d->defaultValue ? d->defaultValue : "",
+                            true,
+                            d->getValue,
+                            d->setValue,
+                            d->ud};
             self->SeedModuleValue(field);
             self->fields_.push_back(std::move(field));
         },
@@ -207,26 +387,82 @@ bool SettingsMenu::Dirty() const noexcept
     return dirty_;
 }
 
-QStringList SettingsMenu::QmlPages()
+QVariantList SettingsMenu::QmlPages()
 {
-    RefreshFields();
-    QStringList result;
-    QSet<QString> seen;
-    for (const FieldMeta& field : fields_)
+    QVariantList result;
+    auto* registry = SettingsPageReg();
+    if (!registry)
     {
-        const auto dot = field.key.find('.');
-        const QString section = QString::fromStdString(field.key.substr(0, dot));
-        if (!seen.contains(section))
-        {
-            seen.insert(section);
-            result.push_back(section);
-        }
+        return result;
     }
-    if (PluginCatalog() && !seen.contains(QStringLiteral("plugins")))
+
+    registry->EnumerateSettingsPages(
+        [](const FrameLiftSettingsPageDesc* page, void* ud)
+        {
+            auto* pages = static_cast<QVariantList*>(ud);
+            QVariantMap row;
+            row.insert(QStringLiteral("id"), QString::fromUtf8(page->id ? page->id : ""));
+            row.insert(QStringLiteral("title"), QString::fromUtf8(page->title ? page->title : ""));
+            row.insert(QStringLiteral("qmlUrl"), QString::fromUtf8(page->qmlUrl ? page->qmlUrl : ""));
+            row.insert(QStringLiteral("viewModel"), QVariant::fromValue(page->viewModel));
+            row.insert(QStringLiteral("order"), page->order);
+            pages->push_back(row);
+        },
+        &result
+    );
+    std::stable_sort(
+        result.begin(), result.end(),
+        [](const QVariant& a, const QVariant& b)
+        {
+            return a.toMap().value(QStringLiteral("order")).toInt() < b.toMap().value(QStringLiteral("order")).toInt();
+        }
+    );
+    if (qmlActivePage_.empty() && !result.empty())
     {
-        result.push_back(QStringLiteral("plugins"));
+        qmlActivePage_ = result.front().toMap().value(QStringLiteral("id")).toString().toStdString();
     }
     return result;
+}
+
+QVariantMap SettingsMenu::ActivePageRecord() const
+{
+    QVariantMap first;
+    auto* registry = SettingsPageReg();
+    if (!registry)
+    {
+        return {};
+    }
+
+    struct Ctx
+    {
+        const std::string* active;
+        QVariantMap first;
+        QVariantMap match;
+    };
+
+    Ctx ctx{&qmlActivePage_, {}, {}};
+    registry->EnumerateSettingsPages(
+        [](const FrameLiftSettingsPageDesc* page, void* ud)
+        {
+            auto& ctx = *static_cast<Ctx*>(ud);
+            QVariantMap row;
+            row.insert(QStringLiteral("id"), QString::fromUtf8(page->id ? page->id : ""));
+            row.insert(QStringLiteral("title"), QString::fromUtf8(page->title ? page->title : ""));
+            row.insert(QStringLiteral("qmlUrl"), QString::fromUtf8(page->qmlUrl ? page->qmlUrl : ""));
+            row.insert(QStringLiteral("viewModel"), QVariant::fromValue(page->viewModel));
+            row.insert(QStringLiteral("order"), page->order);
+            if (ctx.first.isEmpty())
+            {
+                ctx.first = row;
+            }
+            if (!ctx.active->empty() && *ctx.active == row.value(QStringLiteral("id")).toString().toStdString())
+            {
+                ctx.match = row;
+            }
+        },
+        &ctx
+    );
+    return ctx.match.isEmpty() ? ctx.first : ctx.match;
 }
 
 QString SettingsMenu::ActivePage() const
@@ -244,15 +480,21 @@ void SettingsMenu::SetActivePage(const QString& page)
     }
 }
 
-QVariantList SettingsMenu::QmlFields()
+QString SettingsMenu::ActivePageUrl() const
+{
+    return ActivePageRecord().value(QStringLiteral("qmlUrl")).toString();
+}
+
+QObject* SettingsMenu::ActivePageViewModel() const
+{
+    return ActivePageRecord().value(QStringLiteral("viewModel")).value<QObject*>();
+}
+
+QVariantList SettingsMenu::fieldsForPage(const QString& pageId)
 {
     RefreshFields();
-    if (qmlActivePage_ == "plugins")
-    {
-        return {};
-    }
     QVariantList result;
-    const std::string prefix = qmlActivePage_ + ".";
+    const std::string prefix = pageId.toStdString() + ".";
     for (const FieldMeta& field : fields_)
     {
         if (!field.key.starts_with(prefix))
@@ -262,6 +504,7 @@ QVariantList SettingsMenu::QmlFields()
         QVariantMap row;
         row.insert(QStringLiteral("key"), QString::fromStdString(field.key));
         row.insert(QStringLiteral("label"), QString::fromStdString(field.key.substr(prefix.size())));
+        row.insert(QStringLiteral("description"), QString::fromStdString(field.desc));
         row.insert(QStringLiteral("type"), field.type);
         switch (field.type)
         {
@@ -285,7 +528,7 @@ QVariantList SettingsMenu::QmlFields()
     return result;
 }
 
-QVariantList SettingsMenu::QmlPlugins() const
+QVariantList SettingsMenu::pluginsModel() const
 {
     QVariantList result;
     auto* catalog = PluginCatalog();
@@ -319,6 +562,54 @@ QVariantList SettingsMenu::QmlPlugins() const
         &result
     );
     return result;
+}
+
+void SettingsMenu::RegisterBuiltInPages()
+{
+    auto* registry = SettingsPageReg();
+    if (!registry)
+    {
+        return;
+    }
+
+    pageModels_.clear();
+    QSet<QString> seen;
+    int order = 10;
+    for (const FieldMeta& field : fields_)
+    {
+        if (field.moduleOwned)
+        {
+            continue;
+        }
+        const auto dot = field.key.find('.');
+        const std::string section = field.key.substr(0, dot);
+        const QString id = QString::fromStdString(section);
+        if (seen.contains(id))
+        {
+            continue;
+        }
+        seen.insert(id);
+        const char* qmlUrl = SettingsPageQmlForSection(section);
+        if (!qmlUrl)
+        {
+            continue;
+        }
+        auto model = std::make_unique<SettingsSectionPageModel>(*this, id, PageTitleFromId(section));
+        QObject* modelPtr = model.get();
+        pageModels_.push_back(std::move(model));
+        registry->RegisterSettingsPage(
+            section.c_str(), PageTitleFromId(section).toUtf8().constData(), qmlUrl, modelPtr, order
+        );
+        order += 10;
+    }
+
+    if (PluginCatalog())
+    {
+        auto model = std::make_unique<SettingsPluginsPageModel>(*this);
+        QObject* modelPtr = model.get();
+        pageModels_.push_back(std::move(model));
+        registry->RegisterSettingsPage("plugins", "Plugins", kPluginsPageQml, modelPtr, 900);
+    }
 }
 
 void SettingsMenu::setFieldValue(const QString& key, const QVariant& value)
@@ -365,6 +656,16 @@ void SettingsMenu::setPluginEnabled(const QString& pluginId, bool enabled)
     }
     catalog->SetPluginEnabled(pluginId.toUtf8().constData(), enabled);
     Q_EMIT qmlChanged();
+}
+
+void SettingsMenu::saveActivePage()
+{
+    Save();
+}
+
+void SettingsMenu::resetActivePage()
+{
+    Reset();
 }
 
 void SettingsMenu::Save()
@@ -504,6 +805,15 @@ void SettingsMenu::Open() noexcept
         ctx_->Publish<SettingsVisibilityEvent>({true});
     }
     Q_EMIT qmlChanged();
+}
+
+void SettingsMenu::OpenPage(const char* pageId) noexcept
+{
+    if (pageId && pageId[0])
+    {
+        qmlActivePage_ = pageId;
+    }
+    Open();
 }
 
 void SettingsMenu::Close() noexcept

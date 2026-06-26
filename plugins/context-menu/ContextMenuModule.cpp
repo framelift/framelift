@@ -121,7 +121,7 @@ QVariantList ContextMenuModule::QmlExtraItems()
         }
         QVariantMap row;
         row.insert(QStringLiteral("label"), QString::fromStdString(item.label));
-        row.insert(QStringLiteral("hotkey"), QString::fromStdString(item.hotkeyName));
+        row.insert(QStringLiteral("hotkey"), QString::fromStdString(ShortcutFor(item.hotkeyName)));
         row.insert(QStringLiteral("index"), i);
         result.push_back(row);
     }
@@ -334,4 +334,21 @@ AudioNormalizeParams ContextMenuModule::NormalizeParams() const
         p.volume = s->GetSettingFloat("audio.dynaudnormVolume");
     }
     return p;
+}
+
+std::string ContextMenuModule::ShortcutFor(const std::string& hotkeyName) const
+{
+    if (!keys_ || hotkeyName.empty())
+    {
+        return {};
+    }
+    const int len = keys_->GetShortcutString(hotkeyName.c_str(), nullptr, 0);
+    if (len <= 0)
+    {
+        return {};
+    }
+    std::string value(static_cast<std::size_t>(len + 1), '\0');
+    keys_->GetShortcutString(hotkeyName.c_str(), value.data(), len + 1);
+    value.resize(static_cast<std::size_t>(len));
+    return value;
 }

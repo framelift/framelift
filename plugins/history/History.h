@@ -14,6 +14,8 @@
 
 // Slide-in panel (right edge) showing recently played files with resume positions.
 // Entries are persisted to a plain-text file in the user's pref directory.
+class HistorySettings;
+
 class History : public QObject, public ModuleBase, public IHistory
 {
     Q_OBJECT
@@ -86,8 +88,9 @@ protected:
         return "History";
     }
 
-    std::vector<framelift::SettingsField> SettingsFields() override;
     std::vector<framelift::Keybind> Keybinds() override;
+    void LoadSettings(IModuleSettings& ps) override;
+    void SaveSettings(IModuleSettings& ps) override;
     void OnInstall(IModuleContext& ctx) override;
 
 Q_SIGNALS:
@@ -122,6 +125,7 @@ private:
     int maxEntries_ = 200;
     std::string toggleHistoryKey_ = "H";
     bool open_ = false;
+    std::unique_ptr<HistorySettings> settingsPage_;
 
     std::deque<Entry> entries_;
     std::vector<int> filteredIndices_; // indices into entries_ matching searchQuery_
@@ -146,7 +150,10 @@ private:
     mutable std::atomic<unsigned> saveSeq_{0};
     std::shared_ptr<SaveCoordinator> saveCoord_ = std::make_shared<SaveCoordinator>();
 
+    void ApplySettings(int maxEntries);
     void SetOpen(bool value);
+
+    friend class HistorySettings;
 };
 
 FRAMELIFT_MODULE_ENTRY(

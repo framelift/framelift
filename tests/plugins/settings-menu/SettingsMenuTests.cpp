@@ -13,6 +13,22 @@
 
 #include <cstring>
 #include <gtest/gtest.h>
+#include <QtCore/QVariantMap>
+#include <ranges>
+
+namespace
+{
+bool PagesContainId(const QVariantList& pages, const QString& id)
+{
+    return std::ranges::any_of(
+        pages,
+        [&](const QVariant& page)
+        {
+            return page.toMap().value(QStringLiteral("id")).toString() == id;
+        }
+    );
+}
+} // namespace
 
 TEST(SettingsMenuTest, SeedsEditingModelFromContextOnInstall)
 {
@@ -57,7 +73,33 @@ TEST(SettingsMenuTest, ExposesThemePageToQml)
     SettingsMenu sm;
     sm.Install(ctx);
 
-    EXPECT_TRUE(sm.QmlPages().contains("theme"));
+    EXPECT_TRUE(PagesContainId(sm.QmlPages(), QStringLiteral("theme")));
+}
+
+TEST(SettingsMenuTest, DoesNotInventModulePagesFromRawFields)
+{
+    Settings settings;
+    const TempFile ini;
+    ModuleContext ctx("pref/", &settings, ini.str());
+
+    FrameLiftModuleSettingDesc desc{
+        "fakePlugin.enabled",
+        0,
+        "",
+        "1",
+        [](void*) -> const char*
+        {
+            return "1";
+        },
+        [](void*, const char*) {},
+        nullptr
+    };
+    ctx.RegisterModuleSetting(&desc);
+
+    SettingsMenu sm;
+    sm.Install(ctx);
+
+    EXPECT_FALSE(PagesContainId(sm.QmlPages(), QStringLiteral("fakePlugin")));
 }
 
 TEST(SettingsMenuTest, OpenSetsVisible)

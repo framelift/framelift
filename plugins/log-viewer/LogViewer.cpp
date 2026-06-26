@@ -1,4 +1,5 @@
 #include "LogViewer.h"
+#include "LogViewerSettings.h"
 
 #include <framelift/Log.h>
 
@@ -17,17 +18,17 @@ std::vector<framelift::Keybind> LogViewer::Keybinds()
     };
 }
 
-std::vector<framelift::SettingsField> LogViewer::SettingsFields()
-{
-    return {
-        {"showDebug", &showDebug_, true}, {"showInfo", &showInfo_, true},  {"showWarn", &showWarn_, true},
-        {"showError", &showError_, true}, {"perfOnly", &perfOnly_, false},
-    };
-}
-
 void LogViewer::OnInstall(IModuleContext& ctx)
 {
     logs_ = ctx.GetService<ILogBuffer>();
+    if (auto* pages = ctx.GetService<ISettingsPageRegistry>())
+    {
+        settingsPage_ = std::make_unique<LogViewerSettings>(*this);
+        pages->RegisterSettingsPage(
+            "logViewer", "Log Viewer", "qrc:/qt/qml/FrameLift/Plugins/LogViewer/LogViewerSettings.qml",
+            settingsPage_.get(), 320
+        );
+    }
     refreshTimer_ = new QTimer(this);
     refreshTimer_->setInterval(250);
     connect(
@@ -41,6 +42,40 @@ void LogViewer::OnInstall(IModuleContext& ctx)
         }
     );
     refreshTimer_->start();
+}
+
+void LogViewer::LoadSettings(IModuleSettings& ps)
+{
+    showDebug_ = ps.GetBool("showDebug", true);
+    showInfo_ = ps.GetBool("showInfo", true);
+    showWarn_ = ps.GetBool("showWarn", true);
+    showError_ = ps.GetBool("showError", true);
+    perfOnly_ = ps.GetBool("perfOnly", false);
+}
+
+void LogViewer::SaveSettings(IModuleSettings& ps)
+{
+    ps.SetBool("showDebug", showDebug_);
+    ps.SetBool("showInfo", showInfo_);
+    ps.SetBool("showWarn", showWarn_);
+    ps.SetBool("showError", showError_);
+    ps.SetBool("perfOnly", perfOnly_);
+}
+
+void LogViewer::ApplySettings(bool showDebug, bool showInfo, bool showWarn, bool showError, bool perfOnly)
+{
+    showDebug_ = showDebug;
+    showInfo_ = showInfo;
+    showWarn_ = showWarn;
+    showError_ = showError;
+    perfOnly_ = perfOnly;
+    if (auto* store = ctx_ ? ctx_->GetService<ISettingsStore>() : nullptr)
+    {
+        IModuleSettings& ps = store->GetModuleSettings(SettingsSection().c_str());
+        SaveSettings(ps);
+        ps.Save();
+    }
+    Q_EMIT changed();
 }
 
 QVariantList LogViewer::QmlLines() const

@@ -86,20 +86,6 @@ TEST(PluginResolverTest, RejectsMissingRequiredFeature)
     EXPECT_NE(decisions[0].reason.find("history.service"), std::string::npos);
 }
 
-TEST(PluginResolverTest, RejectsUnsupportedPlatform)
-{
-    static constexpr const char* const platforms[] = {"windows"};
-    PackageFixture updater{
-        "framelift.updater", "framelift.updater.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(),
-        List(platforms)};
-
-    const auto decisions = ResolvePlugins({{&updater.info}}, "linux");
-
-    ASSERT_EQ(decisions.size(), 1u);
-    EXPECT_FALSE(decisions[0].accepted);
-    EXPECT_NE(decisions[0].reason.find("platform"), std::string::npos);
-}
-
 TEST(PluginResolverTest, CascadesRejectedDependencies)
 {
     static constexpr const char* const windowsOnly[] = {"windows"};

@@ -1,4 +1,5 @@
 #include "Benchmark.h"
+#include "BenchmarkSettings.h"
 
 #include <QtCore/QStringList>
 #include <QtCore/QTimer>
@@ -8,11 +9,6 @@
 
 #include "Version.h"
 #include <framelift/platform.h>
-
-std::vector<framelift::SettingsField> Benchmark::SettingsFields()
-{
-    return {{"limitDuration", &limitDuration_, false}, {"benchmarkDuration", &benchmarkDuration_, 30.0f}};
-}
 
 std::vector<framelift::Keybind> Benchmark::Keybinds()
 {
@@ -24,8 +20,28 @@ std::vector<framelift::Keybind> Benchmark::Keybinds()
     };
 }
 
+void Benchmark::LoadSettings(IModuleSettings& ps)
+{
+    limitDuration_ = ps.GetBool("limitDuration", false);
+    benchmarkDuration_ = ps.GetFloat("benchmarkDuration", 30.0f);
+}
+
+void Benchmark::SaveSettings(IModuleSettings& ps)
+{
+    ps.SetBool("limitDuration", limitDuration_);
+    ps.SetFloat("benchmarkDuration", benchmarkDuration_);
+}
+
 void Benchmark::OnInstall(IModuleContext& ctx)
 {
+    if (auto* pages = ctx.GetService<ISettingsPageRegistry>())
+    {
+        settingsPage_ = std::make_unique<BenchmarkSettings>(*this);
+        pages->RegisterSettingsPage(
+            "benchmark", "Benchmark", "qrc:/qt/qml/FrameLift/Plugins/Benchmark/BenchmarkSettings.qml",
+            settingsPage_.get(), 330
+        );
+    }
     if (auto* props = ctx.GetService<IMediaProperties>())
     {
         props->ObserveProperty(PlayerProperty::TimePos);
@@ -71,6 +87,19 @@ void Benchmark::OnInstall(IModuleContext& ctx)
         }
     );
     refreshTimer_->start();
+}
+
+void Benchmark::ApplySettings(bool limitDuration, float benchmarkDuration)
+{
+    limitDuration_ = limitDuration;
+    benchmarkDuration_ = benchmarkDuration;
+    if (auto* store = ctx_ ? ctx_->GetService<ISettingsStore>() : nullptr)
+    {
+        IModuleSettings& ps = store->GetModuleSettings(SettingsSection().c_str());
+        SaveSettings(ps);
+        ps.Save();
+    }
+    Q_EMIT changed();
 }
 
 QString Benchmark::Summary() const

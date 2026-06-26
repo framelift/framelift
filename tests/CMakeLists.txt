@@ -110,8 +110,7 @@ target_include_directories(framelift_tests PRIVATE
         ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
         ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
         "${FRAMELIFT_ROOT}/tests/support"  # TempIni.h for PluginConfig/ModuleSettings tests
-        "${FRAMELIFT_ROOT}/plugins/updater/core"
-        "${FRAMELIFT_ROOT}/plugins/playlist/core"
+        "${FRAMELIFT_ROOT}/plugins/playlist"
 )
 target_link_libraries(framelift_tests PRIVATE GTest::gtest_main GTest::gmock Threads::Threads Qt6::Core Qt6::Gui)
 framelift_apply_coverage(framelift_tests)

@@ -1,5 +1,6 @@
 #include "Playlist.h"
 #include "ExtensionFilter.h"
+#include "PlaylistSettings.h"
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -120,18 +121,6 @@ std::string Playlist::FilenameOf(const std::string& path)
 
 // ── ModuleBase hooks ───────────────────────────────────────────────────────
 
-std::vector<framelift::SettingsField> Playlist::SettingsFields()
-{
-    return {
-        {"scanSubdirs", &scanSubdirs_, true},
-        {"scanMaxDepth", &scanMaxDepth_, 5},
-        {"mixedPlaylist", &mixedPlaylist_, false},
-        {"imageSlideshow", &imageSlideshow_, false},
-        {"slideshowDuration", &slideshowDuration_, 5.0f},
-        {"autoReload", &autoReload_, true}
-    };
-}
-
 std::vector<framelift::Keybind> Playlist::Keybinds()
 {
     return {
@@ -170,6 +159,26 @@ std::vector<framelift::Keybind> Playlist::Keybinds()
     };
 }
 
+void Playlist::LoadSettings(IModuleSettings& ps)
+{
+    scanSubdirs_ = ps.GetBool("scanSubdirs", true);
+    scanMaxDepth_ = ps.GetInt("scanMaxDepth", 5);
+    mixedPlaylist_ = ps.GetBool("mixedPlaylist", false);
+    imageSlideshow_ = ps.GetBool("imageSlideshow", false);
+    slideshowDuration_ = ps.GetFloat("slideshowDuration", 5.0f);
+    autoReload_ = ps.GetBool("autoReload", true);
+}
+
+void Playlist::SaveSettings(IModuleSettings& ps)
+{
+    ps.SetBool("scanSubdirs", scanSubdirs_);
+    ps.SetInt("scanMaxDepth", scanMaxDepth_);
+    ps.SetBool("mixedPlaylist", mixedPlaylist_);
+    ps.SetBool("imageSlideshow", imageSlideshow_);
+    ps.SetFloat("slideshowDuration", slideshowDuration_);
+    ps.SetBool("autoReload", autoReload_);
+}
+
 void Playlist::OnInstall(IModuleContext& ctx)
 {
     if (auto* events = ctx.GetService<IEventPump>())
@@ -190,6 +199,15 @@ void Playlist::OnInstall(IModuleContext& ctx)
             }
         }
     );
+
+    if (auto* pages = ctx.GetService<ISettingsPageRegistry>())
+    {
+        settingsPage_ = std::make_unique<PlaylistSettings>(*this);
+        pages->RegisterSettingsPage(
+            "playlist", "Playlist", "qrc:/qt/qml/FrameLift/Plugins/Playlist/PlaylistSettings.qml", settingsPage_.get(),
+            300
+        );
+    }
 
     framelift::Subscribe<OpenFileRequestEvent>(
         ctx,
@@ -243,6 +261,27 @@ void Playlist::OnInstall(IModuleContext& ctx)
             }
         );
     }
+}
+
+void Playlist::ApplySettings(
+    bool scanSubdirs, int scanMaxDepth, bool mixedPlaylist, bool imageSlideshow, float slideshowDuration,
+    bool autoReload
+)
+{
+    scanSubdirs_ = scanSubdirs;
+    scanMaxDepth_ = scanMaxDepth;
+    mixedPlaylist_ = mixedPlaylist;
+    imageSlideshow_ = imageSlideshow;
+    slideshowDuration_ = slideshowDuration;
+    autoReload_ = autoReload;
+
+    if (auto* store = ctx_ ? ctx_->GetService<ISettingsStore>() : nullptr)
+    {
+        IModuleSettings& ps = store->GetModuleSettings(SettingsSection().c_str());
+        SaveSettings(ps);
+        ps.Save();
+    }
+    Q_EMIT playlistChanged();
 }
 
 // ── IModule ──────────────────────────────────────────────────────────────────

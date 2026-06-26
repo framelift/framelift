@@ -45,7 +45,7 @@ if (NOT TARGET FrameLiftSdk)
     target_include_directories(FrameLiftSdk INTERFACE "${_framelift_sdk_include}")
     target_link_libraries(FrameLiftSdk INTERFACE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
     if (NOT FRAMELIFT_SDK_STANDALONE)
-        # In-tree plugins (Overlay, Updater) consume the generated Version.h.
+        # In-tree plugins (Overlay) consume the generated Version.h.
         target_include_directories(FrameLiftSdk INTERFACE "${CMAKE_BINARY_DIR}")
     endif ()
 endif ()

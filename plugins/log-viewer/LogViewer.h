@@ -6,10 +6,12 @@
 #include <QtCore/QObject>
 #include <QtCore/QVariantList>
 #include <deque>
+#include <memory>
 #include <string>
 #include <vector>
 
 class QTimer;
+class LogViewerSettings;
 
 // In-app log viewer (Ctrl+L to toggle). Reads recent log lines back from the
 // host's in-memory ring buffer via the ILogBuffer service and shows them in a
@@ -76,7 +78,8 @@ public:
 
 protected:
     std::vector<framelift::Keybind> Keybinds() override;
-    std::vector<framelift::SettingsField> SettingsFields() override;
+    void LoadSettings(IModuleSettings& ps) override;
+    void SaveSettings(IModuleSettings& ps) override;
     void OnInstall(IModuleContext& ctx) override;
 
 Q_SIGNALS:
@@ -105,16 +108,21 @@ private:
     bool open_ = false;
     std::string toggleKey_ = "Ctrl+L";
 
-    // Persisted filter state (see SettingsFields).
+    // Persisted filter state.
     bool showDebug_ = true;
     bool showInfo_ = true;
     bool showWarn_ = true;
     bool showError_ = true;
     bool perfOnly_ = false;
+    std::unique_ptr<LogViewerSettings> settingsPage_;
 
     // Runtime-only text search (not persisted).
     std::string filterText_;
     QTimer* refreshTimer_ = nullptr;
+
+    void ApplySettings(bool showDebug, bool showInfo, bool showWarn, bool showError, bool perfOnly);
+
+    friend class LogViewerSettings;
 };
 
 FRAMELIFT_MODULE_ENTRY(

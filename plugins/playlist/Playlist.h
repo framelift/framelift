@@ -16,6 +16,8 @@
 // Slide-in panel (left edge) that lists and navigates the files in the current
 // directory. Automatically populated when a file is opened via OpenFile().
 // Driven via OpenFileRequestEvent — there is no service interface.
+class PlaylistSettings;
+
 class Playlist : public QObject, public ModuleBase
 {
     Q_OBJECT
@@ -107,6 +109,11 @@ public:
     // Load the file under the keyboard cursor.
     void ConfirmCursor();
 
+    void ApplySettings(
+        bool scanSubdirs, int scanMaxDepth, bool mixedPlaylist, bool imageSlideshow, float slideshowDuration,
+        bool autoReload
+    );
+
 protected:
     // ── ModuleBase hooks ────────────────────────────────────────────────────
     const char* ModuleName() const override
@@ -114,8 +121,9 @@ protected:
         return "Playlist";
     }
 
-    std::vector<framelift::SettingsField> SettingsFields() override;
     std::vector<framelift::Keybind> Keybinds() override;
+    void LoadSettings(IModuleSettings& ps) override;
+    void SaveSettings(IModuleSettings& ps) override;
     void OnInstall(IModuleContext& ctx) override;
 
 Q_SIGNALS:
@@ -202,6 +210,7 @@ private:
     float slideshowDuration_ = 5.0f;
     bool autoReload_ = true;
     bool open_ = false;
+    std::unique_ptr<PlaylistSettings> settingsPage_;
 
     std::string togglePlaylistKey_ = "L";
     std::string nextTrackKey_ = "Ctrl+Right";
@@ -210,6 +219,8 @@ private:
     std::string toggleShuffleKey_ = "Shift+S";
 
     void SetOpen(bool value);
+
+    friend class PlaylistSettings;
 };
 
 FRAMELIFT_MODULE_ENTRY(

@@ -6,6 +6,7 @@
 #include <QtCore/QObject>
 #include <QtCore/QVariant>
 #include <QtCore/QVariantList>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -26,32 +27,91 @@ private:
     std::unordered_map<std::string, std::string> strings_;
 };
 
+class SettingsMenu;
+
+class SettingsSectionPageModel final : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QString title READ Title CONSTANT)
+    Q_PROPERTY(QVariantList fields READ Fields NOTIFY changed)
+    Q_PROPERTY(bool dirty READ Dirty NOTIFY changed)
+
+public:
+    SettingsSectionPageModel(SettingsMenu& owner, QString id, QString title);
+
+    [[nodiscard]] QString Title() const;
+    [[nodiscard]] QVariantList Fields();
+    [[nodiscard]] bool Dirty() const;
+
+    Q_INVOKABLE void setFieldValue(const QString& key, const QVariant& value);
+    Q_INVOKABLE void save();
+    Q_INVOKABLE void reset();
+
+Q_SIGNALS:
+    void changed();
+
+private:
+    SettingsMenu& owner_;
+    QString id_;
+    QString title_;
+};
+
+class SettingsPluginsPageModel final : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QString title READ Title CONSTANT)
+    Q_PROPERTY(QVariantList plugins READ Plugins NOTIFY changed)
+    Q_PROPERTY(bool dirty READ Dirty NOTIFY changed)
+
+public:
+    explicit SettingsPluginsPageModel(SettingsMenu& owner);
+
+    [[nodiscard]] QString Title() const;
+    [[nodiscard]] QVariantList Plugins() const;
+    [[nodiscard]] bool Dirty() const;
+
+    Q_INVOKABLE void setPluginEnabled(const QString& pluginId, bool enabled);
+    Q_INVOKABLE void save();
+    Q_INVOKABLE void reset();
+
+Q_SIGNALS:
+    void changed();
+
+private:
+    SettingsMenu& owner_;
+};
+
 class SettingsMenu final : public QObject, public ModuleBase
 {
     Q_OBJECT
     Q_PROPERTY(bool open READ IsOpen NOTIFY qmlChanged)
     Q_PROPERTY(bool dirty READ Dirty NOTIFY qmlChanged)
-    Q_PROPERTY(QStringList pages READ QmlPages NOTIFY qmlChanged)
+    Q_PROPERTY(QVariantList pages READ QmlPages NOTIFY qmlChanged)
     Q_PROPERTY(QString activePage READ ActivePage WRITE SetActivePage NOTIFY qmlChanged)
-    Q_PROPERTY(QVariantList activeFields READ QmlFields NOTIFY qmlChanged)
-    Q_PROPERTY(QVariantList plugins READ QmlPlugins NOTIFY qmlChanged)
+    Q_PROPERTY(QString activePageUrl READ ActivePageUrl NOTIFY qmlChanged)
+    Q_PROPERTY(QObject* activePageViewModel READ ActivePageViewModel NOTIFY qmlChanged)
 
 public:
     bool HandleKeyDownEvent(const AppEvent& e) override;
 
     void Open() noexcept;
+    void OpenPage(const char* pageId) noexcept;
     void Close() noexcept;
 
     [[nodiscard]] bool IsOpen() const noexcept;
     [[nodiscard]] bool Dirty() const noexcept;
-    [[nodiscard]] QStringList QmlPages();
+    [[nodiscard]] QVariantList QmlPages();
     [[nodiscard]] QString ActivePage() const;
     void SetActivePage(const QString& page);
-    [[nodiscard]] QVariantList QmlFields();
-    [[nodiscard]] QVariantList QmlPlugins() const;
+    [[nodiscard]] QString ActivePageUrl() const;
+    [[nodiscard]] QObject* ActivePageViewModel() const;
 
+    Q_INVOKABLE QVariantList fieldsForPage(const QString& pageId);
+    Q_INVOKABLE QVariantList pluginsModel() const;
     Q_INVOKABLE void setFieldValue(const QString& key, const QVariant& value);
     Q_INVOKABLE void setPluginEnabled(const QString& pluginId, bool enabled);
+    Q_INVOKABLE void saveActivePage();
+    Q_INVOKABLE void resetActivePage();
     Q_INVOKABLE void saveQml();
     Q_INVOKABLE void resetAllQml();
     Q_INVOKABLE void closeQml();
@@ -74,6 +134,7 @@ private:
     {
         std::string key;
         int type = 0;
+        std::string desc;
         std::string defaultValue;
         bool moduleOwned = false;
         const char* (*getValue)(void*) = nullptr;
@@ -83,6 +144,7 @@ private:
 
     [[nodiscard]] ISettingsStore* SettingsStore() const;
     [[nodiscard]] ISettingsRegistry* SettingsReg() const;
+    [[nodiscard]] ISettingsPageRegistry* SettingsPageReg() const;
     [[nodiscard]] IPluginCatalog* PluginCatalog() const;
 
     void SeedFromContext();
@@ -92,6 +154,8 @@ private:
     void ResetValue(const FieldMeta& f);
     void Save();
     void Reset();
+    void RegisterBuiltInPages();
+    [[nodiscard]] QVariantMap ActivePageRecord() const;
     void SetCapturing(bool v);
     [[nodiscard]] std::string FindKeyOwnerLabel(const std::string& canonicalKey, const char* exceptAction);
 
@@ -102,7 +166,8 @@ private:
     std::string openSettingsKey_ = "Ctrl+Comma";
     std::vector<FieldMeta> fields_;
     EditModel model_;
-    std::string qmlActivePage_ = "general";
+    std::string qmlActivePage_;
+    std::vector<std::unique_ptr<QObject>> pageModels_;
 
     std::string capturingName_;
     int capturingSlot_ = 0;

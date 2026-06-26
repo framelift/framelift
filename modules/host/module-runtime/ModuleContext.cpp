@@ -33,6 +33,7 @@ ModuleContext::ModuleContext(
     // bootstrap methods; these are the discoverable Tier-2 services.
     RegisterServiceRaw(ISettingsStore::InterfaceId, static_cast<ISettingsStore*>(this));
     RegisterServiceRaw(ISettingsRegistry::InterfaceId, static_cast<ISettingsRegistry*>(this));
+    RegisterServiceRaw(ISettingsPageRegistry::InterfaceId, static_cast<ISettingsPageRegistry*>(this));
     RegisterServiceRaw(IPluginCatalog::InterfaceId, static_cast<IPluginCatalog*>(this));
     RegisterServiceRaw(IAppPaths::InterfaceId, static_cast<IAppPaths*>(this));
 }
@@ -323,6 +324,32 @@ void ModuleContext::EnumerateModuleSettings(
     }
 }
 
+void ModuleContext::RegisterSettingsPage(
+    const char* id, const char* title, const char* qmlUrl, QObject* viewModel, int order
+) noexcept
+{
+    if (!id || !title || !qmlUrl || !viewModel)
+    {
+        return;
+    }
+    settingsPages_.push_back({id, title, qmlUrl, viewModel, order});
+}
+
+void ModuleContext::EnumerateSettingsPages(
+    void (*visit)(const FrameLiftSettingsPageDesc*, void*), void* visitUd
+) const noexcept
+{
+    if (!visit)
+    {
+        return;
+    }
+    for (const auto& rec : settingsPages_)
+    {
+        const FrameLiftSettingsPageDesc desc{rec.id.c_str(), rec.title.c_str(), rec.qmlUrl.c_str(), rec.viewModel, rec.order};
+        visit(&desc, visitUd);
+    }
+}
+
 // ── Keybind entries ───────────────────────────────────────────────────────────
 
 void ModuleContext::RegisterKeybindEntry(
@@ -409,4 +436,5 @@ void ModuleContext::ClearSubscriptions()
 
     keybindEntries_.clear();
     moduleSettingEntries_.clear();
+    settingsPages_.clear();
 }

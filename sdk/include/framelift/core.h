@@ -17,6 +17,6 @@
 #include <framelift/ModuleABI.h>
 #include <framelift/ModuleBase.h>
 #include <framelift/ModuleEntry.h>
-#include <framelift/ModuleFields.h>
+#include <framelift/ModuleKeybinds.h>
 #include <framelift/UrlUtils.h>
 #include <framelift/services.h>

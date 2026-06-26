@@ -8,9 +8,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <string>
 
 class QTimer;
+class BenchmarkSettings;
 
 // Running min/avg/max aggregate over one sampled metric. Folded once per
 // sample while a benchmark run is recording; reset between runs.
@@ -101,8 +103,9 @@ public:
     void HandleMediaEvent(const MediaEvent& event) override;
 
 protected:
-    std::vector<framelift::SettingsField> SettingsFields() override;
     std::vector<framelift::Keybind> Keybinds() override;
+    void LoadSettings(IModuleSettings& ps) override;
+    void SaveSettings(IModuleSettings& ps) override;
     void OnInstall(IModuleContext& ctx) override;
 
 Q_SIGNALS:
@@ -138,11 +141,16 @@ private:
     // ── Settings ────────────────────────────────────────────────────────────────
     bool limitDuration_ = false;
     float benchmarkDuration_ = 30.f; // seconds
+    std::unique_ptr<BenchmarkSettings> settingsPage_;
 
     std::chrono::steady_clock::time_point lastRefresh_{};
     static constexpr double refreshInterval = 1.0; // seconds
     QTimer* refreshTimer_ = nullptr;
     std::chrono::steady_clock::time_point lastFrameTick_{};
+
+    void ApplySettings(bool limitDuration, float benchmarkDuration);
+
+    friend class BenchmarkSettings;
 };
 
 FRAMELIFT_MODULE_ENTRY(

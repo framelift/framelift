@@ -145,21 +145,25 @@ embedded JSON metadata without instantiating the plugin, rejects incompatible AB
 versions, resolves plugin dependencies, and only then creates the module object and
 their QObject/QML surfaces.
 
-### Declarative settings & keybinds
+### Settings & keybinds
 
-Instead of hand-writing `LoadSettings`/`SaveSettings` and the keybind
-load→register→bind dance, return descriptor tables over your members
-(`<framelift/PluginFields.h>`, included by `<framelift/core.h>`). `ModuleBase`'s default
-hooks consume them — persistence, the Settings → Keybinds page row, and the
-hotkey binding all come from one declaration:
+Settings are explicit per module: override `LoadSettings`/`SaveSettings` and
+surface any Settings UI through a plugin-owned QML page registered with the
+settings page registry. Keybinds still use descriptor tables so the host can load,
+register, and bind them consistently:
 
 ```cpp
 class MyModule : public QObject, public ModuleBase
 {
 protected:
-    std::vector<framelift::SettingsField> SettingsFields() override
+    void LoadSettings(IModuleSettings& ps) override
     {
-        return {{"maxEntries", &maxEntries_, 200}};
+        maxEntries_ = ps.GetInt("maxEntries", 200);
+    }
+
+    void SaveSettings(IModuleSettings& ps) override
+    {
+        ps.SetInt("maxEntries", maxEntries_);
     }
 
     std::vector<framelift::Keybind> Keybinds() override
@@ -173,10 +177,6 @@ private:
     std::string toggleKey_ = "P";
 };
 ```
-
-Overriding one of the hooks (e.g. `LoadSettings`) replaces the table-driven
-default for that leg only; call the `ModuleBase::` version to keep it and add
-extras.
 
 ### Media events
 

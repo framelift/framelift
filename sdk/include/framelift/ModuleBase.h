@@ -3,7 +3,7 @@
 #include <framelift/IModule.h>
 #include <framelift/IModuleContext.h>
 #include <framelift/IModuleSettings.h>
-#include <framelift/ModuleFields.h>
+#include <framelift/ModuleKeybinds.h>
 #include <string>
 #include <vector>
 
@@ -35,11 +35,6 @@ protected:
     // Required: display/settings name used by the current host settings UI.
     // Future module metadata plumbing can remove this virtual from C++ modules.
     virtual const char* ModuleName() const = 0;
-
-    virtual std::vector<framelift::SettingsField> SettingsFields()
-    {
-        return {};
-    }
 
     virtual std::vector<framelift::Keybind> Keybinds()
     {
@@ -100,20 +95,7 @@ protected:
     IModuleContext* ctx_ = nullptr;
 
 private:
-    struct RegisteredSettingField
-    {
-        ModuleBase* owner = nullptr;
-        framelift::SettingsField* field = nullptr;
-        std::string key;
-        std::string desc;
-        std::string defaultValue;
-        std::string currentValue;
-    };
-
-    void RegisterSettingsFields(IModuleContext& ctx);
     void PersistSettings();
 
-    std::vector<framelift::SettingsField> fields_;
     std::vector<framelift::Keybind> keybinds_;
-    std::vector<RegisteredSettingField> registeredFields_;
 };
