@@ -176,7 +176,7 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
 #if FRAMELIFT_MODULE_WIN_SHELL
     // Windows shell integration consumes the same services/events; wire it after
     // they're registered so its Connect() can resolve them.
-    winShell_ = std::make_unique<WinShell>(appWindow_->GetWin32Hwnd());
+    winShell_ = std::make_unique<WinShell>();
     winShell_->Connect(*moduleCtx_);
 #endif
 }
@@ -449,12 +449,6 @@ void App::Dispatch(const AppEvent& e)
         // Let modules handle their own Quit cleanup (e.g. Playlist::FlushCurrentPos).
         registry_.OnEvent(e);
         registry_.OnShutdown();
-#if FRAMELIFT_MODULE_WIN_SHELL
-        if (winShell_)
-        {
-            winShell_->OnShutdown();
-        }
-#endif
         appWindow_->PushQuitEvent(); // QGuiApplication::quit() on the GUI thread
         return;
     default:

@@ -88,7 +88,6 @@ add_executable(framelift_tests
         unit/misc/ExtensionFilterTests.cpp
         unit/media/FFmpegFiltersTests.cpp
         unit/media/MediaEventTests.cpp
-        unit/host/WinShellTests.cpp
         unit/host/SettingsMappingTests.cpp
         unit/host/ReadAheadCacheTests.cpp
         unit/misc/ThemeUtilTests.cpp

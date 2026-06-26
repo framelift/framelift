@@ -2,7 +2,7 @@
   "fileVersion": 1,
   "id": "framelift.host.win_shell",
   "name": "Windows Shell Integration",
-  "description": "Taskbar playback progress and OS notifications on Windows.",
+  "description": "Qt-backed playback error notifications on Windows.",
   "enabled": true,
   "provides": {
     "features": [

@@ -102,7 +102,7 @@ private:
     std::unique_ptr<ModuleContext> moduleCtx_;
     std::unique_ptr<PlaybackControls> playbackControls_;
 #if FRAMELIFT_MODULE_WIN_SHELL
-    // Windows-only: taskbar playback progress + error toasts. Driven off the media
+    // Windows-only: Qt-backed playback error notifications. Driven off the media
     // event stream in DrainMediaEvents; not part of the plugin registry.
     std::unique_ptr<WinShell> winShell_;
 #endif

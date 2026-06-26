@@ -176,13 +176,6 @@ if (WIN32)
     target_link_libraries(FrameLift PRIVATE winmm)
 endif ()
 
-# Windows shell integration (taskbar progress + toast notifications): COM
-# (ole32), the shell shortcut/AUMID APIs (shell32), and the WinRT activation
-# runtime for the Windows.UI.Notifications ABI (runtimeobject).
-if (FRAMELIFT_MODULE_WIN_SHELL)
-    target_link_libraries(FrameLift PRIVATE ole32 shell32 runtimeobject)
-endif ()
-
 if (MINGW)
     target_link_options(FrameLift PRIVATE -static-libgcc -static-libstdc++ -static)
 endif ()

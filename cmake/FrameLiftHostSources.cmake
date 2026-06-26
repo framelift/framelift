@@ -106,9 +106,6 @@ set(_FRAMELIFT_HOST_WATCH_SOURCES
 set(_FRAMELIFT_HOST_WIN_SHELL_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/WinShell.cpp"
         "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/WinShell.h"
-        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/ProgressMapping.h"
-        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/TaskbarProgress.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/TaskbarProgress.h"
         "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/ToastNotifier.cpp"
         "${CMAKE_SOURCE_DIR}/modules/platform/win-shell/ToastNotifier.h"
 )
