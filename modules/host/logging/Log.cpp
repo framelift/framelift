@@ -1,6 +1,8 @@
 #include <framelift/Log.h>
 
 #include <QtCore/QDebug>
+#include <QtCore/QTime>
+#include <cstdio>
 
 #include "LogBuffer.h"
 
@@ -29,6 +31,12 @@ void QtLogSink(const int level, const char* msg)
     case Log::Level::Error:
         qCritical().noquote() << line;
         break;
+    case Log::Level::Perf: {
+        const QString now = QTime::currentTime().toString("hh:mm:ss.zzz");
+        std::fprintf(stderr, "[%s] [PERF ] %s\n", qPrintable(now), line);
+        std::fflush(stderr);
+        break;
+    }
     }
 }
 } // namespace

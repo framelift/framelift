@@ -43,7 +43,7 @@ Item {
                     required property var modelData
                     width: ListView.view.width
                     text: row.modelData.message
-                    color: row.modelData.level >= 3 ? Theme.danger : row.modelData.level === 2 ? "#FBBF24" : Theme.textMuted
+                    color: row.modelData.level === 4 ? Theme.accent : row.modelData.level >= 3 ? Theme.danger : row.modelData.level === 2 ? "#FBBF24" : Theme.textMuted
                     font.family: "monospace"
                     font.pixelSize: 11
                     wrapMode: Text.WrapAnywhere

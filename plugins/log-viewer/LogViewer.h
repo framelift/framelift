@@ -13,8 +13,8 @@ class QTimer;
 
 // In-app log viewer (Ctrl+L to toggle). Reads recent log lines back from the
 // host's in-memory ring buffer via the ILogBuffer service and shows them in a
-// scrolling, filterable window. Performance measurements are emitted by the host
-// as "[perf] …" log lines; the "Perf only" toggle isolates them.
+// scrolling, filterable window. Performance measurements are emitted at
+// Log::Level::Perf; the "Perf only" toggle isolates them.
 class LogViewer final : public QObject, public ModuleBase
 {
     Q_OBJECT

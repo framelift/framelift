@@ -16,7 +16,8 @@ enum class Level : int
     Debug,
     Info,
     Warn,
-    Error
+    Error,
+    Perf
 };
 
 // POD sink: level is a Log::Level value, msg is a NUL-terminated, call-scoped string.
@@ -58,12 +59,12 @@ void Error(std::format_string<Args...> fmt, Args&&... args)
 
 // ── Performance timing ──────────────────────────────────────────────────────
 // Lightweight, name-keyed timing. PerfStart stamps the current time under `name`;
-// PerfEnd logs the elapsed milliseconds as a consistent "[perf] <name> <ms> ms"
-// Info line and returns that duration. PerfEnd is a no-op returning <0 when `name`
-// was never started, so an end site that fires repeatedly (e.g. once per frame)
-// only emits the first time after a matching start. The registry is per-module
-// (compiled into each plugin and the host); start/end must pair within one module.
-// Use the FRAMELIFT_PERF_START / FRAMELIFT_PERF_END macros below.
+// PerfEnd logs the elapsed milliseconds at Level::Perf as "<name> <ms> ms" and
+// returns that duration. PerfEnd is a no-op returning <0 when `name` was never
+// started, so an end site that fires repeatedly (e.g. once per frame) only emits
+// the first time after a matching start. The registry is per-module (compiled
+// into each plugin and the host); start/end must pair within one module. Use the
+// FRAMELIFT_PERF_START / FRAMELIFT_PERF_END macros below.
 void Perf(const char* name, double ms);
 void PerfStart(const char* name);
 double PerfEnd(const char* name);

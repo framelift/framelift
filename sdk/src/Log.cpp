@@ -16,7 +16,7 @@ Log::SinkFn g_sink = nullptr;
 // host); mutex-guarded because a timer may be started and ended on different threads.
 std::mutex g_perfMutex;
 std::unordered_map<std::string, std::chrono::steady_clock::time_point> g_perfTimers;
-}
+} // namespace
 
 void Log::SetSink(const SinkFn fn)
 {
@@ -33,7 +33,7 @@ void Log::Emit(const Level level, const std::string& msg)
 
 void Log::Perf(const char* name, const double ms)
 {
-    Info("[perf] {} {:.1f} ms", name ? name : "", ms);
+    Emit(Level::Perf, std::format("{} {:.1f} ms", name ? name : "", ms));
 }
 
 void Log::PerfStart(const char* name)

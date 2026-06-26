@@ -108,15 +108,15 @@ bool ContainsNoCase(const std::string& hay, const std::string& needle)
     return it != hay.end();
 }
 
-bool IsPerf(const std::string& msg)
+bool IsPerf(const int level)
 {
-    return msg.rfind("[perf]", 0) == 0;
+    return static_cast<Log::Level>(level) == Log::Level::Perf;
 }
 } // namespace
 
 bool LogViewer::Passes(const Entry& e) const
 {
-    if (perfOnly_ && !IsPerf(e.msg))
+    if (perfOnly_ && !IsPerf(e.level))
     {
         return false;
     }
@@ -145,6 +145,8 @@ bool LogViewer::Passes(const Entry& e) const
         {
             return false;
         }
+        break;
+    case Log::Level::Perf:
         break;
     }
     return ContainsNoCase(e.msg, filterText_);
