@@ -34,6 +34,7 @@ class SettingsMenu final : public QObject, public ModuleBase
     Q_PROPERTY(QStringList pages READ QmlPages NOTIFY qmlChanged)
     Q_PROPERTY(QString activePage READ ActivePage WRITE SetActivePage NOTIFY qmlChanged)
     Q_PROPERTY(QVariantList activeFields READ QmlFields NOTIFY qmlChanged)
+    Q_PROPERTY(QVariantList plugins READ QmlPlugins NOTIFY qmlChanged)
 
 public:
     bool HandleKeyDownEvent(const AppEvent& e) override;
@@ -47,8 +48,10 @@ public:
     [[nodiscard]] QString ActivePage() const;
     void SetActivePage(const QString& page);
     [[nodiscard]] QVariantList QmlFields();
+    [[nodiscard]] QVariantList QmlPlugins() const;
 
     Q_INVOKABLE void setFieldValue(const QString& key, const QVariant& value);
+    Q_INVOKABLE void setPluginEnabled(const QString& pluginId, bool enabled);
     Q_INVOKABLE void saveQml();
     Q_INVOKABLE void resetAllQml();
     Q_INVOKABLE void closeQml();
@@ -80,6 +83,7 @@ private:
 
     [[nodiscard]] ISettingsStore* SettingsStore() const;
     [[nodiscard]] ISettingsRegistry* SettingsReg() const;
+    [[nodiscard]] IPluginCatalog* PluginCatalog() const;
 
     void SeedFromContext();
     void SeedHostValue(const FieldMeta& f);

@@ -77,8 +77,8 @@ void QmlCompositor::Load(std::vector<QmlViewSpec> views)
         item->setPosition(QPointF(0, 0));
         item->setSize(root_->size());
         // The custom VideoItem is the first child of the window content item and
-        // occupies z=0. Keep every package surface strictly above it while retaining
-        // the package render-order relationship.
+        // occupies z=0. Keep every plugin surface strictly above it while retaining
+        // the plugin render-order relationship.
         item->setZ(1.0 + static_cast<qreal>(view.order));
         QObject::connect(
             root_, &QQuickItem::widthChanged, item,

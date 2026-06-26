@@ -1,5 +1,5 @@
 #include "ModuleContext.h"
-#include "PackageConfig.h"
+#include "PluginConfig.h"
 #include "Settings.h"
 #include "PlaybackSettings.h"
 #include "VideoDecodeMode.h"
@@ -12,11 +12,11 @@
 #include <utility>
 
 ModuleContext::ModuleContext(
-    std::string prefPath, Settings* settings, const std::string& settingsPath, PackageConfig* packageConfig,
-    std::string packagesPath
+    std::string prefPath, Settings* settings, const std::string& settingsPath, PluginConfig* pluginConfig,
+    std::string pluginsPath
 )
-    : prefPath_(std::move(prefPath)), settingsPath_(settingsPath), settings_(settings), packageConfig_(packageConfig),
-      packagesPath_(std::move(packagesPath))
+    : prefPath_(std::move(prefPath)), settingsPath_(settingsPath), settings_(settings), pluginConfig_(pluginConfig),
+      pluginsPath_(std::move(pluginsPath))
 {
     // Bind the field registry to the live settings, and snapshot the serialized
     // defaults from a fresh Settings so EnumerateSettings can report them.
@@ -33,7 +33,7 @@ ModuleContext::ModuleContext(
     // bootstrap methods; these are the discoverable Tier-2 services.
     RegisterServiceRaw(ISettingsStore::InterfaceId, static_cast<ISettingsStore*>(this));
     RegisterServiceRaw(ISettingsRegistry::InterfaceId, static_cast<ISettingsRegistry*>(this));
-    RegisterServiceRaw(IPackageCatalog::InterfaceId, static_cast<IPackageCatalog*>(this));
+    RegisterServiceRaw(IPluginCatalog::InterfaceId, static_cast<IPluginCatalog*>(this));
     RegisterServiceRaw(IAppPaths::InterfaceId, static_cast<IAppPaths*>(this));
 }
 
@@ -54,11 +54,11 @@ int ModuleContext::GetPrefPath(char* buf, int cap) const noexcept
     return len;
 }
 
-// ── Package catalogue ─────────────────────────────────────────────────────────
+// ── Plugin catalogue ──────────────────────────────────────────────────────────
 
-void ModuleContext::AddPackage(PackageCatalogEntry entry)
+void ModuleContext::AddPlugin(PluginCatalogEntry entry)
 {
-    PackageCatalogRec rec;
+    PluginCatalogRec rec;
     rec.id = std::move(entry.id);
     rec.displayName = std::move(entry.displayName);
     rec.version[0] = entry.version[0];
@@ -66,72 +66,44 @@ void ModuleContext::AddPackage(PackageCatalogEntry entry)
     rec.version[2] = entry.version[2];
     rec.publisher = std::move(entry.publisher);
     rec.description = std::move(entry.description);
+    rec.enabled = entry.enabled;
     rec.loaded = entry.loaded;
-    for (auto& m : entry.modules)
-    {
-        // A module enabled at startup yet not loaded was attempted and failed (the
-        // resolver rejected its package, or construction threw). Snapshot it once;
-        // SetModuleEnabled toggles never revise it.
-        const bool loadFailed = m.enabled && !m.loaded;
-        rec.modules.push_back({std::move(m.id), std::move(m.name), std::move(m.description), m.enabled, m.loaded, loadFailed});
-    }
-    packageCatalog_.push_back(std::move(rec));
+    rec.loadFailed = rec.enabled && !rec.loaded;
+    pluginCatalog_.push_back(std::move(rec));
 }
 
-void ModuleContext::EnumeratePackages(
-    void (*visit)(const char*, const char*, const int*, const char*, const char*, bool, void*), void* visitUd
+void ModuleContext::EnumeratePlugins(
+    void (*visit)(const char*, const char*, const int*, const char*, const char*, bool, bool, bool, void*),
+    void* visitUd
 ) const noexcept
 {
     if (!visit)
     {
         return;
     }
-    for (const auto& rec : packageCatalog_)
+    for (const auto& rec : pluginCatalog_)
     {
         visit(
             rec.id.c_str(), rec.displayName.c_str(), rec.version, rec.publisher.c_str(), rec.description.c_str(),
-            rec.loaded, visitUd
+            rec.enabled, rec.loaded, rec.loadFailed, visitUd
         );
     }
 }
 
-void ModuleContext::EnumerateModules(
-    void (*visit)(const char*, const char*, const char*, const char*, bool, bool, bool, void*), void* visitUd
-) const noexcept
+void ModuleContext::SetPluginEnabled(const char* pluginId, bool enabled) noexcept
 {
-    if (!visit)
-    {
-        return;
-    }
-    for (const auto& pkg : packageCatalog_)
-    {
-        for (const auto& m : pkg.modules)
-        {
-            visit(
-                pkg.id.c_str(), m.id.c_str(), m.name.c_str(), m.description.c_str(), m.enabled, m.loaded, m.loadFailed,
-                visitUd
-            );
-        }
-    }
-}
-
-void ModuleContext::SetModuleEnabled(const char* moduleId, bool enabled) noexcept
-{
-    if (!moduleId)
+    if (!pluginId)
     {
         return;
     }
 
     bool found = false;
-    for (auto& pkg : packageCatalog_)
+    for (auto& plugin : pluginCatalog_)
     {
-        for (auto& m : pkg.modules)
+        if (plugin.id == pluginId)
         {
-            if (m.id == moduleId)
-            {
-                m.enabled = enabled; // reflect immediately so the UI checkbox updates
-                found = true;
-            }
+            plugin.enabled = enabled; // reflect immediately so the UI checkbox updates
+            found = true;
         }
     }
     if (!found)
@@ -141,10 +113,10 @@ void ModuleContext::SetModuleEnabled(const char* moduleId, bool enabled) noexcep
 
     // Persist to the opt-out manifest; the change takes effect on the next launch,
     // so there is no live state to notify (skip the change-callback fan-out).
-    if (packageConfig_)
+    if (pluginConfig_)
     {
-        packageConfig_->Set(moduleId, enabled);
-        packageConfig_->Save(packagesPath_);
+        pluginConfig_->Set(pluginId, enabled);
+        pluginConfig_->Save(pluginsPath_);
     }
 }
 

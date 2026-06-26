@@ -1,4 +1,4 @@
-#include "PackageConfig.h"
+#include "PluginConfig.h"
 #include "ModuleContext.h"
 #include "Settings.h"
 #include "UiSettings.h"
@@ -365,7 +365,7 @@ TEST(ModuleContextTest, EnumeratePackagesEmptyByDefault)
 TEST(ModuleContextTest, SetModuleEnabledUpdatesCatalogueAndPersists)
 {
     Settings settings;
-    PackageConfig packageConfig;
+    PluginConfig packageConfig;
     const std::string packagesIni =
         (std::filesystem::temp_directory_path() / "framelift_test_packagesini.ini").string();
     std::filesystem::remove(packagesIni);
@@ -389,7 +389,7 @@ TEST(ModuleContextTest, SetModuleEnabledUpdatesCatalogueAndPersists)
     EXPECT_FALSE(mods[1].enabled); // framelift.media.extra
 
     // The opt-out manifest persisted the disable and nothing else.
-    PackageConfig reloaded;
+    PluginConfig reloaded;
     reloaded.Load(packagesIni);
     EXPECT_FALSE(reloaded.IsEnabled("framelift.media.extra"));
     EXPECT_TRUE(reloaded.IsEnabled("framelift.media.core"));

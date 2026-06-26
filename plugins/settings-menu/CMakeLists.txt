@@ -1,14 +1,14 @@
 add_framelift_plugin(SettingsMenu
         PLUGIN_JSON "${CMAKE_CURRENT_SOURCE_DIR}/SettingsMenu.Plugin.json"
         QML_URI FrameLift.Plugins.SettingsMenu
-        QML_ENTRY "${CMAKE_CURRENT_SOURCE_DIR}/core/SettingsMenu.qml"
-        "${CMAKE_CURRENT_SOURCE_DIR}/core/SettingsMenu.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/core/SettingsMenu.h"
+        QML_ENTRY "${CMAKE_CURRENT_SOURCE_DIR}/SettingsMenu.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/SettingsMenu.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/SettingsMenu.h"
         "${CMAKE_SOURCE_DIR}/modules/host/settings/Settings.cpp"
         ${FRAMELIFT_SDK_SOURCES}
 )
 target_include_directories(SettingsMenu PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/core"
+        "${CMAKE_CURRENT_SOURCE_DIR}"
         "${CMAKE_SOURCE_DIR}/src"
         ${FRAMELIFT_HOST_MODULE_INCLUDE_DIRS}
 )

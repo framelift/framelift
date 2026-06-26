@@ -12,17 +12,17 @@ set(_FRAMELIFT_HOST_CORE_SOURCES
 )
 
 set(_FRAMELIFT_HOST_MODULE_RUNTIME_SOURCES
-        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageConfig.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageConfig.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PluginConfig.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PluginConfig.h"
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/ModuleContext.cpp"
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/ModuleContext.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageLoader.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageLoader.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PluginLoader.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PluginLoader.h"
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/ModuleRegistry.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageResolver.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageResolver.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageMetadata.cpp"
-        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PackageMetadata.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PluginResolver.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PluginResolver.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PluginMetadata.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/PluginMetadata.h"
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/ModuleSettingsImpl.h"
         "${CMAKE_SOURCE_DIR}/modules/host/module-runtime/Services.h"
 )

@@ -1,10 +1,10 @@
-#include "PackageConfig.h"
+#include "PluginConfig.h"
 
 #include <filesystem>
 #include <fstream>
 #include <string>
 
-void PackageConfig::Load(const std::string& path)
+void PluginConfig::Load(const std::string& path)
 {
     states_.clear();
 
@@ -43,7 +43,7 @@ void PackageConfig::Load(const std::string& path)
     }
 }
 
-void PackageConfig::Save(const std::string& path) const
+void PluginConfig::Save(const std::string& path) const
 {
     std::error_code ec;
     std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
@@ -59,8 +59,8 @@ void PackageConfig::Save(const std::string& path) const
         {
             return;
         }
-        out << "# FrameLift module enablement. Set a module to 'disabled' to stop it loading.\n";
-        out << "# Modules not listed here default to enabled.\n";
+        out << "# FrameLift plugin enablement. Set a plugin to 'disabled' to stop it loading.\n";
+        out << "# Plugins not listed here default to enabled.\n";
         for (const auto& [id, enabled] : states_) // std::map iterates sorted by id
         {
             out << id << '=' << (enabled ? "enabled" : "disabled") << '\n';
@@ -78,7 +78,7 @@ void PackageConfig::Save(const std::string& path) const
     }
 }
 
-std::unordered_set<std::string> PackageConfig::DisabledIds() const
+std::unordered_set<std::string> PluginConfig::DisabledIds() const
 {
     std::unordered_set<std::string> out;
     for (const auto& [id, enabled] : states_)

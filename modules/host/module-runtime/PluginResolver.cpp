@@ -1,4 +1,4 @@
-#include "PackageResolver.h"
+#include "PluginResolver.h"
 #include <algorithm>
 #include <cstddef>
 #include <set>
@@ -24,14 +24,14 @@ void AddAll(std::unordered_set<std::string>& out, const std::vector<std::string>
     }
 }
 
-bool PlatformSupported(const ModuleMetadata& module, std::string_view platformId)
+bool PlatformSupported(const PluginMetadata& meta, std::string_view platformId)
 {
-    return module.platforms.empty() || Contains(module.platforms, platformId);
+    return meta.platforms.empty() || Contains(meta.platforms, platformId);
 }
 
-std::string PackageId(const PackageMetadata* meta)
+std::string PluginId(const PluginMetadata* meta)
 {
-    return meta && !meta->packageId.empty() ? meta->packageId : "<unknown>";
+    return meta && !meta->pluginId.empty() ? meta->pluginId : "<unknown>";
 }
 } // namespace
 
@@ -48,47 +48,36 @@ const char* FrameLiftCurrentPlatformId() noexcept
 #endif
 }
 
-std::vector<PackageResolveDecision> ResolvePackages(
-    const std::vector<PackageResolveCandidate>& candidates, std::string_view platformId
+std::vector<PluginResolveDecision> ResolvePlugins(
+    const std::vector<PluginResolveCandidate>& candidates, std::string_view platformId
 )
 {
-    std::vector<PackageResolveDecision> decisions(candidates.size());
+    std::vector<PluginResolveDecision> decisions(candidates.size());
 
     for (std::size_t i = 0; i < candidates.size(); ++i)
     {
-        const PackageMetadata* meta = candidates[i].meta;
+        const PluginMetadata* meta = candidates[i].meta;
         if (!meta || !meta->valid)
         {
-            decisions[i].reason = "missing package metadata";
+            decisions[i].reason = "missing plugin metadata";
             continue;
         }
-        if (meta->packageId.empty())
+        if (meta->pluginId.empty())
         {
-            decisions[i].reason = "missing package id";
+            decisions[i].reason = "missing plugin id";
             continue;
         }
-        if (meta->modules.empty())
+        if (!meta->enabled)
         {
-            decisions[i].reason = "package has no enabled modules";
+            decisions[i].reason = "plugin disabled by metadata";
             continue;
         }
 
         decisions[i].accepted = true;
-        for (const ModuleMetadata& module : meta->modules)
+        if (!PlatformSupported(*meta, platformId))
         {
-            if (module.id.empty())
-            {
-                decisions[i].accepted = false;
-                decisions[i].reason = "module is missing id";
-                break;
-            }
-            if (!PlatformSupported(module, platformId))
-            {
-                decisions[i].accepted = false;
-                decisions[i].reason =
-                    "module '" + module.id + "' does not support platform '" + std::string(platformId) + "'";
-                break;
-            }
+            decisions[i].accepted = false;
+            decisions[i].reason = "plugin does not support platform '" + std::string(platformId) + "'";
         }
     }
 
@@ -97,7 +86,7 @@ std::vector<PackageResolveDecision> ResolvePackages(
     {
         changed = false;
 
-        std::unordered_set<std::string> providedModules;
+        std::unordered_set<std::string> providedPlugins;
         std::unordered_set<std::string> providedFeatures;
         for (std::size_t i = 0; i < candidates.size(); ++i)
         {
@@ -105,11 +94,8 @@ std::vector<PackageResolveDecision> ResolvePackages(
             {
                 continue;
             }
-            for (const ModuleMetadata& module : candidates[i].meta->modules)
-            {
-                providedModules.emplace(module.id);
-                AddAll(providedFeatures, module.providesFeatures);
-            }
+            providedPlugins.emplace(candidates[i].meta->pluginId);
+            AddAll(providedFeatures, candidates[i].meta->providesFeatures);
         }
 
         for (std::size_t i = 0; i < candidates.size(); ++i)
@@ -119,36 +105,29 @@ std::vector<PackageResolveDecision> ResolvePackages(
                 continue;
             }
 
-            const PackageMetadata* meta = candidates[i].meta;
-            for (const ModuleMetadata& module : meta->modules)
+            const PluginMetadata* meta = candidates[i].meta;
+            for (const std::string& required : meta->requiresPlugins)
+            {
+                if (!required.empty() && !providedPlugins.contains(required))
+                {
+                    decisions[i].accepted = false;
+                    decisions[i].reason = PluginId(meta) + " requires missing plugin '" + required + "'";
+                    changed = true;
+                    break;
+                }
+            }
+            for (const std::string& required : meta->requiresFeatures)
             {
                 if (!decisions[i].accepted)
                 {
                     break;
                 }
-                for (const std::string& required : module.requiresModules)
+                if (!required.empty() && !providedFeatures.contains(required))
                 {
-                    if (!required.empty() && !providedModules.contains(required))
-                    {
-                        decisions[i].accepted = false;
-                        decisions[i].reason = PackageId(meta) + " requires missing module '" + required + "'";
-                        changed = true;
-                        break;
-                    }
-                }
-                for (const std::string& required : module.requiresFeatures)
-                {
-                    if (!decisions[i].accepted)
-                    {
-                        break;
-                    }
-                    if (!required.empty() && !providedFeatures.contains(required))
-                    {
-                        decisions[i].accepted = false;
-                        decisions[i].reason = PackageId(meta) + " requires missing feature '" + required + "'";
-                        changed = true;
-                        break;
-                    }
+                    decisions[i].accepted = false;
+                    decisions[i].reason = PluginId(meta) + " requires missing feature '" + required + "'";
+                    changed = true;
+                    break;
                 }
             }
         }
@@ -157,35 +136,29 @@ std::vector<PackageResolveDecision> ResolvePackages(
     return decisions;
 }
 
-std::vector<std::size_t> OrderPackages(const std::vector<PackageResolveCandidate>& candidates)
+std::vector<std::size_t> OrderPlugins(const std::vector<PluginResolveCandidate>& candidates)
 {
     const std::size_t n = candidates.size();
 
-    // Per package: the set of tokens it provides (module ids + features) and the set
-    // it depends on (requires + optional, modules + features).
+    // Per plugin: the set of tokens it provides (plugin id + features) and the set
+    // it depends on (requires + optional, plugins + features).
     std::vector<std::unordered_set<std::string>> provides(n);
     std::vector<std::unordered_set<std::string>> needs(n);
     std::vector<std::string> ids(n);
     for (std::size_t i = 0; i < n; ++i)
     {
-        const PackageMetadata* meta = candidates[i].meta;
-        ids[i] = PackageId(meta);
+        const PluginMetadata* meta = candidates[i].meta;
+        ids[i] = PluginId(meta);
         if (!meta)
         {
             continue;
         }
-        for (const ModuleMetadata& module : meta->modules)
-        {
-            if (!module.id.empty())
-            {
-                provides[i].emplace(module.id);
-            }
-            AddAll(provides[i], module.providesFeatures);
-            AddAll(needs[i], module.requiresModules);
-            AddAll(needs[i], module.requiresFeatures);
-            AddAll(needs[i], module.optionalModules);
-            AddAll(needs[i], module.optionalFeatures);
-        }
+        provides[i].emplace(meta->pluginId);
+        AddAll(provides[i], meta->providesFeatures);
+        AddAll(needs[i], meta->requiresPlugins);
+        AddAll(needs[i], meta->requiresFeatures);
+        AddAll(needs[i], meta->optionalPlugins);
+        AddAll(needs[i], meta->optionalFeatures);
     }
 
     // Edge i → j when consumer j depends on a token provider i offers. Dedupe edges
@@ -216,8 +189,8 @@ std::vector<std::size_t> OrderPackages(const std::vector<PackageResolveCandidate
         }
     }
 
-    // Kahn's algorithm, draining zero-indegree nodes in ascending package-id order
-    // for determinism. Any nodes left in a cycle are appended by package-id order.
+    // Kahn's algorithm, draining zero-indegree nodes in ascending plugin-id order
+    // for determinism. Any nodes left in a cycle are appended by plugin-id order.
     std::vector<std::size_t> order;
     order.reserve(n);
     std::vector<bool> done(n, false);
@@ -237,7 +210,7 @@ std::vector<std::size_t> OrderPackages(const std::vector<PackageResolveCandidate
         }
         if (pick == n)
         {
-            // Cycle: append the remaining nodes in package-id order and stop.
+            // Cycle: append the remaining nodes in plugin-id order and stop.
             std::vector<std::size_t> rest;
             for (std::size_t i = 0; i < n; ++i)
             {

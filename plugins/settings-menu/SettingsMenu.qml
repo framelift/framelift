@@ -103,6 +103,7 @@ Item {
                 }
 
                 ListView {
+                    visible: root.vm === null || root.vm.activePage !== "plugins"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     model: root.vm !== null ? root.vm.activeFields : []
@@ -171,6 +172,60 @@ Item {
                                 onEditingFinished: {
                                     if (root.vm !== null)
                                         root.vm.setFieldValue(fieldDelegate.modelData.key, text)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                ListView {
+                    visible: root.vm !== null && root.vm.activePage === "plugins"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    model: root.vm !== null ? root.vm.plugins : []
+                    spacing: 8
+                    clip: true
+
+                    delegate: GlassPanel {
+                        id: pluginDelegate
+                        required property var modelData
+                        width: ListView.view.width
+                        height: 72
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 12
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 3
+                                Text {
+                                    text: pluginDelegate.modelData.name
+                                    color: Theme.text
+                                    font.pixelSize: 15
+                                    font.weight: Font.DemiBold
+                                }
+                                Text {
+                                    text: pluginDelegate.modelData.description
+                                    color: Theme.textMuted
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                Text {
+                                    text: pluginDelegate.modelData.loadFailed
+                                          ? "Failed to load"
+                                          : pluginDelegate.modelData.loaded ? "Loaded" : "Pending restart"
+                                    color: pluginDelegate.modelData.loadFailed ? Theme.danger : Theme.textMuted
+                                    font.pixelSize: 12
+                                }
+                            }
+
+                            Switch {
+                                checked: pluginDelegate.modelData.enabled
+                                onToggled: {
+                                    if (root.vm !== null)
+                                        root.vm.setPluginEnabled(pluginDelegate.modelData.id, checked)
                                 }
                             }
                         }

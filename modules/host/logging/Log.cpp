@@ -8,7 +8,7 @@ namespace
 {
 // Host sink: receives formatted lines from the SDK (host + every plugin) and
 // routes them to Qt logging. Installed into the host TU by Init() and into each
-// plugin DLL by the loader via IPackage::SetLogSink.
+// plugin DLL by the loader via IPlugin::SetLogSink.
 void QtLogSink(const int level, const char* msg)
 {
     // Keep an in-memory copy for the Log Viewer plugin (read back via ILogBuffer).

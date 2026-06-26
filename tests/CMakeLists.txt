@@ -6,7 +6,7 @@
 #     FRAMELIFT_BUILD_TESTS is ON, so the suite shows up in the solution/CMake view.
 #
 # The pure-logic suite (framelift_tests) compiles only standalone units. Plugin behaviour
-# suites compile a single module entry .cpp each (one exe per package; each emits
+# suites compile a single module entry .cpp each (one exe per plugin; each emits
 # framelift_create/etc., so two in one binary would clash) plus the SDK helper sources.
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     cmake_minimum_required(VERSION 3.28)
@@ -68,19 +68,19 @@ set(FRAMELIFT_SDK_TEST_SOURCES
         "${FRAMELIFT_ROOT}/sdk/src/Log.cpp"
 )
 
-# ── framelift_tests: pure-logic + platform-builder suites (no package entry symbols) ─
+# ── framelift_tests: pure-logic + platform-builder suites (no plugin entry symbols) ─
 add_executable(framelift_tests
         unit/misc/CliTests.cpp
         unit/host/SettingsTests.cpp
         unit/host/ModuleContextTests.cpp
-        unit/host/PackageConfigTests.cpp
+        unit/host/PluginConfigTests.cpp
         unit/host/ModuleSettingsTests.cpp
         unit/host/FocusManagerTests.cpp
         unit/misc/KeyNamesTests.cpp
         unit/host/SemVerTests.cpp
         unit/host/HotkeysTests.cpp
-        unit/host/PackageAbiTests.cpp
-        unit/host/PackageResolverTests.cpp
+        unit/host/PluginAbiTests.cpp
+        unit/host/PluginResolverTests.cpp
         unit/misc/UrlUtilsTests.cpp
         unit/misc/ExtensionFilterTests.cpp
         unit/media/FFmpegFiltersTests.cpp
@@ -97,9 +97,9 @@ add_executable(framelift_tests
         unit/media/FFmpegTrackLabelTests.cpp
         unit/gfx/VulkanQueueLockTests.cpp
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PackageConfig.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PackageResolver.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginResolver.cpp"
         "${FRAMELIFT_ROOT}/modules/host/services/HotkeysImpl.cpp"
         "${FRAMELIFT_ROOT}/sdk/src/KeyNames.cpp"
         "${FRAMELIFT_ROOT}/sdk/src/Log.cpp"
@@ -111,7 +111,7 @@ target_include_directories(framelift_tests PRIVATE
         "${FRAMELIFT_ROOT}/src"
         ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
         ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
-        "${FRAMELIFT_ROOT}/tests/support"  # TempIni.h for PackageConfig/ModuleSettings tests
+        "${FRAMELIFT_ROOT}/tests/support"  # TempIni.h for PluginConfig/ModuleSettings tests
         "${FRAMELIFT_ROOT}/plugins/updater/core"
         "${FRAMELIFT_ROOT}/plugins/playlist/core"
 )
@@ -141,7 +141,7 @@ gtest_discover_tests(framelift_tests_vulkan_off)
 function(add_framelift_plugin_test name)
     cmake_parse_arguments(_FL_TEST "EMIT_MODULE_ENTRY" "METADATA_HEADER" "" ${ARGN})
     if (NOT _FL_TEST_METADATA_HEADER)
-        set(_FL_TEST_METADATA_HEADER "TestPackageMetadata.h")
+        set(_FL_TEST_METADATA_HEADER "TestPluginMetadata.h")
     endif ()
     add_executable(${name} ${_FL_TEST_UNPARSED_ARGUMENTS} ${FRAMELIFT_SDK_TEST_SOURCES})
     set_target_properties(${name} PROPERTIES
@@ -159,13 +159,13 @@ function(add_framelift_plugin_test name)
                 ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
             "${FRAMELIFT_ROOT}/tests/support"
             "${FRAMELIFT_ROOT}/tests/support/stubs"  # stub Version.h for plugins that need generated headers
-            "${FRAMELIFT_ROOT}/plugins/playlist/core"
-            "${FRAMELIFT_ROOT}/plugins/history/core"
-            "${FRAMELIFT_ROOT}/plugins/settings-menu/core"
-            "${FRAMELIFT_ROOT}/plugins/overlay/core"
-            "${FRAMELIFT_ROOT}/plugins/debug-overlay/core"
-            "${FRAMELIFT_ROOT}/plugins/benchmark/core"
-            "${FRAMELIFT_ROOT}/plugins/remote-stream/core"
+            "${FRAMELIFT_ROOT}/plugins/playlist"
+            "${FRAMELIFT_ROOT}/plugins/history"
+            "${FRAMELIFT_ROOT}/plugins/settings-menu"
+            "${FRAMELIFT_ROOT}/plugins/overlay"
+            "${FRAMELIFT_ROOT}/plugins/debug-overlay"
+            "${FRAMELIFT_ROOT}/plugins/benchmark"
+            "${FRAMELIFT_ROOT}/plugins/remote-stream"
     )
     target_link_libraries(${name} PRIVATE
             GTest::gtest_main GTest::gmock Threads::Threads Qt6::Core Qt6::Gui)
@@ -178,7 +178,7 @@ endfunction()
 # JsonServiceImpl into the test (the only suite that exercises JSON) and link Qt6::Core.
 add_framelift_plugin_test(framelift_test_history
         plugins/history/HistoryTests.cpp
-        "${FRAMELIFT_ROOT}/plugins/history/core/History.cpp"
+        "${FRAMELIFT_ROOT}/plugins/history/History.cpp"
         "${FRAMELIFT_ROOT}/modules/host/services/JsonServiceImpl.cpp")
 target_link_libraries(framelift_test_history PRIVATE Qt6::Core)
 
@@ -186,34 +186,34 @@ target_link_libraries(framelift_test_history PRIVATE Qt6::Core)
 # the host plugin runtime and settings modules.
 add_framelift_plugin_test(framelift_test_playlist
         plugins/playlist/PlaylistTests.cpp
-        "${FRAMELIFT_ROOT}/plugins/playlist/core/Playlist.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PackageConfig.cpp"
+        "${FRAMELIFT_ROOT}/plugins/playlist/Playlist.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
 
 add_framelift_plugin_test(framelift_test_settingsmenu
         plugins/settings-menu/SettingsMenuTests.cpp
-        "${FRAMELIFT_ROOT}/plugins/settings-menu/core/SettingsMenu.cpp"
-        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PackageConfig.cpp"
+        "${FRAMELIFT_ROOT}/plugins/settings-menu/SettingsMenu.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
 
 add_framelift_plugin_test(framelift_test_overlay
         plugins/overlay/OverlayTests.cpp
-        "${FRAMELIFT_ROOT}/plugins/overlay/core/Overlay.cpp")
+        "${FRAMELIFT_ROOT}/plugins/overlay/Overlay.cpp")
 
 add_framelift_plugin_test(framelift_test_debugoverlay
         plugins/debug-overlay/DebugOverlayTests.cpp
-        "${FRAMELIFT_ROOT}/plugins/debug-overlay/core/DebugOverlay.cpp")
+        "${FRAMELIFT_ROOT}/plugins/debug-overlay/DebugOverlay.cpp")
 
 add_framelift_plugin_test(framelift_test_benchmark
         plugins/benchmark/BenchmarkTests.cpp
-        "${FRAMELIFT_ROOT}/plugins/benchmark/core/Benchmark.cpp"
-        "${FRAMELIFT_ROOT}/plugins/benchmark/core/SysStats.cpp")
+        "${FRAMELIFT_ROOT}/plugins/benchmark/Benchmark.cpp"
+        "${FRAMELIFT_ROOT}/plugins/benchmark/SysStats.cpp")
 if (WIN32)
     target_link_libraries(framelift_test_benchmark PRIVATE pdh)
 endif ()
 
 add_framelift_plugin_test(framelift_test_remotestream
         plugins/remote-stream/RemoteStreamTests.cpp
-        "${FRAMELIFT_ROOT}/plugins/remote-stream/core/RemoteStream.cpp")
+        "${FRAMELIFT_ROOT}/plugins/remote-stream/RemoteStream.cpp")

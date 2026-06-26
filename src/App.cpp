@@ -22,8 +22,57 @@
 #include <vector>
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <ranges>
 #include <unordered_set>
+
+namespace
+{
+std::string LegacyPluginId(std::string id)
+{
+    if (id.ends_with(".core"))
+    {
+        id.erase(id.size() - 5);
+    }
+    return id;
+}
+
+void MigrateLegacyPluginConfig(const std::string& legacyPath, PluginConfig& pluginConfig)
+{
+    std::ifstream file(legacyPath);
+    if (!file)
+    {
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line))
+    {
+        if (!line.empty() && line.back() == '\r')
+        {
+            line.pop_back();
+        }
+        if (line.empty() || line.front() == '#')
+        {
+            continue;
+        }
+
+        const auto eq = line.find('=');
+        if (eq == std::string::npos)
+        {
+            continue;
+        }
+
+        const std::string id = LegacyPluginId(line.substr(0, eq));
+        const std::string value = line.substr(eq + 1);
+        if (!id.empty())
+        {
+            pluginConfig.Set(id, value != "disabled");
+        }
+    }
+}
+} // namespace
 
 // ── Constructor / Destructor ──────────────────────────────────────────────────
 
@@ -40,23 +89,22 @@ App::App(const char* title, const int width, const int height, const int cliArgc
     (void)QtAppWindow::ResolvePrefPath("", "FrameLift", prefBuf, sizeof(prefBuf));
     const std::string prefDir = prefBuf;
     const std::string settingsPath = prefDir.empty() ? "settings.ini" : prefDir + "settings.ini";
-    packagesPath_ = prefDir.empty() ? "packages.ini" : prefDir + "packages.ini";
+    pluginsPath_ = prefDir.empty() ? "plugins.ini" : prefDir + "plugins.ini";
 
     InitPlatform(title, width, height, prefDir, settingsPath);
     InitServices(prefDir, settingsPath);
 
-    // The ContextMenu module owns the right-click menu: it registers the ContextMenu
-    // service that other modules extend, and assembles its core items plus their
-    // sections on its first frame.
-    LoadPackages();
+    // The ContextMenu plugin owns the right-click menu: it registers the ContextMenu
+    // service that other plugins extend, and assembles its items on its first frame.
+    LoadPlugins();
 
     BuildPluginViews();
 }
 
 App::~App()
 {
-    // Clear all DLL-owned lambdas before packageLoader_ calls FreeLibrary.
-    // packageLoader_ destructs after this body (declared after moduleCtx_),
+    // Clear all DLL-owned lambdas before pluginLoader_ calls FreeLibrary.
+    // pluginLoader_ destructs after this body (declared after moduleCtx_),
     // so modules can still call ctx_->GetService() in their destructors.
     if (moduleCtx_)
     {
@@ -72,7 +120,7 @@ App::~App()
         appWindow_->SetVideoRenderCallbacks({}, {});
     }
     player_.reset();    // destroy the player's render context before the GL context is torn down
-    appWindow_.reset(); // destroy QML roots before packageLoader_ unloads plugin DLLs/view models
+    appWindow_.reset(); // destroy QML roots before pluginLoader_ unloads plugin DLLs/view models
 }
 
 // ── Construction phases ─────────────────────────────────────────────────────────
@@ -84,8 +132,12 @@ void App::InitPlatform(
     // App owns the Settings instance; load it before any module sees it.
     settings_.Load(settingsPath);
 
-    // User package enablement manifest (opt-out): load before packages are scanned.
-    packageConfig_.Load(packagesPath_);
+    // User plugin enablement manifest (opt-out): load before plugins are scanned.
+    pluginConfig_.Load(pluginsPath_);
+    const std::string legacyPath = std::filesystem::path(pluginsPath_).parent_path().empty()
+                                       ? std::string("packages.ini")
+                                       : (std::filesystem::path(pluginsPath_).parent_path() / "packages.ini").string();
+    MigrateLegacyPluginConfig(legacyPath, pluginConfig_);
 
     appWindow_ = std::make_unique<QtAppWindow>(
         title, width, height, GraphicsApiFromString(settings_.Get<GraphicsSettings>().backend)
@@ -100,7 +152,7 @@ void App::InitPlatform(
 
 void App::InitServices(const std::string& prefDir, const std::string& settingsPath)
 {
-    moduleCtx_ = std::make_unique<ModuleContext>(prefDir, &settings_, settingsPath, &packageConfig_, packagesPath_);
+    moduleCtx_ = std::make_unique<ModuleContext>(prefDir, &settings_, settingsPath, &pluginConfig_, pluginsPath_);
 
     // The one FFmpegPlayer is registered under each capability interface it implements.
     // Register each separately: the variadic RegisterService can't sibling-cast a
@@ -184,82 +236,63 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
 #endif
 }
 
-// ── Package loading ─────────────────────────────────────────────────────────────
+// ── Plugin loading ──────────────────────────────────────────────────────────────
 
-void App::LoadPackages()
+void App::LoadPlugins()
 {
-    // Load every package present in the packages/ subdirectory. Per-module enablement
-    // comes from packages.ini (keyed by module id); the loader resolves dependencies
-    // and load order from embedded metadata, then instantiates each enabled module.
-    // Each module registers its own context menu sections etc. during Install().
+    // Load every plugin present in the plugins/ subdirectory. Plugin enablement
+    // comes from plugins.ini (keyed by plugin id); the loader resolves dependencies
+    // and load order from embedded metadata, then instantiates each enabled plugin's
+    // single module.
     char baseBuf[512] = {};
     (void)appWindow_->GetBasePath(baseBuf, sizeof(baseBuf));
-    const std::string packagesDir = std::string(baseBuf) + "packages/";
-    packageLoader_.LoadAll(packagesDir, packageConfig_.DisabledIds());
+    const std::string pluginsDir = std::string(baseBuf) + "plugins/";
+    pluginLoader_.LoadAll(pluginsDir, pluginConfig_.DisabledIds());
 
-    // What actually got instantiated this session, by package id and module id.
-    std::unordered_set<std::string> loadedPackageIds;
-    std::unordered_set<std::string> loadedModuleIds;
-    for (const auto& p : packageLoader_.Packages())
+    // What actually got instantiated this session, by plugin id.
+    std::unordered_set<std::string> loadedPluginIds;
+    for (const auto& p : pluginLoader_.Plugins())
     {
-        loadedPackageIds.insert(p.name);
-        for (const auto& m : p.modules)
-        {
-            loadedModuleIds.insert(m.moduleId);
-        }
+        loadedPluginIds.insert(p.pluginId);
     }
 
-    // Build the catalogue from every discovered package (loaded or not) so the
-    // settings UI can list and toggle each module. Populate it before Install() so a
-    // module may enumerate peers during it.
-    std::vector<std::string> discoveredModuleIds;
-    for (auto& pkg : PackageLoader::DiscoverAvailable(packagesDir))
+    // Build the catalogue from every discovered plugin (loaded or not) so the
+    // settings UI can list and toggle each plugin. Populate it before Install() so a
+    // plugin module may enumerate peers during it.
+    std::vector<std::string> discoveredPluginIds;
+    for (auto& plugin : PluginLoader::DiscoverAvailable(pluginsDir))
     {
-        ModuleContext::PackageCatalogEntry entry;
-        entry.id = pkg.packageId;
-        entry.displayName = std::move(pkg.displayName);
-        entry.version[0] = pkg.version[0];
-        entry.version[1] = pkg.version[1];
-        entry.version[2] = pkg.version[2];
-        entry.publisher = std::move(pkg.publisher);
-        entry.description = std::move(pkg.description);
-        entry.loaded = loadedPackageIds.contains(pkg.packageId);
-        for (auto& mod : pkg.modules)
-        {
-            ModuleContext::ModuleCatalogEntry me;
-            discoveredModuleIds.push_back(mod.id);
-            // enabled=false ⇒ user-disabled (unchecked in the UI); enabled=true but
-            // not loaded ⇒ resolver-rejected/failed (surfaces as a load failure).
-            me.enabled = packageConfig_.IsEnabled(mod.id);
-            me.loaded = loadedModuleIds.contains(mod.id);
-            me.id = std::move(mod.id);
-            me.name = std::move(mod.name);
-            me.description = std::move(mod.description);
-            entry.modules.push_back(std::move(me));
-        }
-        moduleCtx_->AddPackage(std::move(entry));
+        ModuleContext::PluginCatalogEntry entry;
+        entry.id = plugin.pluginId;
+        discoveredPluginIds.push_back(plugin.pluginId);
+        entry.displayName = std::move(plugin.displayName);
+        entry.version[0] = plugin.version[0];
+        entry.version[1] = plugin.version[1];
+        entry.version[2] = plugin.version[2];
+        entry.publisher = std::move(plugin.publisher);
+        entry.description = std::move(plugin.description);
+        entry.enabled = pluginConfig_.IsEnabled(entry.id);
+        entry.loaded = loadedPluginIds.contains(entry.id);
+        moduleCtx_->AddPlugin(std::move(entry));
     }
 
-    // Install each loaded module (every module of every loaded package).
-    for (auto& p : packageLoader_.Packages())
+    // Install each loaded plugin module.
+    for (auto& p : pluginLoader_.Plugins())
     {
-        for (auto& m : p.modules)
-        {
-            registry_.Add(m.module, *moduleCtx_);
-        }
+        registry_.Add(p.module, *moduleCtx_);
     }
 
-    // Refresh the manifest so it lists every discovered module (new ones default to
-    // enabled), keeping packages.ini a complete, hand-editable record.
-    packageConfig_.EnsureKnown(discoveredModuleIds);
-    packageConfig_.Save(packagesPath_);
+    // Refresh the manifest so it lists every discovered plugin (new ones default to
+    // enabled), keeping plugins.ini a complete, hand-editable record.
+    pluginConfig_.EnsureKnown(discoveredPluginIds);
+    pluginConfig_.Save(pluginsPath_);
 
     registry_.BindHotkeys(keys_);
     playbackControls_->Bind();
 
     // Materialize module settings + keybinds on first run: modules populate their
     // ModuleSettingsImpl caches during Install(), but those reach disk only via
-    // SaveSettings(). The startup Settings::Save (InitPlatform, before packages)
+    // SaveSettings(). The startup Settings::Save (InitPlatform, before plugins)
     // writes host sections only, so without this flush module sections appear only
     // after the user presses Save in the Settings menu.
     moduleCtx_->SaveSettings();
@@ -271,17 +304,13 @@ void App::BuildPluginViews()
 {
     std::vector<QmlViewSpec> views;
 
-    for (const auto& p : packageLoader_.Packages())
+    for (const auto& p : pluginLoader_.Plugins())
     {
-        for (const auto& m : p.modules)
+        if (p.viewModel && !p.qmlEntryUrl.empty())
         {
-            if (m.viewModel && !m.qmlEntryUrl.empty())
-            {
-                views.push_back(
-                    {QString::fromStdString(m.moduleId), QString::fromStdString(m.qmlEntryUrl), m.viewModel,
-                     m.renderOrder}
-                );
-            }
+            views.push_back(
+                {QString::fromStdString(p.pluginId), QString::fromStdString(p.qmlEntryUrl), p.viewModel, p.renderOrder}
+            );
         }
     }
     appWindow_->SetPluginViews(std::move(views));

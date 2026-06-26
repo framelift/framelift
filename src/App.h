@@ -6,9 +6,9 @@
 #include "JsonServiceImpl.h"
 #include "ModuleContext.h"
 #include "ModuleRegistry.h"
-#include "PackageConfig.h"
-#include "PackageLoader.h"
 #include "PlaybackControls.h"
+#include "PluginConfig.h"
+#include "PluginLoader.h"
 #include "Settings.h"
 #include <chrono>
 #include <framelift/platform/IAppWindow.h>
@@ -24,8 +24,8 @@ class WinShell;
 
 // Top-level application object. Owns all subsystems, drives the main loop,
 // and co-ordinates rendering. Exactly one instance exists for the program lifetime.
-// Has no compile-time knowledge of specific modules — every capability ships as a
-// package DLL loaded at runtime from the packages/ directory.
+// Has no compile-time knowledge of specific plugins; every user-facing capability
+// ships as a plugin DLL/SO loaded at runtime from the plugins/ directory.
 class App
 {
 public:
@@ -47,7 +47,7 @@ private:
         const char* title, int width, int height, const std::string& prefDir, const std::string& settingsPath
     );
     void InitServices(const std::string& prefDir, const std::string& settingsPath);
-    void LoadPackages();
+    void LoadPlugins();
     void BuildPluginViews();
 
     // Wire the player's worker-thread wakeups to the window's queued signals (no GL).
@@ -92,8 +92,8 @@ private:
     bool renderInit_ = false;
 
     Settings settings_;
-    PackageConfig packageConfig_;
-    std::string packagesPath_;
+    PluginConfig pluginConfig_;
+    std::string pluginsPath_;
     FileDialogServiceImpl fileDialogService_{&settings_};
     FocusManagerImpl focus_;
     HotkeysImpl keys_;
@@ -106,6 +106,6 @@ private:
     // event stream in DrainMediaEvents; not part of the plugin registry.
     std::unique_ptr<WinShell> winShell_;
 #endif
-    PackageLoader packageLoader_;
+    PluginLoader pluginLoader_;
     ModuleRegistry registry_;
 };

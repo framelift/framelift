@@ -95,6 +95,11 @@ ISettingsRegistry* SettingsMenu::SettingsReg() const
     return ctx_ ? ctx_->GetService<ISettingsRegistry>() : nullptr;
 }
 
+IPluginCatalog* SettingsMenu::PluginCatalog() const
+{
+    return ctx_ ? ctx_->GetService<IPluginCatalog>() : nullptr;
+}
+
 void SettingsMenu::SeedHostValue(const FieldMeta& f)
 {
     auto* store = SettingsStore();
@@ -218,6 +223,10 @@ QStringList SettingsMenu::QmlPages()
             result.push_back(section);
         }
     }
+    if (PluginCatalog() && !seen.contains(QStringLiteral("plugins")))
+    {
+        result.push_back(QStringLiteral("plugins"));
+    }
     return result;
 }
 
@@ -239,6 +248,10 @@ void SettingsMenu::SetActivePage(const QString& page)
 QVariantList SettingsMenu::QmlFields()
 {
     RefreshFields();
+    if (qmlActivePage_ == "plugins")
+    {
+        return {};
+    }
     QVariantList result;
     const std::string prefix = qmlActivePage_ + ".";
     for (const FieldMeta& field : fields_)
@@ -270,6 +283,42 @@ QVariantList SettingsMenu::QmlFields()
         }
         result.push_back(row);
     }
+    return result;
+}
+
+QVariantList SettingsMenu::QmlPlugins() const
+{
+    QVariantList result;
+    auto* catalog = PluginCatalog();
+    if (!catalog)
+    {
+        return result;
+    }
+
+    catalog->EnumeratePlugins(
+        [](const char* pluginId, const char* displayName, const int* version, const char* publisher,
+           const char* description, bool enabled, bool loaded, bool loadFailed, void* ud)
+        {
+            auto* out = static_cast<QVariantList*>(ud);
+            QVariantMap row;
+            row.insert(QStringLiteral("id"), QString::fromUtf8(pluginId ? pluginId : ""));
+            row.insert(QStringLiteral("name"), QString::fromUtf8(displayName ? displayName : ""));
+            row.insert(QStringLiteral("publisher"), QString::fromUtf8(publisher ? publisher : ""));
+            row.insert(QStringLiteral("description"), QString::fromUtf8(description ? description : ""));
+            row.insert(QStringLiteral("enabled"), enabled);
+            row.insert(QStringLiteral("loaded"), loaded);
+            row.insert(QStringLiteral("loadFailed"), loadFailed);
+            if (version)
+            {
+                row.insert(
+                    QStringLiteral("version"),
+                    QStringLiteral("%1.%2.%3").arg(version[0]).arg(version[1]).arg(version[2])
+                );
+            }
+            out->push_back(row);
+        },
+        &result
+    );
     return result;
 }
 
@@ -305,6 +354,17 @@ void SettingsMenu::setFieldValue(const QString& key, const QVariant& value)
         return;
     }
     dirty_ = true;
+    Q_EMIT qmlChanged();
+}
+
+void SettingsMenu::setPluginEnabled(const QString& pluginId, bool enabled)
+{
+    auto* catalog = PluginCatalog();
+    if (!catalog)
+    {
+        return;
+    }
+    catalog->SetPluginEnabled(pluginId.toUtf8().constData(), enabled);
     Q_EMIT qmlChanged();
 }
 

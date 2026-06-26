@@ -7,7 +7,7 @@
 // message is formatted in-plugin via std::format, then handed to the host across
 // a POD C-ABI sink (void(*)(int, const char*)). The host routes it to its real
 // logger (Qt logging). Each translation unit holds its own sink pointer; the host
-// installs it per-plugin via IPackage::SetLogSink.
+// installs it per-plugin via IPlugin::SetLogSink.
 
 namespace Log
 {

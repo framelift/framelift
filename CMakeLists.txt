@@ -8,9 +8,9 @@ project(FrameLift VERSION ${FRAMELIFT_VERSION} LANGUAGES C CXX)
 # Forced OFF during the Qt migration (the test targets reference SDL/ImGui-era headers).
 option(FRAMELIFT_BUILD_TESTS "Build the unit tests (tests/)" OFF)
 
-# Build runtime plugin package DLLs in plugins/. Packages load through QPluginLoader
+# Build runtime plugin DLLs/SOs in plugins/. Plugins load through QPluginLoader
 # and embed their Qt Quick surfaces as QML modules.
-option(FRAMELIFT_BUILD_PLUGINS "Build the plugin package DLLs (plugins/)" ON)
+option(FRAMELIFT_BUILD_PLUGINS "Build the runtime plugin DLLs/SOs (plugins/)" ON)
 
 # Display string shown in the UI; defaults to the numeric version for local/release builds.
 if (NOT DEFINED FRAMELIFT_VERSION_DISPLAY OR FRAMELIFT_VERSION_DISPLAY STREQUAL "")
@@ -168,7 +168,7 @@ set_target_properties(FrameLift PROPERTIES
         CXX_EXTENSIONS OFF
         WIN32_EXECUTABLE TRUE
         # Ship a lowercase artifact name (framelift / framelift.exe) to match the
-        # lowercase package DLLs and the packages/ folder.
+        # lowercase plugin DLLs/SOs and the plugins/ folder.
         OUTPUT_NAME "framelift"
 )
 
@@ -204,7 +204,7 @@ endif ()
 # it for QAudioSink, but FrameLift does not route media files through Qt.
 target_link_libraries(FrameLift PRIVATE ffmpeg libass)
 
-# Packages load via Qt's QPluginLoader (which uses dlopen on POSIX internally);
+# Plugins load via Qt's QPluginLoader (which uses dlopen on POSIX internally);
 # link libdl explicitly so the symbols resolve (no-op libs on Windows).
 target_link_libraries(FrameLift PRIVATE ${CMAKE_DL_LIBS})
 
@@ -220,16 +220,14 @@ endif ()
 
 FrameLift_apply_release_opts(FrameLift)
 
-# Create packages/ subdirectory before the first package DLL is built.
+# Create plugins/ subdirectory before the first plugin DLL/SO is built.
 add_custom_command(TARGET FrameLift PRE_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:FrameLift>/packages"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:FrameLift>/plugins"
 )
 
-# Discover plugin package source folders automatically. Each plugin CMakeLists
+# Discover plugin source folders automatically. Each plugin CMakeLists
 # registers its target through add_framelift_plugin(). Skipped entirely during the
-# Qt migration (FRAMELIFT_BUILD_PLUGINS=OFF) — the plugins are still ImGui-based and
-# Phase 1 ships host-only video playback. They will be reimplemented (QPluginLoader)
-# in a later phase.
+# Qt migration with FRAMELIFT_BUILD_PLUGINS=OFF.
 if (FRAMELIFT_BUILD_PLUGINS)
     set_property(GLOBAL PROPERTY FRAMELIFT_PLUGIN_TARGETS)
     file(GLOB FRAMELIFT_PLUGIN_DIRS CONFIGURE_DEPENDS LIST_DIRECTORIES TRUE
@@ -248,7 +246,7 @@ if (FRAMELIFT_BUILD_PLUGINS)
         add_dependencies(FrameLift ${FRAMELIFT_PLUGIN_TARGETS})
     endif ()
 
-    # Apply the same Release optimizations to each shipped plugin DLL (LTO is
+    # Apply the same Release optimizations to each shipped plugin DLL/SO (LTO is
     # per-binary, so the host's doesn't reach into the plugins).
     foreach (_plugin IN LISTS FRAMELIFT_PLUGIN_TARGETS)
         get_target_property(_plugin_disabled ${_plugin} FRAMELIFT_PLUGIN_DISABLED)
@@ -287,7 +285,7 @@ endif ()
 # The version is parsed from the SDK header — single source of truth.
 set(_FrameLift_abi_header "${CMAKE_SOURCE_DIR}/sdk/include/framelift/ModuleABI.h")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_FrameLift_abi_header}")
-# Same whitespace-tolerant regex as FrameLiftPackageMetadata.cmake's standalone-SDK
+# Same whitespace-tolerant regex as FrameLiftPluginMetadata.cmake's standalone-SDK
 # fallback, so either parse path accepts spaces or tabs after the macro name.
 file(STRINGS "${_FrameLift_abi_header}" _FrameLift_abi_line
         REGEX "^#define[ \t]+FRAMELIFT_ABI_VERSION[ \t]+[0-9]+")
@@ -314,7 +312,7 @@ install(DIRECTORY "${CMAKE_SOURCE_DIR}/sdk/src/"
         DESTINATION src COMPONENT sdk)
 install(FILES
         "${CMAKE_SOURCE_DIR}/cmake/FrameLiftSdk.cmake"
-        "${CMAKE_SOURCE_DIR}/cmake/FrameLiftPackageMetadata.cmake"
+        "${CMAKE_SOURCE_DIR}/cmake/FrameLiftPluginMetadata.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/sdk-pkg/FrameLiftSdkConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/sdk-pkg/FrameLiftSdkConfigVersion.cmake"
         DESTINATION cmake COMPONENT sdk)

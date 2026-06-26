@@ -3,7 +3,7 @@
 #include "SettingsRegistry.h"
 #include <framelift/IModuleContext.h>
 #include <framelift/services/IAppPaths.h>
-#include <framelift/services/IPackageCatalog.h>
+#include <framelift/services/IPluginCatalog.h>
 #include <framelift/services/ISettingsRegistry.h>
 #include <framelift/services/ISettingsStore.h>
 #include <memory>
@@ -12,7 +12,7 @@
 #include <vector>
 
 class Settings;
-class PackageConfig;
+class PluginConfig;
 
 struct KeybindEntryRec
 {
@@ -56,13 +56,13 @@ struct ChangeCallbackRec
 class ModuleContext final : public IModuleContext,
                             public ISettingsStore,
                             public ISettingsRegistry,
-                            public IPackageCatalog,
+                            public IPluginCatalog,
                             public IAppPaths
 {
 public:
     ModuleContext(
         std::string prefPath, Settings* settings, const std::string& settingsPath,
-        PackageConfig* packageConfig = nullptr, std::string packagesPath = {}
+        PluginConfig* pluginConfig = nullptr, std::string pluginsPath = {}
     );
 
     // Anchored out-of-line so the implicit virtual destructor (and its secondary-base
@@ -73,42 +73,28 @@ public:
 
     int GetPrefPath(char* buf, int cap) const noexcept override;
 
-    void EnumeratePackages(
-        void (*visit)(const char*, const char*, const int*, const char*, const char*, bool, void*), void* visitUd
+    void EnumeratePlugins(
+        void (*visit)(const char*, const char*, const int*, const char*, const char*, bool, bool, bool, void*),
+        void* visitUd
     ) const noexcept override;
 
-    void EnumerateModules(
-        void (*visit)(const char*, const char*, const char*, const char*, bool, bool, bool, void*), void* visitUd
-    ) const noexcept override;
+    void SetPluginEnabled(const char* pluginId, bool enabled) noexcept override;
 
-    void SetModuleEnabled(const char* moduleId, bool enabled) noexcept override;
-
-    // One module within a catalogue package. Owned copies so the entry survives after
-    // the discovering DLL is closed.
-    struct ModuleCatalogEntry
-    {
-        std::string id;
-        std::string name;
-        std::string description;
-        bool enabled = true;
-        bool loaded = false;
-    };
-
-    // A package present in packages/ (loaded or merely discovered) and the modules it
-    // carries. Built by the host and handed to AddPackage after PackageLoader::LoadAll
-    // so SettingsMenu (and any consumer) can list and toggle modules via the ABI.
-    struct PackageCatalogEntry
+    // A plugin present in plugins/ (loaded or merely discovered). Built by the host
+    // and handed to AddPlugin after PluginLoader::LoadAll so SettingsMenu (and any
+    // consumer) can list and toggle plugins via the ABI.
+    struct PluginCatalogEntry
     {
         std::string id;
         std::string displayName;
         int version[3] = {0, 0, 0};
         std::string publisher;
         std::string description;
+        bool enabled = true;
         bool loaded = false;
-        std::vector<ModuleCatalogEntry> modules;
     };
 
-    void AddPackage(PackageCatalogEntry entry);
+    void AddPlugin(PluginCatalogEntry entry);
 
     // Settings getters
     float GetSettingFloat(const char* key) const noexcept override;
@@ -172,10 +158,10 @@ private:
     std::string settingsPath_;
     Settings* settings_;
 
-    // User package enablement manifest (packages.ini) and its path. Null in contexts
-    // that don't manage package enablement (e.g. unit tests).
-    PackageConfig* packageConfig_ = nullptr;
-    std::string packagesPath_;
+    // User plugin enablement manifest (plugins.ini) and its path. Null in contexts
+    // that don't manage plugin enablement (e.g. unit tests).
+    PluginConfig* pluginConfig_ = nullptr;
+    std::string pluginsPath_;
 
     // Field registry bound to *settings_, plus the serialized defaults (for
     // EnumerateSettings' defaultValue). Built once in the constructor.
@@ -188,31 +174,21 @@ private:
     std::vector<KeybindEntryRec> keybindEntries_;
     std::vector<ModuleSettingRec> moduleSettingEntries_;
 
-    // One catalogue entry per available package (loaded or merely present); each owns
-    // the modules it carries. loadFailed (a module enabled at startup yet not loaded)
-    // is computed once in AddPackage and snapshots startup state, so a freshly toggled
-    // module reads as "pending restart", not "failed".
-    struct ModuleCatalogRec
-    {
-        std::string id;
-        std::string name;
-        std::string description;
-        bool enabled;
-        bool loaded;
-        bool loadFailed;
-    };
-
-    struct PackageCatalogRec
+    // One catalogue entry per available plugin (loaded or merely present). loadFailed
+    // is computed once in AddPlugin and snapshots startup state, so a freshly toggled
+    // plugin reads as "pending restart", not "failed".
+    struct PluginCatalogRec
     {
         std::string id;
         std::string displayName;
         int version[3];
         std::string publisher;
         std::string description;
+        bool enabled;
         bool loaded;
-        std::vector<ModuleCatalogRec> modules;
+        bool loadFailed;
     };
 
-    std::vector<PackageCatalogRec> packageCatalog_;
+    std::vector<PluginCatalogRec> pluginCatalog_;
 
 };

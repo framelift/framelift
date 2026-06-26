@@ -18,8 +18,8 @@ struct QmlViewSpec
     int order = 0;
 };
 
-// Loads package-owned QML components into one engine and parents their root items
-// over the video scene-graph item. A broken component is isolated to its package.
+// Loads plugin-owned QML components into one engine and parents their root items
+// over the video scene-graph item. A broken component is isolated to its plugin.
 class QmlCompositor final
 {
 public:

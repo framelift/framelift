@@ -143,7 +143,7 @@ QtAppWindow::QtAppWindow(const char* title, int width, int height, GraphicsApi a
     );
 
     // Created hidden (shown on the first painted frame in RunEventLoop) so the user never
-    // sees an unpainted black framebuffer while settings/packages load. The GL RHI and the
+    // sees an unpainted black framebuffer while settings/plugins load. The GL RHI and the
     // "basic" render loop are forced in main() before any QQuickWindow exists.
     window_ = new QQuickWindow();
     try

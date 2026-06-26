@@ -9,9 +9,8 @@
 // The check runs before any vtable is touched.
 //
 // Bump the version ONLY on a break to the core load-bearing handshake (Tier 1):
-//   - the IPackage interface signature or its Q_PLUGIN_METADATA IID,
-//   - the embedded package-metadata JSON shape the host parses (abi/packageId/
-//     modules/…),
+//   - the IPlugin interface signature or its Q_PLUGIN_METADATA IID,
+//   - the embedded plugin-metadata JSON shape the host parses,
 //   - a host-CALLED interface (IModule),
 //   - the bootstrap surface of IModuleContext (GetServiceRaw/RegisterServiceRaw/
 //     SubscribeRaw/PublishRaw).
@@ -20,7 +19,7 @@
 // as small, independently-discovered service interfaces. Adding, changing, or
 // removing a Tier-2 interface NEVER bumps the version — consumers discover it with
 // ctx.GetService<T>() and degrade when it returns nullptr. QML view models are
-// QObject instances returned by IPackage and are therefore part of Tier 1.
+// QObject instances returned by IPlugin and are therefore part of Tier 1.
 #define FRAMELIFT_ABI_VERSION 1
 
 // Load-time compatibility predicate. Header-only so both the host loader and the

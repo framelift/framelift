@@ -6,10 +6,10 @@
 // All fields describe THIS process (FrameLift), not the whole machine.
 struct SysSample
 {
-    double cpuPercent = 0.0;  // CPU usage, normalized across all cores (0-100)
-    uint64_t memBytes = 0;    // resident memory / working set, in bytes
-    double gpuPercent = 0.0;  // best-effort GPU utilization (0-100)
-    bool gpuValid = false;    // false → GPU usage unavailable, display "N/A"
+    double cpuPercent = 0.0; // CPU usage, normalized across all cores (0-100)
+    uint64_t memBytes = 0;   // resident memory / working set, in bytes
+    double gpuPercent = 0.0; // best-effort GPU utilization (0-100)
+    bool gpuValid = false;   // false → GPU usage unavailable, display "N/A"
 };
 
 // Cross-platform sampler for process CPU / memory / GPU usage.

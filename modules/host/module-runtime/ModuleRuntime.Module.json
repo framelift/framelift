@@ -2,7 +2,7 @@
   "fileVersion": 1,
   "id": "framelift.host.module_runtime",
   "name": "Module Runtime",
-  "description": "Runtime package discovery, dependency resolution, module context, and settings bridge.",
+  "description": "Runtime plugin discovery, dependency resolution, module context, and settings bridge.",
   "enabled": true,
   "required": true,
   "provides": {

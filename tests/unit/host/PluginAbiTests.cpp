@@ -2,18 +2,18 @@
 
 #include <gtest/gtest.h>
 
-TEST(PackageAbiTest, MatchingEpochLoads)
+TEST(PluginAbiTest, MatchingEpochLoads)
 {
     EXPECT_TRUE(FrameLiftAbiCompatible(FRAMELIFT_ABI_VERSION, FRAMELIFT_ABI_VERSION));
 }
 
-TEST(PackageAbiTest, MismatchedEpochRejectedEitherDirection)
+TEST(PluginAbiTest, MismatchedEpochRejectedEitherDirection)
 {
     EXPECT_FALSE(FrameLiftAbiCompatible(FRAMELIFT_ABI_VERSION - 1, FRAMELIFT_ABI_VERSION));
     EXPECT_FALSE(FrameLiftAbiCompatible(FRAMELIFT_ABI_VERSION + 1, FRAMELIFT_ABI_VERSION));
 }
 
-TEST(PackageAbiTest, MetadataCarriesPackageAndModules)
+TEST(PluginAbiTest, MetadataCarriesPackageAndModules)
 {
     static constexpr const char* const kFeatures[] = {"playlist.panel", "playlist.navigation"};
     static constexpr FrameLiftModuleInfo kModules[] = {
@@ -45,7 +45,7 @@ TEST(PackageAbiTest, MetadataCarriesPackageAndModules)
     EXPECT_STREQ(info.modules[0].providesFeatures.items[1], "playlist.navigation");
 }
 
-TEST(PackageAbiTest, MetadataCarriesMultipleModules)
+TEST(PluginAbiTest, MetadataCarriesMultipleModules)
 {
     static constexpr FrameLiftModuleInfo kModules[] = {
         {"framelift.overlay.core", "Overlay Core", nullptr, {nullptr, 0}, {nullptr, 0}, {nullptr, 0}, {nullptr, 0},

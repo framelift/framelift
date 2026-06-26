@@ -40,7 +40,7 @@ struct PackageFixture
 };
 } // namespace
 
-TEST(PackageResolverTest, AcceptsValidDependencyGraph)
+TEST(PluginResolverTest, AcceptsValidDependencyGraph)
 {
     static constexpr const char* const providerFeatures[] = {"history.service"};
     static constexpr const char* const consumerRequires[] = {"history.service"};
@@ -51,56 +51,56 @@ TEST(PackageResolverTest, AcceptsValidDependencyGraph)
         "framelift.playlist", "framelift.playlist.core", EmptyList(), EmptyList(), List(consumerRequires), EmptyList(),
         EmptyList()};
 
-    const auto decisions = ResolvePackages({{&provider.info}, {&consumer.info}}, "linux");
+    const auto decisions = ResolvePlugins({{&provider.info}, {&consumer.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 2u);
     EXPECT_TRUE(decisions[0].accepted);
     EXPECT_TRUE(decisions[1].accepted);
 }
 
-TEST(PackageResolverTest, RejectsMissingRequiredModule)
+TEST(PluginResolverTest, RejectsMissingRequiredModule)
 {
     static constexpr const char* const requiredModules[] = {"framelift.history.core"};
     PackageFixture consumer{
         "framelift.playlist", "framelift.playlist.core", EmptyList(), List(requiredModules), EmptyList(), EmptyList(),
         EmptyList()};
 
-    const auto decisions = ResolvePackages({{&consumer.info}}, "linux");
+    const auto decisions = ResolvePlugins({{&consumer.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 1u);
     EXPECT_FALSE(decisions[0].accepted);
     EXPECT_NE(decisions[0].reason.find("framelift.history.core"), std::string::npos);
 }
 
-TEST(PackageResolverTest, RejectsMissingRequiredFeature)
+TEST(PluginResolverTest, RejectsMissingRequiredFeature)
 {
     static constexpr const char* const requiredFeatures[] = {"history.service"};
     PackageFixture consumer{
         "framelift.playlist", "framelift.playlist.core", EmptyList(), EmptyList(), List(requiredFeatures), EmptyList(),
         EmptyList()};
 
-    const auto decisions = ResolvePackages({{&consumer.info}}, "linux");
+    const auto decisions = ResolvePlugins({{&consumer.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 1u);
     EXPECT_FALSE(decisions[0].accepted);
     EXPECT_NE(decisions[0].reason.find("history.service"), std::string::npos);
 }
 
-TEST(PackageResolverTest, RejectsUnsupportedPlatform)
+TEST(PluginResolverTest, RejectsUnsupportedPlatform)
 {
     static constexpr const char* const platforms[] = {"windows"};
     PackageFixture updater{
         "framelift.updater", "framelift.updater.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(),
         List(platforms)};
 
-    const auto decisions = ResolvePackages({{&updater.info}}, "linux");
+    const auto decisions = ResolvePlugins({{&updater.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 1u);
     EXPECT_FALSE(decisions[0].accepted);
     EXPECT_NE(decisions[0].reason.find("platform"), std::string::npos);
 }
 
-TEST(PackageResolverTest, CascadesRejectedDependencies)
+TEST(PluginResolverTest, CascadesRejectedDependencies)
 {
     static constexpr const char* const windowsOnly[] = {"windows"};
     static constexpr const char* const requiresModule[] = {"framelift.provider.core"};
@@ -111,7 +111,7 @@ TEST(PackageResolverTest, CascadesRejectedDependencies)
         "framelift.consumer", "framelift.consumer.core", EmptyList(), List(requiresModule), EmptyList(), EmptyList(),
         EmptyList()};
 
-    const auto decisions = ResolvePackages({{&provider.info}, {&consumer.info}}, "linux");
+    const auto decisions = ResolvePlugins({{&provider.info}, {&consumer.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 2u);
     EXPECT_FALSE(decisions[0].accepted);
@@ -119,20 +119,20 @@ TEST(PackageResolverTest, CascadesRejectedDependencies)
     EXPECT_NE(decisions[1].reason.find("framelift.provider.core"), std::string::npos);
 }
 
-TEST(PackageResolverTest, OptionalFeaturesDoNotGateLoading)
+TEST(PluginResolverTest, OptionalFeaturesDoNotGateLoading)
 {
     static constexpr const char* const optional[] = {"missing.optional"};
     PackageFixture package{
         "framelift.optional", "framelift.optional.core", EmptyList(), EmptyList(), EmptyList(), List(optional),
         EmptyList()};
 
-    const auto decisions = ResolvePackages({{&package.info}}, "linux");
+    const auto decisions = ResolvePlugins({{&package.info}}, "linux");
 
     ASSERT_EQ(decisions.size(), 1u);
     EXPECT_TRUE(decisions[0].accepted);
 }
 
-TEST(PackageResolverTest, OrdersProviderBeforeOptionalConsumer)
+TEST(PluginResolverTest, OrdersProviderBeforeOptionalConsumer)
 {
     static constexpr const char* const provides[] = {"ui.context_menu"};
     static constexpr const char* const optional[] = {"ui.context_menu"};
@@ -144,20 +144,20 @@ TEST(PackageResolverTest, OrdersProviderBeforeOptionalConsumer)
         EmptyList()};
 
     // Consumer listed first in the input; ordering must still load the provider first.
-    const auto order = OrderPackages({{&consumer.info}, {&provider.info}});
+    const auto order = OrderPlugins({{&consumer.info}, {&provider.info}});
     ASSERT_EQ(order.size(), 2u);
     EXPECT_EQ(order[0], 1u); // provider (input index 1)
     EXPECT_EQ(order[1], 0u); // consumer (input index 0)
 }
 
-TEST(PackageResolverTest, OrdersIndependentPackagesByPackageId)
+TEST(PluginResolverTest, OrdersIndependentPackagesByPackageId)
 {
     PackageFixture zzz{
         "framelift.zzz", "framelift.zzz.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
     PackageFixture aaa{
         "framelift.aaa", "framelift.aaa.core", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
 
-    const auto order = OrderPackages({{&zzz.info}, {&aaa.info}});
+    const auto order = OrderPlugins({{&zzz.info}, {&aaa.info}});
     ASSERT_EQ(order.size(), 2u);
     EXPECT_EQ(order[0], 1u); // framelift.aaa sorts first
     EXPECT_EQ(order[1], 0u);

@@ -42,8 +42,8 @@
 //    before any vtable is touched. Host and plugins are built from one source tree
 //    in lockstep, so an exact match is the whole rule — a mismatch means a stale
 //    binary that must be rebuilt, not negotiated.
-//      Bump FRAMELIFT_ABI_VERSION only on a Tier-1 break: IPackage or its IID,
-//      package metadata consumed before instantiation, a host-called interface
+//      Bump FRAMELIFT_ABI_VERSION only on a Tier-1 break: IPlugin or its IID,
+//      plugin metadata consumed before instantiation, a host-called interface
 //      (IModule), QObject/QML view-model discovery, or IModuleContext bootstrap.
 //      New host capabilities are NOT a break — they ship as new, independently
 //      discovered service interfaces (GetService<T>() returns nullptr when absent),
@@ -53,7 +53,7 @@
 
 // Declare a non-copyable, non-movable interface base.
 // Use at the top of every boundary interface class body.
-#define FRAMELIFT_INTERFACE(ClassName)                                                                                      \
+#define FRAMELIFT_INTERFACE(ClassName)                                                                                 \
     ClassName(const ClassName&) = delete;                                                                              \
     ClassName& operator=(const ClassName&) = delete;                                                                   \
     ClassName(ClassName&&) = delete;                                                                                   \

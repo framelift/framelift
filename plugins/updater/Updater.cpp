@@ -466,7 +466,7 @@ void Updater::ApplyUpdate() const
     const fs::path pending(pendingDir_);
 
     // Apply every file from the extracted update, preserving its relative path so
-    // framelift.exe, the runtime DLLs, and the plugin package DLLs are all replaced.
+    // framelift.exe, the runtime DLLs, and the plugin DLLs are all replaced.
     // Windows allows renaming loaded executables and DLLs (including this Updater
     // DLL); the new files take effect on the next launch.
     std::error_code ec;

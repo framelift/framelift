@@ -6,9 +6,9 @@
 #   find_package(FrameLiftSdk REQUIRED)
 #   add_framelift_plugin(MyPlugin
 #       PLUGIN_JSON "${CMAKE_CURRENT_SOURCE_DIR}/MyPlugin.Plugin.json"
-#       core/MyPlugin.cpp ${FRAMELIFT_SDK_SOURCES})
+#       MyPlugin.cpp ${FRAMELIFT_SDK_SOURCES})
 #
-# A package DLL is a Qt plugin (QPluginLoader + Q_PLUGIN_METADATA via IPackage), so
+# A runtime plugin DLL/SO is a Qt plugin (QPluginLoader + Q_PLUGIN_METADATA via IPlugin), so
 # the SDK requires Qt6::Core — the historical imgui/json-free rule no longer
 # implies Qt-free. find_package compatibility is gated on the ABI version via the
 # accompanying FrameLiftSdkConfigVersion.cmake (ExactVersion); the runtime loader
