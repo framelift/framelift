@@ -79,22 +79,3 @@ void* GlGraphicsBackend::GetProcAddr(const char* name) const
     }
     return reinterpret_cast<void*>(context_->getProcAddress(name));
 }
-
-bool GlGraphicsBackend::BeginFrame()
-{
-    // Qt's scene graph acquires and clears the render target (QQuickWindow::setColor),
-    // and the video renderer clears + letterboxes within it, so there is nothing to do
-    // here. Kept for ABI shape / the Vulkan backend.
-    return true;
-}
-
-void GlGraphicsBackend::SwapBuffers()
-{
-    // Qt's scene graph presents the frame; nothing to do here.
-}
-
-void GlGraphicsBackend::SetVSync(bool /*enabled*/)
-{
-    // Presentation is owned by Qt's scene graph (vsynced by the QSurfaceFormat / render
-    // loop). Not independently togglable here under the basic GL render loop.
-}

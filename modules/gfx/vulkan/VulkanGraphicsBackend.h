@@ -68,19 +68,6 @@ public:
     [[nodiscard]] void* GetProcAddr(const char* name) const override;
     [[nodiscard]] bool GetVulkanDeviceInfo(VulkanDeviceInfo& out) const noexcept override;
 
-    bool BeginFrame() override
-    {
-        return true;
-    }
-
-    void SwapBuffers() override
-    {
-    }
-
-    void SetVSync(bool) override
-    {
-    }
-
     [[nodiscard]] VkDevice Device() const
     {
         return device_;

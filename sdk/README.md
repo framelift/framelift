@@ -121,7 +121,7 @@ add_framelift_plugin(MyPlugin
 | `<framelift/core.h>`     | module entry macro, module lifecycle, `ModuleBase`, context, ABI, events, hotkeys, `Log` |
 | Qt/QML                   | QObject view models and plugin-embedded Qt Quick components |
 | `<framelift/services.h>` | host + cross-plugin service interfaces (`IHistory`, `ISettingsStore`, `ISettingsRegistry`, `IPluginCatalog`, `IAppPaths`) |
-| `<framelift/platform.h>` | media playback family (`IMediaPlayback`, `IMediaProperties`, `IVideoOutput`, `IAudioControl`, `ISubtitleControl`), window family (`IAppWindow`, `IGraphicsSurface`, `IEventPump`), `IFileDialog` |
+| `<framelift/platform.h>` | media playback family (`IMediaPlayback`, `IMediaProperties`, `IVideoOutput`, `IAudioControl`, `ISubtitleControl`), window/event interfaces (`IAppWindow`, `IEventPump`), `IFileDialog` |
 
 ### Module Entry
 
@@ -217,15 +217,10 @@ logged via `Log::Error` and swallowed with a safe fallback — the plugin
 misbehaves loudly instead of crashing the host. Only code that implements `IModule`
 raw, bypassing the scaffolding, keeps terminate-on-throw semantics.
 
-### Native backend access (escape hatches)
+### Native backend access
 
-The curated interfaces cover the common cases; for anything beyond them the raw
-platform objects are reachable — bring the matching headers/libraries yourself:
-
-- `IAppWindow::GetNativeHandle()` — the raw Qt window object pointer.
-
-(The graphics API behind the window — OpenGL or Vulkan — is an internal detail and is
-no longer exposed to plugins; the host owns all video/UI rendering.)
+The graphics API behind the window — OpenGL or Vulkan — is an internal detail and is
+not exposed to plugins; the host owns all video/UI rendering.
 
 ## ABI compatibility
 

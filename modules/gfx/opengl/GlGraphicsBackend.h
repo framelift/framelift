@@ -32,9 +32,6 @@ public:
     [[nodiscard]] uintptr_t CreateUiTexture(const unsigned char* rgba, int w, int h) override;
 
     [[nodiscard]] void* GetProcAddr(const char* name) const override;
-    bool BeginFrame() override;
-    void SwapBuffers() override;
-    void SetVSync(bool enabled) override;
 
 private:
     QOpenGLContext* context_ = nullptr; // Qt-owned; adopted, not created here

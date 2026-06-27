@@ -14,11 +14,11 @@ class QQuickWindow;
 class QEvent;
 class VideoItem;
 
-// Concrete window backed by Qt6 (Qt Quick). Implements the window/graphics/event interface family (IAppWindow /
-// IGraphicsSurface / IEventPump) and, host-only, pref/base path resolution. Owns one
-// QQuickWindow with a VideoItem (QQuickItem → QSGRenderNode) that draws the video inside
-// the scene-graph render pass, delegating the draw to an IGraphicsBackend that adopts
-// Qt's scene-graph graphics context.
+// Concrete window backed by Qt6 (Qt Quick). Implements the plugin-visible window/event
+// interfaces (IAppWindow / IEventPump) and, host-only, pref/base path resolution plus
+// graphics-backend access. Owns one QQuickWindow with a VideoItem (QQuickItem →
+// QSGRenderNode) that draws the video inside the scene-graph render pass, delegating
+// the draw to an IGraphicsBackend that adopts Qt's scene-graph graphics context.
 //
 // This file, VideoItem, and VideoRenderNode are the only window-layer files that may
 // #include <QtGui/...>/<QtQuick/...>. QObject is the first base so AUTOMOC can wire the
@@ -30,7 +30,7 @@ class VideoItem;
 // methods, which emit queued signals delivered on the GUI thread, where they set the
 // dirty state and call QQuickWindow::update() (requestUpdate) — the only thread-legal way
 // to schedule a repaint.
-class QtAppWindow final : public QObject, public IAppWindow, public IGraphicsSurface, public IEventPump
+class QtAppWindow final : public QObject, public IAppWindow, public IEventPump
 {
     Q_OBJECT
 
@@ -59,37 +59,22 @@ public:
     int RunEventLoop();
 
     // ── IAppWindow ──
-    void GetSize(int& w, int& h) const noexcept override;
-    void SetSize(int w, int h) noexcept override;
     void ResizeToVideo(int videoW, int videoH, float maxDisplayRatio) noexcept;
     [[nodiscard]] bool IsFullscreen() const noexcept override;
     void SetFullscreen(bool fs) noexcept override;
-    [[nodiscard]] Rect GetDisplayUsableBounds() const noexcept override;
-    [[nodiscard]] void* GetNativeHandle() const noexcept override;
-    bool SetWindowIcon(const char* path) noexcept override;
-    bool SetWindowIconFromMemory(const unsigned char* data, int size) noexcept override;
     void SetTitle(const char* title) noexcept override;
 
-    // ── IGraphicsSurface ──
-    [[nodiscard]] void* GetGraphicsBackend() const noexcept override;
-    [[nodiscard]] const char* GetGraphicsBackendName() const noexcept override;
-    bool BeginFrame() noexcept override;
-    void SwapBuffers() noexcept override;
-    void SetVSync(bool enabled) noexcept override;
-    [[nodiscard]] bool IsRenderable() const noexcept override;
-
     // ── IEventPump ──
-    // Qt owns the loop, so the blocking Wait/Poll pair is unused (returns false). The
-    // Push* wakes are emitted as queued signals to the GUI thread (see class comment).
-    bool WaitNextEvent(AppEvent& out, int timeoutMs) noexcept override;
-    bool PollNextEvent(AppEvent& out) noexcept override;
     [[nodiscard]] uint32_t RegisterCustomEventType() noexcept override;
     void PushCustomEvent(uint32_t eventType, void* data1) noexcept override;
-    void PushRenderUpdate() noexcept override;
-    void PushPlayerWakeup() noexcept override;
     void PushQuitEvent() noexcept override;
 
     // ── Host-only surface (not on any ABI interface) ──
+    [[nodiscard]] void* GetNativeHandle() const noexcept;
+    [[nodiscard]] void* GetGraphicsBackend() const noexcept;
+    bool SetWindowIcon(const char* path) noexcept;
+    void PushRenderUpdate() noexcept;
+    void PushPlayerWakeup() noexcept;
     int GetPrefPath(const char* org, const char* app, char* buf, int cap) const noexcept;
     int GetBasePath(char* buf, int cap) const noexcept;
     // Native Win32 HWND (as void*), or nullptr off Windows / before the window exists.

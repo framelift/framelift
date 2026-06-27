@@ -161,9 +161,8 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
     moduleCtx_->RegisterService<IVideoOutput>(player_.get());
     moduleCtx_->RegisterService<IAudioControl>(player_.get());
     moduleCtx_->RegisterService<ISubtitleControl>(player_.get());
-    // The one QtAppWindow is registered under each window facet it implements.
+    // The one QtAppWindow is registered under each plugin-visible window facet it implements.
     moduleCtx_->RegisterService<IAppWindow>(appWindow_.get());
-    moduleCtx_->RegisterService<IGraphicsSurface>(appWindow_.get());
     moduleCtx_->RegisterService<IEventPump>(appWindow_.get());
     moduleCtx_->RegisterService<Hotkeys>(&keys_);
     moduleCtx_->RegisterService<IFileDialog>(&fileDialogService_);
@@ -173,7 +172,7 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
     // Controllers own their own event-bus wiring (settings re-apply, audio ducking,
     // theme reaction) so App holds no subscriptions.
     playbackControls_ = std::make_unique<PlaybackControls>(
-        keys_, settings_, *ffmpeg_, *appWindow_, *appWindow_, *appWindow_, fileDialogService_, *moduleCtx_
+        keys_, settings_, *ffmpeg_, *appWindow_, *appWindow_, fileDialogService_, *moduleCtx_
     );
     playbackControls_->Connect();
 

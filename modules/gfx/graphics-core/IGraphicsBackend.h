@@ -11,11 +11,10 @@
 
 class QQuickWindow;
 
-// Host-internal abstraction over the graphics presentation API (OpenGL today, Vulkan
-// planned). It owns everything API-specific behind the window: the GL context / Vulkan
-// device, buffer presentation, and vsync. Under Qt the window is a QQuickWindow owned by
-// QtAppWindow, which adopts Qt's scene-graph GL context into the backend; the video is
-// drawn as a QSGRenderNode inside the scene-graph render pass.
+// Host-internal abstraction over the graphics API. It owns everything API-specific
+// behind the Qt scene graph: the adopted GL context or Vulkan device, renderers, and
+// UI/video resources. Under Qt the window is a QQuickWindow owned by QtAppWindow; the
+// video is drawn as a QSGRenderNode inside the scene-graph render pass.
 //
 // Not part of the plugin ABI — signatures may evolve as the Vulkan backend lands.
 // GL/Qt implementations may #include <QtGui/...> and system GL headers (same allowance
@@ -75,19 +74,12 @@ public:
     }
 #endif
 
-    // ── Presentation ──────────────────────────────────────────────────────────
+    // ── Backend utilities ─────────────────────────────────────────────────────
     [[nodiscard]] virtual void* GetProcAddr(const char* name) const = 0;
-    // Begin a frame: acquire/clear the render target. Returns false if the frame should
-    // be skipped (e.g. the Vulkan swapchain is mid-recreation). GL always succeeds. Under
-    // Qt the scene graph owns acquire/present, so the GL backend's BeginFrame/SwapBuffers
-    // are effectively no-ops — kept for the Vulkan backend and ABI shape.
-    virtual bool BeginFrame() = 0;
-    virtual void SwapBuffers() = 0;
-    virtual void SetVSync(bool enabled) = 0;
 
-    // Hint, set before BeginFrame(), of which logical layers changed this frame so a
-    // layered backend can reuse cached layers instead of re-rendering them. Default
-    // no-op — the OpenGL backend draws everything directly every frame.
+    // Hint which logical layers changed so a layered backend can reuse cached layers
+    // instead of re-rendering them. Default no-op — the OpenGL backend draws everything
+    // directly every frame.
     virtual void SetFrameDirty(bool videoDirty, bool uiDirty)
     {
         (void)videoDirty;

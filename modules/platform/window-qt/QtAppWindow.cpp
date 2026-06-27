@@ -289,39 +289,25 @@ int QtAppWindow::RunEventLoop()
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
-void QtAppWindow::GetSize(int& w, int& h) const noexcept
-{
-    if (window_)
-    {
-        w = window_->width();
-        h = window_->height();
-    }
-    else
-    {
-        w = 0;
-        h = 0;
-    }
-}
-
-void QtAppWindow::SetSize(int w, int h) noexcept
-{
-    if (window_)
-    {
-        window_->resize(w, h);
-    }
-}
-
 void QtAppWindow::ResizeToVideo(int videoW, int videoH, float maxDisplayRatio) noexcept
 {
     if (IsFullscreen() || videoW <= 0 || videoH <= 0)
     {
         return;
     }
-    const Rect usable = GetDisplayUsableBounds();
-    const int maxW = static_cast<int>(static_cast<float>(usable.w) * maxDisplayRatio);
-    const int maxH = static_cast<int>(static_cast<float>(usable.h) * maxDisplayRatio);
+    const QScreen* screen = window_ ? window_->screen() : QGuiApplication::primaryScreen();
+    if (!screen)
+    {
+        return;
+    }
+    const QRect usable = screen->availableGeometry();
+    const int maxW = static_cast<int>(static_cast<float>(usable.width()) * maxDisplayRatio);
+    const int maxH = static_cast<int>(static_cast<float>(usable.height()) * maxDisplayRatio);
     const WindowSize fit = FitWithinAspect(videoW, videoH, maxW, maxH);
-    SetSize(fit.w, fit.h);
+    if (window_)
+    {
+        window_->resize(fit.w, fit.h);
+    }
 }
 
 bool QtAppWindow::IsFullscreen() const noexcept
@@ -335,17 +321,6 @@ void QtAppWindow::SetFullscreen(bool fs) noexcept
     {
         window_->setVisibility(fs ? QWindow::FullScreen : QWindow::Windowed);
     }
-}
-
-Rect QtAppWindow::GetDisplayUsableBounds() const noexcept
-{
-    const QScreen* screen = window_ ? window_->screen() : QGuiApplication::primaryScreen();
-    if (!screen)
-    {
-        return {};
-    }
-    const QRect g = screen->availableGeometry();
-    return {g.x(), g.y(), g.width(), g.height()};
 }
 
 void* QtAppWindow::GetNativeHandle() const noexcept
@@ -377,21 +352,6 @@ bool QtAppWindow::SetWindowIcon(const char* path) noexcept
     return true;
 }
 
-bool QtAppWindow::SetWindowIconFromMemory(const unsigned char* data, int size) noexcept
-{
-    if (!window_ || !data || size <= 0)
-    {
-        return false;
-    }
-    QImage img;
-    if (!img.loadFromData(data, size))
-    {
-        return false;
-    }
-    window_->setIcon(QIcon(QPixmap::fromImage(img)));
-    return true;
-}
-
 void QtAppWindow::SetTitle(const char* title) noexcept
 {
     title_ = title ? title : "";
@@ -406,35 +366,6 @@ void QtAppWindow::SetTitle(const char* title) noexcept
 void* QtAppWindow::GetGraphicsBackend() const noexcept
 {
     return backend_.get();
-}
-
-const char* QtAppWindow::GetGraphicsBackendName() const noexcept
-{
-    return backend_ ? backend_->Name() : "none";
-}
-
-bool QtAppWindow::BeginFrame() noexcept
-{
-    // Qt's scene graph owns frame acquisition/present; kept for ABI shape.
-    return backend_ ? backend_->BeginFrame() : false;
-}
-
-void QtAppWindow::SwapBuffers() noexcept
-{
-    // Qt presents the frame; nothing to do here.
-}
-
-void QtAppWindow::SetVSync(bool enabled) noexcept
-{
-    if (backend_)
-    {
-        backend_->SetVSync(enabled);
-    }
-}
-
-bool QtAppWindow::IsRenderable() const noexcept
-{
-    return window_ && window_->isVisible() && window_->visibility() != QWindow::Minimized;
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -485,18 +416,6 @@ bool QtAppWindow::eventFilter(QObject* watched, QEvent* event)
         }
     }
     return QObject::eventFilter(watched, event);
-}
-
-bool QtAppWindow::WaitNextEvent(AppEvent& out, int /*timeoutMs*/) noexcept
-{
-    out = AppEvent{};
-    return false;
-}
-
-bool QtAppWindow::PollNextEvent(AppEvent& out) noexcept
-{
-    out = AppEvent{};
-    return false;
 }
 
 uint32_t QtAppWindow::RegisterCustomEventType() noexcept
