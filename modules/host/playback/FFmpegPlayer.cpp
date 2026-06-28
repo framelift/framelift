@@ -27,6 +27,8 @@
 #include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstdarg>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -112,6 +114,59 @@ void CountDecodeError(std::atomic<int64_t>& counter, const AVCodecContext* dec)
     }
 }
 
+// Route FFmpeg's libav* logging through the host logger (mirrors AssLogCallback for
+// libass). FFmpeg's default callback writes raw to stderr, bypassing our message
+// pattern *and* the IsSuppressed filter in Log.cpp; routing it through Log::* gives
+// it timestamps/colors, lands it in the Log Viewer buffer, and lets IsSuppressed drop
+// known-benign container noise (UDTA/chapter/codec-params) from stderr while keeping it
+// in the buffer. Only messages at or below the active av_log level reach us (default
+// AV_LOG_INFO), so verbose/debug spam never arrives unless explicitly enabled.
+void FFmpegLogCallback(void* /*avcl*/, int level, const char* fmt, va_list va)
+{
+    // A custom av_log callback is invoked for *every* message regardless of level —
+    // FFmpeg's level threshold is applied inside its default callback, not before
+    // dispatch. So we must gate on av_log_get_level() ourselves, or libav's VERBOSE/
+    // DEBUG internals (CUDA symbol loads, FFT transform-tree dumps, ...) flood the log.
+    if (level > av_log_get_level())
+    {
+        return;
+    }
+    char buf[1024];
+    std::vsnprintf(buf, sizeof(buf), fmt, va);
+    // FFmpeg messages usually carry a trailing newline; strip it so Log::* doesn't
+    // emit a blank line after each one.
+    for (size_t n = std::strlen(buf); n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'); --n)
+    {
+        buf[n - 1] = '\0';
+    }
+    if (buf[0] == '\0')
+    {
+        return;
+    }
+    if (level <= AV_LOG_ERROR)
+    {
+        Log::Error("FFmpeg: {}", buf);
+    }
+    else if (level <= AV_LOG_WARNING)
+    {
+        Log::Warn("FFmpeg: {}", buf);
+    }
+    else
+    {
+        Log::Info("FFmpeg: {}", buf);
+    }
+}
+
+// (Re)install our av_log callback. av_log_set_callback is global libav state, and on
+// Linux the Qt Multimedia FFmpeg backend (loaded lazily via QMediaDevices/QAudioSink)
+// shares the same libav* and clobbers it with its own handler — so a one-shot install
+// in the constructor doesn't stick. Re-assert it right before each open instead; the
+// call is cheap (just a function-pointer store) and idempotent.
+void InstallFFmpegLogCallback()
+{
+    av_log_set_callback(&FFmpegLogCallback);
+}
+
 // Presentation timestamp of a decoded frame in seconds (0 when unknown).
 double FramePtsSec(const AVFrame* f, AVRational tb)
 {
@@ -131,6 +186,9 @@ FFmpegPlayer::FFmpegPlayer()
       videoQ_(std::make_unique<FFmpegPacketQueue>()), subQ_(std::make_unique<FFmpegPacketQueue>(64)),
       subtitles_(std::make_unique<FFmpegSubtitles>())
 {
+    // Funnel libav* logging into the host logger. Re-asserted before each open in
+    // PlayFile too, since Qt Multimedia clobbers the global callback (see InstallFFmpegLogCallback).
+    InstallFFmpegLogCallback();
 #if defined(_WIN32)
     // Auto-reset event the video worker waits on alongside its frame-pacing timer;
     // Wake() signals it so pause/seek/load/shutdown interrupt the wait immediately.
@@ -282,6 +340,7 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
     UpdateCoreIdle();
 
     AVFormatContext* fmt = nullptr;
+    InstallFFmpegLogCallback(); // Qt may have clobbered the global callback since construction.
     if (const int ret = avformat_open_input(&fmt, path.c_str(), nullptr, nullptr); ret < 0)
     {
         Log::Error("FFmpegPlayer: failed to open {}", path);
@@ -1487,6 +1546,7 @@ bool FFmpegPlayer::OpenAudioBinding(int64_t id, AVFormatContext* mainFmt, AudioB
     else
     {
         const std::string& srcPath = externalSources_[e.container - 1].path;
+        InstallFFmpegLogCallback(); // re-assert; Qt may have clobbered the global callback.
         if (avformat_open_input(&srcFmt, srcPath.c_str(), nullptr, nullptr) < 0)
         {
             Log::Warn("FFmpegPlayer: failed to open external audio {}", srcPath);

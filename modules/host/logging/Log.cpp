@@ -47,13 +47,26 @@ bool DetectColor()
 
 bool g_color = false;
 
-// Substrings of third-party log lines we deliberately drop. Qt Multimedia's PipeWire
-// audio backend emits these via qWarning() on the *default* category (so QT_LOGGING_RULES
-// can't target them) every time QAudioSink/QMediaDevices probes a device that advertises
-// an IEC958 / S-PDIF passthrough format — harmless pod-parse noise on playback start.
+// Substrings of third-party log lines we deliberately drop from stderr. These still
+// reach the Log Viewer buffer (HostLogBuffer::Push runs before this filter), so the
+// suppression only quiets the console — we keep the data in case we want it later.
+//   - "spaVisitChoice": Qt Multimedia's PipeWire audio backend emits this via
+//     qWarning() on the *default* category (so QT_LOGGING_RULES can't target it) every
+//     time QAudioSink/QMediaDevices probes a device advertising an IEC958 / S-PDIF
+//     passthrough format — harmless pod-parse noise on playback start.
+//   - "Using Qt multimedia with FFmpeg": Qt's FFmpeg media backend logs this banner on
+//     init; we only use Qt Multimedia for audio output, so it's irrelevant noise.
+//   - The rest are benign libav* container quirks (routed in via FFmpegLogCallback):
+//     mov UDTA atoms it can't parse, dangling QT chapter-track references, and the
+//     "couldn't probe codec params / increase analyzeduration" pair on lazy-init files.
 bool IsSuppressed(const QString& msg)
 {
-    return msg.contains(QLatin1String("spaVisitChoice"));
+    return msg.contains(QLatin1String("spaVisitChoice")) ||
+           msg.contains(QLatin1String("Using Qt multimedia with FFmpeg")) ||
+           msg.contains(QLatin1String("UDTA parsing failed")) ||
+           msg.contains(QLatin1String("Referenced QT chapter track not found")) ||
+           msg.contains(QLatin1String("Could not find codec parameters for stream")) ||
+           msg.contains(QLatin1String("Consider increasing the value for the"));
 }
 
 // Single output point for Qt logging. Applies the pattern set in Init(), drops suppressed
