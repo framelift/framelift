@@ -120,6 +120,13 @@ private:
     std::string filterText_;
     QTimer* refreshTimer_ = nullptr;
 
+    // ── QML lines cache ────────────────────────────────────────────────────────
+    // QmlLines() filters and rebuilds a QVariantList on every read; with the ring
+    // buffer holding up to kMaxEntries lines this is costly. Cache it and
+    // invalidate whenever changed fires (the NOTIFY for `lines` and the filters).
+    mutable QVariantList linesCache_;
+    mutable bool linesCacheDirty_ = true;
+
     void ApplySettings(bool showDebug, bool showInfo, bool showWarn, bool showError, bool perfOnly);
 
     friend class LogViewerSettings;

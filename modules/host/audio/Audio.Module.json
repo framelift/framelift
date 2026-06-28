@@ -1,6 +1,6 @@
 {
   "fileVersion": 1,
-  "id": "framelift.host.audio",
+  "id": "framelift.audio",
   "name": "Audio Output",
   "description": "Host audio output: Qt QAudioSink PCM device + swresample, master clock, volume/mute/ducking, and the libavfilter normalization graph.",
   "enabled": true,
@@ -12,7 +12,7 @@
   },
   "requires": {
     "modules": [
-      "framelift.host.settings"
+      "framelift.settings"
     ],
     "features": []
   },

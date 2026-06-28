@@ -95,13 +95,6 @@ void QmlCompositor::Load(std::vector<QmlViewSpec> views)
             }
         );
 
-        if (component.isError())
-        {
-            Log::Error("QML '{}': {}", view.moduleId.toStdString(), component.errorString().toStdString());
-            delete item;
-            continue;
-        }
-
         views_.push_back({std::move(context), item});
         Log::Debug(
             "QML '{}': loaded '{}' at z={} ({}x{})", view.moduleId.toStdString(), view.sourceUrl.toStdString(),

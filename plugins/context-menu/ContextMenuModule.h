@@ -138,6 +138,13 @@ private:
 
     bool assembled_ = false;
     bool playerIdle_ = true;
+
+    // ── QML extra-items cache ──────────────────────────────────────────────────
+    // QmlExtraItems() filters items_ and rebuilds a QVariantList on every read.
+    // Cache it and invalidate whenever menuChanged fires (the NOTIFY for the
+    // `extraItems` property).
+    QVariantList extraItemsCache_;
+    bool extraItemsCacheDirty_ = true;
 };
 
 FRAMELIFT_MODULE_ENTRY(

@@ -221,6 +221,13 @@ private:
 
     void SetOpen(bool value);
 
+    // ── QML entries cache ──────────────────────────────────────────────────────
+    // QmlEntries() is read once per delegate realization; rebuilding the whole
+    // QVariantList each time is costly for long playlists. Cache it and invalidate
+    // whenever playlistChanged fires (the NOTIFY for the `entries` property).
+    mutable QVariantList entriesCache_;
+    mutable bool entriesCacheDirty_ = true;
+
     friend class PlaylistSettings;
 };
 

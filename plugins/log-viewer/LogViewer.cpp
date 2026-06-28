@@ -42,6 +42,16 @@ void LogViewer::OnInstall(IModuleContext& ctx)
         }
     );
     refreshTimer_->start();
+
+    // Invalidate the QmlLines cache on every change to the lines projection
+    // (new entries, filter text, perf-only, level toggles all emit `changed`).
+    connect(
+        this, &LogViewer::changed, this,
+        [this]
+        {
+            linesCacheDirty_ = true;
+        }
+    );
 }
 
 void LogViewer::LoadSettings(IModuleSettings& ps)
@@ -80,6 +90,10 @@ void LogViewer::ApplySettings(bool showDebug, bool showInfo, bool showWarn, bool
 
 QVariantList LogViewer::QmlLines() const
 {
+    if (!linesCacheDirty_)
+    {
+        return linesCache_;
+    }
     QVariantList result;
     for (const Entry& entry : entries_)
     {
@@ -93,7 +107,9 @@ QVariantList LogViewer::QmlLines() const
         row.insert(QStringLiteral("timestamp"), entry.tsMillis);
         result.push_back(row);
     }
-    return result;
+    linesCache_ = std::move(result);
+    linesCacheDirty_ = false;
+    return linesCache_;
 }
 
 void LogViewer::clearLines()

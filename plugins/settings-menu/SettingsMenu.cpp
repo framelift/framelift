@@ -206,6 +206,15 @@ void SettingsMenu::OnInstall(IModuleContext& ctx)
     SeedFromContext();
     RegisterBuiltInPages();
 
+    // Invalidate the QmlPages cache on every change to the pages projection.
+    QObject::connect(
+        this, &SettingsMenu::qmlChanged, this,
+        [this]
+        {
+            pagesCacheDirty_ = true;
+        }
+    );
+
     framelift::Subscribe<OpenSettingsPageEvent>(
         ctx,
         [this](const OpenSettingsPageEvent& e)
@@ -385,11 +394,15 @@ bool SettingsMenu::Dirty() const noexcept
 
 QVariantList SettingsMenu::QmlPages()
 {
+    if (!pagesCacheDirty_)
+    {
+        return pagesCache_;
+    }
     QVariantList result;
     auto* registry = SettingsPageReg();
     if (!registry)
     {
-        return result;
+        return result; // leave the cache dirty; rebuild once a registry is available
     }
 
     registry->EnumerateSettingsPages(
@@ -417,7 +430,9 @@ QVariantList SettingsMenu::QmlPages()
     {
         qmlActivePage_ = result.front().toMap().value(QStringLiteral("id")).toString().toStdString();
     }
-    return result;
+    pagesCache_ = std::move(result);
+    pagesCacheDirty_ = false;
+    return pagesCache_;
 }
 
 QVariantMap SettingsMenu::ActivePageRecord() const

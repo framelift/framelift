@@ -176,6 +176,13 @@ private:
     void (*capturingSetStr_)(void*, const char*) = nullptr;
     void* capturingUd_ = nullptr;
     std::string keybindConflict_;
+
+    // ── QML pages cache ────────────────────────────────────────────────────────
+    // QmlPages() re-enumerates the registry and rebuilds a QVariantList on every
+    // read. Cache it and invalidate whenever qmlChanged fires (the NOTIFY for the
+    // `pages` property).
+    mutable QVariantList pagesCache_;
+    mutable bool pagesCacheDirty_ = true;
 };
 
 FRAMELIFT_MODULE_ENTRY(

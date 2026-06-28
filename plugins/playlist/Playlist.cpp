@@ -97,7 +97,17 @@ static void CollectWatchDirectories(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-Playlist::Playlist() = default;
+Playlist::Playlist()
+{
+    // Invalidate the QmlEntries cache on every change to the entries projection.
+    QObject::connect(
+        this, &Playlist::playlistChanged, this,
+        [this]
+        {
+            entriesCacheDirty_ = true;
+        }
+    );
+}
 
 Playlist::~Playlist()
 {
@@ -842,6 +852,10 @@ void Playlist::ConfirmCursor()
 
 QVariantList Playlist::QmlEntries() const
 {
+    if (!entriesCacheDirty_)
+    {
+        return entriesCache_;
+    }
     QVariantList result;
     result.reserve(static_cast<qsizetype>(entries_.size()));
     for (int i = 0; i < static_cast<int>(entries_.size()); ++i)
@@ -853,7 +867,9 @@ QVariantList Playlist::QmlEntries() const
         row.insert(QStringLiteral("cursor"), i == cursor_);
         result.push_back(row);
     }
-    return result;
+    entriesCache_ = std::move(result);
+    entriesCacheDirty_ = false;
+    return entriesCache_;
 }
 
 void Playlist::togglePanel()

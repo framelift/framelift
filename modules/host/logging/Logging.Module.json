@@ -1,13 +1,13 @@
 {
   "fileVersion": 1,
-  "id": "framelift.read_ahead",
-  "name": "Read-Ahead Cache",
-  "description": "Shared memory-bounded read-ahead budget and hit/miss/stall metrics for the demuxer packet queues.",
+  "id": "framelift.logging",
+  "name": "Logging",
+  "description": "Host logging sink and in-memory ring buffer backing Log::* and the LogViewer plugin.",
   "enabled": true,
   "required": true,
   "provides": {
     "features": [
-      "media.read_ahead_cache"
+      "logging.core"
     ]
   },
   "requires": {

@@ -156,6 +156,13 @@ private:
     void ApplySettings(int maxEntries);
     void SetOpen(bool value);
 
+    // ── QML entries cache ──────────────────────────────────────────────────────
+    // QmlEntries() is read once per delegate realization; rebuilding the whole
+    // QVariantList each time is wasteful. Cache it and invalidate whenever
+    // historyChanged fires (the NOTIFY for the `entries` and `search` properties).
+    mutable QVariantList entriesCache_;
+    mutable bool entriesCacheDirty_ = true;
+
     friend class HistorySettings;
 };
 

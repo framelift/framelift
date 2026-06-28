@@ -24,7 +24,17 @@
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-History::History() = default;
+History::History()
+{
+    // Invalidate the QmlEntries cache on every change to the entries projection.
+    QObject::connect(
+        this, &History::historyChanged, this,
+        [this]
+        {
+            entriesCacheDirty_ = true;
+        }
+    );
+}
 
 History::~History() = default;
 
@@ -521,6 +531,10 @@ void History::SetSearch(const QString& value)
 
 QVariantList History::QmlEntries() const
 {
+    if (!entriesCacheDirty_)
+    {
+        return entriesCache_;
+    }
     QVariantList result;
     result.reserve(static_cast<qsizetype>(filteredIndices_.size()));
     for (int i = 0; i < static_cast<int>(filteredIndices_.size()); ++i)
@@ -533,7 +547,9 @@ QVariantList History::QmlEntries() const
         row.insert(QStringLiteral("selected"), i == cursor_);
         result.push_back(row);
     }
-    return result;
+    entriesCache_ = std::move(result);
+    entriesCacheDirty_ = false;
+    return entriesCache_;
 }
 
 void History::togglePanel()

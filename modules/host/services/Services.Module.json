@@ -1,6 +1,6 @@
 {
   "fileVersion": 1,
-  "id": "framelift.host.services",
+  "id": "framelift.services",
   "name": "Host Services",
   "description": "Host service implementations for hotkeys and file dialogs.",
   "enabled": true,

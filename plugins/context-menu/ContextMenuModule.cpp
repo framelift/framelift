@@ -92,6 +92,15 @@ void ContextMenuModule::OnInstall(IModuleContext& ctx)
     // own OnInstall(). This plugin is listed first in the enabled set, so the
     // service is live before any consumer installs.
     ctx.RegisterService<ContextMenu>(this);
+
+    // Invalidate the QmlExtraItems cache on every change to the menu projection.
+    QObject::connect(
+        this, &ContextMenuModule::menuChanged, this,
+        [this]
+        {
+            extraItemsCacheDirty_ = true;
+        }
+    );
 }
 
 void ContextMenuModule::HandleMediaEvent(const MediaEvent& e)
@@ -116,6 +125,13 @@ QVariantList ContextMenuModule::QmlExtraItems()
         const QSignalBlocker blocker(this);
         Assemble();
         assembled_ = true;
+        // Assemble()'s menuChanged emissions were blocked above, so the cache
+        // invalidator never ran — mark it dirty explicitly.
+        extraItemsCacheDirty_ = true;
+    }
+    if (!extraItemsCacheDirty_)
+    {
+        return extraItemsCache_;
     }
     QVariantList result;
     for (int i = 0; i < static_cast<int>(items_.size()); ++i)
@@ -132,7 +148,9 @@ QVariantList ContextMenuModule::QmlExtraItems()
         row.insert(QStringLiteral("index"), i);
         result.push_back(row);
     }
-    return result;
+    extraItemsCache_ = std::move(result);
+    extraItemsCacheDirty_ = false;
+    return extraItemsCache_;
 }
 
 void ContextMenuModule::openNetwork()

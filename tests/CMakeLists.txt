@@ -42,6 +42,7 @@ set(FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS
         "${FRAMELIFT_ROOT}/modules/host/module-runtime"
         "${FRAMELIFT_ROOT}/modules/host/settings"
         "${FRAMELIFT_ROOT}/modules/host/services"
+        "${FRAMELIFT_ROOT}/modules/host/controls"
         "${FRAMELIFT_ROOT}/modules/host/logging"
         "${FRAMELIFT_ROOT}/modules/host/audio"
         "${FRAMELIFT_ROOT}/modules/host/playback"
@@ -178,6 +179,8 @@ function(add_framelift_plugin_test name)
             "${FRAMELIFT_ROOT}/plugins/debug-overlay"
             "${FRAMELIFT_ROOT}/plugins/benchmark"
             "${FRAMELIFT_ROOT}/plugins/remote-stream"
+            "${FRAMELIFT_ROOT}/plugins/context-menu"
+            "${FRAMELIFT_ROOT}/plugins/log-viewer"
     )
     target_link_libraries(${name} PRIVATE
             GTest::gtest_main GTest::gmock Threads::Threads Qt6::Core Qt6::Gui)
@@ -232,3 +235,12 @@ endif ()
 add_framelift_plugin_test(framelift_test_remotestream
         plugins/remote-stream/RemoteStreamTests.cpp
         "${FRAMELIFT_ROOT}/plugins/remote-stream/RemoteStream.cpp")
+
+add_framelift_plugin_test(framelift_test_contextmenu
+        plugins/context-menu/ContextMenuTests.cpp
+        "${FRAMELIFT_ROOT}/plugins/context-menu/ContextMenuModule.cpp")
+
+add_framelift_plugin_test(framelift_test_logviewer
+        plugins/log-viewer/LogViewerTests.cpp
+        "${FRAMELIFT_ROOT}/plugins/log-viewer/LogViewer.cpp"
+        "${FRAMELIFT_ROOT}/plugins/log-viewer/LogViewerSettings.cpp")

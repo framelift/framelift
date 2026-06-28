@@ -1,6 +1,6 @@
 {
   "fileVersion": 1,
-  "id": "framelift.host.win_shell",
+  "id": "framelift.win_shell",
   "name": "Windows Shell Integration",
   "description": "Qt-backed playback error notifications on Windows.",
   "enabled": true,
