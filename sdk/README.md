@@ -5,11 +5,10 @@ plugin ships as one runtime-loaded Qt plugin DLL/SO with one `IModule` entry obj
 plugin metadata compiled in by CMake.
 
 The SDK keeps host implementation dependencies out of plugins: building a plugin
-needs a C++23 compiler, CMake, and Qt 6. No legacy rendering or JSON libraries
-are required — the host↔plugin boundary is a COM-like binary ABI (pure abstract
-interfaces, POD-only signatures, C entry points), so a plugin built with any
-compatible Windows compiler interoperates with the host regardless of how the
-host was built.
+needs a C++23 compiler, CMake, and Qt 6. No third-party library is required — the host↔plugin boundary is a COM-like binary ABI (pure
+abstract interfaces and POD-only signatures, fronted by a Qt plugin factory), so a
+plugin built with any compatible compiler interoperates with the host regardless of
+how the host was built.
 
 ## Layout
 
@@ -20,7 +19,7 @@ framelift-sdk-<ver>/
 │   ├── FrameLiftSdk.cmake       # add_framelift_plugin() + the FrameLiftSdk target
 │   ├── FrameLiftSdkConfig.cmake # find_package(FrameLiftSdk) entry point
 │   └── FrameLiftSdkConfigVersion.cmake
-├── include/framelift/           # public headers (umbrella: core.h, ui.h, services.h, platform.h)
+├── include/framelift/           # public headers (umbrella: core.h, services.h, platform.h)
 ├── src/                    # SDK helper sources, compiled into your plugin
 ├── README.md
 └── LICENSE
@@ -45,7 +44,7 @@ add_framelift_plugin(MyPlugin
 ```sh
 cmake -B build
 cmake --build build
-# -> build/plugins/example.my_plugin.dll
+# -> build/plugins/example.my_plugin.so   (.dll on Windows)
 ```
 
 Drop the resulting plugin DLL/SO into the `plugins/` directory next to `framelift.exe` and it loads on

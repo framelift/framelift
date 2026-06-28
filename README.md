@@ -5,7 +5,7 @@ features are runtime-loaded plugins. The host application has no compile-time kn
 them: playback controls, playlists, history, settings, network streaming, and updates are all plugin
 DLLs loaded at startup over a stable, versioned binary ABI; the window, decode/playback engine, and
 platform integration are built-in modules compiled into the host. Add or remove plugin features by
-dropping a DLL in or out of the `packages/` folder.
+dropping a DLL/SO in or out of the `plugins/` folder.
 
 ## Features
 
@@ -63,23 +63,24 @@ current list of options.
 
 ## Extending FrameLift (Plugin SDK)
 
-Each FrameLift plugin ships as a **package** — one runtime-loaded DLL under the `packages/` folder
-next to the executable. A *plugin* (what you build with the SDK) ships as a package: a `.Plugin.json`
-plus its `.Module.json`(s), compiled into one DLL that carries one or more **modules**, each declaring
-the **features** it provides and requires. A package may carry several modules, and each module can be
-enabled or disabled independently from the Settings → Plugins page (persisted per module id in
-`packages.ini`). You can build your own against the **dependency-free plugin SDK**
-(`framelift-sdk-<ver>.zip`, published as a Release asset on every version tag).
+Each FrameLift plugin ships as exactly one runtime-loaded Qt plugin DLL/SO under the `plugins/` folder
+next to the executable. A *plugin* (what you build with the SDK) is a single `.Plugin.json` that
+returns one **module** (`IModule`) and declares the **features** it provides and requires. Its artifact
+name is the lowercase plugin id (e.g. `framelift.playlist.so`), and it is enabled or disabled from the
+Settings → Plugins page (persisted by plugin id in `plugins.ini`). You can build your own against the
+**dependency-free plugin SDK** (`framelift-sdk-<ver>.zip`, published as a Release asset on every
+version tag).
 
 - **Stable binary boundary.** The host↔plugin boundary is a COM-like binary ABI: pure abstract
-  interfaces, POD-only method signatures, and `extern "C"` entry points. A plugin built with any
-  compatible Windows compiler loads regardless of how the host was built. The ABI is a single integer,
-  `FRAMELIFT_ABI_VERSION`, matched exactly; new host capabilities arrive as new discoverable service
-  interfaces (capability discovery), so they never bump it.
-- **JSON-authored metadata.** Plugin packages declare package/module/feature metadata in
-  `[Plugin].Plugin.json` and `[Module].Module.json` files, including `fileVersion`, package `version`,
-  and `abi`. CMake validates those files and embeds the resulting POD metadata into the
-  plugin DLL; runtime does not read JSON sidecars.
+  interfaces and POD-only method signatures, fronted by a Qt plugin factory (`IPlugin` +
+  `Q_PLUGIN_METADATA`). A plugin built with any compatible compiler loads regardless of how the host
+  was built. The ABI is a single integer, `FRAMELIFT_ABI_VERSION`, matched exactly; new host
+  capabilities arrive as new discoverable service interfaces (capability discovery), so they never
+  bump it.
+- **JSON-authored metadata.** Each plugin declares its id, version, `abi`, features, and dependencies
+  in a single `[Plugin].Plugin.json`. CMake validates it and embeds the resulting metadata into the
+  plugin's `Q_PLUGIN_METADATA`, which the host reads before any vtable is touched; runtime does not
+  read JSON sidecars.
 - **Small surface.** Plugins include only the umbrella headers `<framelift/core.h>`,
   `<framelift/services.h>`, and `<framelift/platform.h>` plus Qt/QML headers — never host internals.
 - **Cross-plugin communication.** Plugins never link against each other; they interact through the
@@ -96,7 +97,7 @@ repository for worked example plugins to copy from.
 FrameLift/
 ├── sdk/                    # Public plugin SDK — everything a plugin author needs
 │   ├── include/framelift/  # Public headers (include path: sdk/include)
-│   │   ├── core.h          # Umbrella: module lifecycle, package entry, context, ABI, events, hotkeys
+│   │   ├── core.h          # Umbrella: module lifecycle, plugin entry, context, ABI, events, hotkeys
 │   │   ├── services.h      # Umbrella: cross-plugin service interfaces
 │   │   ├── platform.h      # Umbrella: media playback + window interface families, IFileDialog
 │   │   ├── services/       # Per-plugin service interfaces (IHistory, …)
@@ -107,11 +108,11 @@ FrameLift/
 ├── src/                    # Host entry point (framelift.exe): App, CLI, main — owns only the loop
 │
 ├── modules/                # Built-in modules compiled into the host (not shipped as DLLs)
-│   ├── host/               # playback, audio, settings, services, controls, fonts, read-ahead, ui, module-runtime
+│   ├── host/               # playback, audio, settings, services, controls, logging, read-ahead, ui, module-runtime
 │   ├── gfx/                # Graphics backends (graphics-core, opengl, vulkan) and video renderers
 │   └── platform/           # Qt window integration and platform shell services
 │
-├── plugins/                # Plugins — each builds one package (DLL) emitted into packages/
+├── plugins/                # Plugins — each builds one Qt plugin DLL/SO emitted into plugins/
 │   ├── overlay/            # Playback controls, idle screen, notifications
 │   ├── playlist/           # Folder playlist and file navigation
 │   ├── history/            # Recently played + resume positions
@@ -126,11 +127,10 @@ FrameLift/
 └── CMakeLists.txt
 ```
 
-The host (`src/`) has no compile-time knowledge of specific plugins; every package is loaded at
-runtime from a DLL such as `packages/framelift.playlist.core.dll`, dependency-resolved and ABI-checked
-before any module object is constructed. Each module a package carries is instantiated unless its id is
-disabled in `packages.ini` (one `framelift.playlist.core=enabled|disabled` row per module; absent ⇒
-enabled).
+The host (`src/`) has no compile-time knowledge of specific plugins; every plugin is loaded at
+runtime from a DLL/SO such as `plugins/framelift.playlist.so`, dependency-resolved and ABI-checked
+before any module object is constructed. Each plugin is instantiated unless its id is disabled in
+`plugins.ini` (one `framelift.playlist=enabled|disabled` row per plugin; absent ⇒ enabled).
 
 ## Building from Source
 
@@ -164,8 +164,8 @@ cmake --build build --config Debug
 ```
 
 Output: `cmake-build-debug/framelift` (`.exe` on Windows). On Windows the required shared libraries
-are copied next to the executable; on Linux Qt/FFmpeg/libass are resolved from the system. Package
-DLLs are placed under `cmake-build-debug/packages/` (`.dll` on Windows, `.so` on Linux).
+are copied next to the executable; on Linux Qt/FFmpeg/libass are resolved from the system. Plugin
+DLLs/SOs are placed under `cmake-build-debug/plugins/` (`.dll` on Windows, `.so` on Linux).
 The Vulkan backend links the official Vulkan loader when enabled; a Vulkan runtime
 (`libvulkan.so.1` / `vulkan-1.dll`) is required for Vulkan-enabled builds.
 
@@ -193,10 +193,9 @@ CMake via `FetchContent`.
 | Qt 6             | vcpkg / system    | vcpkg/system  |
 | FFmpeg           | vcpkg / system    | vcpkg/system  |
 | libass           | vcpkg / system    | vcpkg/system  |
-| nlohmann/json    | 3.11.3            | FetchContent  |
 | Vulkan-Headers   | 1.4.354           | FetchContent  |
 | VulkanMemoryAllocator | 3.4.0        | FetchContent  |
-| glslang          | 15.0.0 (build-time, fallback) | PATH / FetchContent |
+| glslang          | build-time, fallback | PATH / FetchContent |
 
 ## License
 
