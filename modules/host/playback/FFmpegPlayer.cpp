@@ -2359,7 +2359,6 @@ void FFmpegPlayer::InitRender(void* graphicsBackend) noexcept
     {
         vkHwDevice_ = CreateVulkanHwDevice(vkInfo);
         vulkanZeroCopyAvailable_ = vkHwDevice_ != nullptr;
-        Log::Info("FFmpegPlayer: Vulkan zero-copy decode {}", vulkanZeroCopyAvailable_ ? "available" : "unavailable");
     }
 #endif
 }
