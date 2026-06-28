@@ -97,6 +97,9 @@ add_executable(framelift_tests
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/AppPaths.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginCatalog.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/SettingsService.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginMetadata.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginResolver.cpp"
         "${FRAMELIFT_ROOT}/modules/host/services/HotkeysImpl.cpp"
@@ -206,6 +209,9 @@ add_framelift_plugin_test(framelift_test_playlist
         "${FRAMELIFT_ROOT}/plugins/playlist/PlaylistSettings.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/AppPaths.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginCatalog.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/SettingsService.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
 
 add_framelift_plugin_test(framelift_test_settingsmenu
@@ -213,6 +219,9 @@ add_framelift_plugin_test(framelift_test_settingsmenu
         "${FRAMELIFT_ROOT}/plugins/settings-menu/SettingsMenu.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/AppPaths.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginCatalog.cpp"
+        "${FRAMELIFT_ROOT}/modules/host/module-runtime/SettingsService.cpp"
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp")
 
 add_framelift_plugin_test(framelift_test_overlay

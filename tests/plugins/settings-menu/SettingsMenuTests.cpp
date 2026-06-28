@@ -94,7 +94,7 @@ TEST(SettingsMenuTest, DoesNotInventModulePagesFromRawFields)
         [](void*, const char*) {},
         nullptr
     };
-    ctx.RegisterModuleSetting(&desc);
+    ctx.Settings().RegisterModuleSetting(&desc);
 
     SettingsMenu sm;
     sm.Install(ctx);

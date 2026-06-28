@@ -72,6 +72,18 @@ private:
     int cliArgc_ = 0;
     const char* const* cliArgv_ = nullptr;
 
+    // ── Teardown contract (members destruct in REVERSE declaration order) ──
+    // The order below is load-bearing; do not reorder without re-checking ~App:
+    //   • pluginLoader_ is declared last among the owning members, so it destructs
+    //     (FreeLibrary) only after every object that may live in a plugin DLL —
+    //     module instances in registry_, plugin view models, moduleCtx_ — is gone.
+    //     A plugin module may still call ctx_->GetService() from its destructor.
+    //   • moduleCtx_ is declared before pluginLoader_ (outlives it on destruction is
+    //     handled in ~App) and after the services it registers, so those services
+    //     stay alive while modules tear down.
+    //   • player_ and appWindow_ own GPU/render resources; ~App resets them explicitly
+    //     in the right order (player render context before the GL context) rather than
+    //     relying on declaration order alone.
     std::unique_ptr<QtAppWindow> appWindow_;
     // App always builds the concrete FFmpegPlayer: it needs the FFmpeg-only entry
     // points (ApplySettings, decode mode, ducking) that aren't on any of the split

@@ -257,7 +257,7 @@ void App::LoadPlugins()
     std::vector<std::string> discoveredPluginIds;
     for (auto& plugin : PluginLoader::DiscoverAvailable(pluginsDir))
     {
-        ModuleContext::PluginCatalogEntry entry;
+        PluginCatalog::PluginCatalogEntry entry;
         entry.id = plugin.pluginId;
         discoveredPluginIds.push_back(plugin.pluginId);
         entry.displayName = std::move(plugin.displayName);
@@ -268,7 +268,7 @@ void App::LoadPlugins()
         entry.description = std::move(plugin.description);
         entry.enabled = pluginConfig_.IsEnabled(entry.id);
         entry.loaded = loadedPluginIds.contains(entry.id);
-        moduleCtx_->AddPlugin(std::move(entry));
+        moduleCtx_->Catalog().AddPlugin(std::move(entry));
     }
 
     // Install each loaded plugin module.
@@ -290,7 +290,7 @@ void App::LoadPlugins()
     // SaveSettings(). The startup Settings::Save (InitPlatform, before plugins)
     // writes host sections only, so without this flush module sections appear only
     // after the user presses Save in the Settings menu.
-    moduleCtx_->SaveSettings();
+    moduleCtx_->Settings().SaveSettings();
 }
 
 // ── Renderables ───────────────────────────────────────────────────────────────
@@ -341,11 +341,16 @@ void App::PrepareVideo(const int fbW, const int fbH)
     // OpenGL context or Vulkan frame resources, then build the matching video renderer.
     if (!renderInit_)
     {
-        if (auto* backend = static_cast<IGraphicsBackend*>(appWindow_->GetGraphicsBackend()))
+        auto* backend = static_cast<IGraphicsBackend*>(appWindow_->GetGraphicsBackend());
+        if (!backend)
         {
-            backend->OnQtWindowCreated(static_cast<QQuickWindow*>(appWindow_->GetNativeHandle()));
+            // A failed backend init must not propagate a null handle into the player's
+            // renderer. Leave renderInit_ false so this retries on the next frame.
+            Log::Warn("App: graphics backend unavailable; deferring render init");
+            return;
         }
-        player_->InitRender(appWindow_->GetGraphicsBackend());
+        backend->OnQtWindowCreated(static_cast<QQuickWindow*>(appWindow_->GetNativeHandle()));
+        player_->InitRender(backend);
         renderInit_ = true;
     }
 

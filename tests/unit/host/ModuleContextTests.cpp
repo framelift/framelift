@@ -24,11 +24,11 @@ struct Ctx
 
 std::string GetStr(ModuleContext& ctx, const char* key)
 {
-    const int n = ctx.GetSettingString(key, nullptr, 0); // query length
+    const int n = ctx.Settings().GetSettingString(key, nullptr, 0); // query length
     std::string s(static_cast<std::size_t>(n), '\0');
     if (n > 0)
     {
-        ctx.GetSettingString(key, s.data(), n + 1);
+        ctx.Settings().GetSettingString(key, s.data(), n + 1);
     }
     return s;
 }
@@ -37,23 +37,23 @@ std::string GetStr(ModuleContext& ctx, const char* key)
 TEST(ModuleContextTest, ReadsDefaultsThroughTypedGetters)
 {
     Ctx c;
-    EXPECT_FLOAT_EQ(c.ctx.GetSettingFloat("ui.panelWidth"), 320.f);
-    EXPECT_TRUE(c.ctx.GetSettingBool("playback.hwdec"));
-    EXPECT_EQ(c.ctx.GetSettingInt("audio.dynaudnormFrameLen"), 100);
+    EXPECT_FLOAT_EQ(c.ctx.Settings().GetSettingFloat("ui.panelWidth"), 320.f);
+    EXPECT_TRUE(c.ctx.Settings().GetSettingBool("playback.hwdec"));
+    EXPECT_EQ(c.ctx.Settings().GetSettingInt("audio.dynaudnormFrameLen"), 100);
     EXPECT_EQ(GetStr(c.ctx, "files.videoExtensions").rfind("mp4", 0), 0u);
 }
 
 TEST(ModuleContextTest, CommitRoundTripsPerType)
 {
     Ctx c;
-    c.ctx.CommitSettingFloat("ui.panelWidth", 500.f);
-    c.ctx.CommitSettingBool("playback.hwdec", false);
-    c.ctx.CommitSettingInt("audio.dynaudnormFrameLen", 250);
-    c.ctx.CommitSettingString("files.videoExtensions", "avi;mov");
+    c.ctx.Settings().CommitSettingFloat("ui.panelWidth", 500.f);
+    c.ctx.Settings().CommitSettingBool("playback.hwdec", false);
+    c.ctx.Settings().CommitSettingInt("audio.dynaudnormFrameLen", 250);
+    c.ctx.Settings().CommitSettingString("files.videoExtensions", "avi;mov");
 
-    EXPECT_FLOAT_EQ(c.ctx.GetSettingFloat("ui.panelWidth"), 500.f);
-    EXPECT_FALSE(c.ctx.GetSettingBool("playback.hwdec"));
-    EXPECT_EQ(c.ctx.GetSettingInt("audio.dynaudnormFrameLen"), 250);
+    EXPECT_FLOAT_EQ(c.ctx.Settings().GetSettingFloat("ui.panelWidth"), 500.f);
+    EXPECT_FALSE(c.ctx.Settings().GetSettingBool("playback.hwdec"));
+    EXPECT_EQ(c.ctx.Settings().GetSettingInt("audio.dynaudnormFrameLen"), 250);
     EXPECT_EQ(GetStr(c.ctx, "files.videoExtensions"), "avi;mov");
     // The commit also reflects in the underlying Settings object.
     EXPECT_FLOAT_EQ(c.settings.Get<UiSettings>().panelWidth, 500.f);
@@ -62,16 +62,16 @@ TEST(ModuleContextTest, CommitRoundTripsPerType)
 TEST(ModuleContextTest, GetSettingStringReportsFullLength)
 {
     Ctx c;
-    c.ctx.CommitSettingString("files.videoExtensions", "avi;mov");
-    EXPECT_EQ(c.ctx.GetSettingString("files.videoExtensions", nullptr, 0), 7); // strlen("avi;mov")
+    c.ctx.Settings().CommitSettingString("files.videoExtensions", "avi;mov");
+    EXPECT_EQ(c.ctx.Settings().GetSettingString("files.videoExtensions", nullptr, 0), 7); // strlen("avi;mov")
 }
 
 TEST(ModuleContextTest, GetSettingStringTruncatesToBuffer)
 {
     Ctx c;
-    c.ctx.CommitSettingString("files.videoExtensions", "avi;mov");
+    c.ctx.Settings().CommitSettingString("files.videoExtensions", "avi;mov");
     char buf[4] = {};
-    const int len = c.ctx.GetSettingString("files.videoExtensions", buf, 4);
+    const int len = c.ctx.Settings().GetSettingString("files.videoExtensions", buf, 4);
     EXPECT_EQ(len, 7); // returns full length...
     EXPECT_STREQ(buf, "avi"); // ...but writes only cap-1 chars + NUL
 }
@@ -79,10 +79,10 @@ TEST(ModuleContextTest, GetSettingStringTruncatesToBuffer)
 TEST(ModuleContextTest, UnknownKeysYieldZeroOrEmpty)
 {
     Ctx c;
-    EXPECT_FLOAT_EQ(c.ctx.GetSettingFloat("no.such.key"), 0.f);
-    EXPECT_EQ(c.ctx.GetSettingInt("no.such.key"), 0);
-    EXPECT_FALSE(c.ctx.GetSettingBool("no.such.key"));
-    EXPECT_EQ(c.ctx.GetSettingString("no.such.key", nullptr, 0), 0);
+    EXPECT_FLOAT_EQ(c.ctx.Settings().GetSettingFloat("no.such.key"), 0.f);
+    EXPECT_EQ(c.ctx.Settings().GetSettingInt("no.such.key"), 0);
+    EXPECT_FALSE(c.ctx.Settings().GetSettingBool("no.such.key"));
+    EXPECT_EQ(c.ctx.Settings().GetSettingString("no.such.key", nullptr, 0), 0);
 }
 
 TEST(ModuleContextTest, WrongTypeKeyDoesNotMatch)
@@ -100,15 +100,15 @@ TEST(ModuleContextTest, GetSettingsFilePathReportsPathWithBufferContract)
     ModuleContext ctx{"pref/", &settings, "some/dir/settings.ini"};
 
     // Full length reported regardless of buffer.
-    EXPECT_EQ(ctx.GetSettingsFilePath(nullptr, 0), 21); // strlen("some/dir/settings.ini")
+    EXPECT_EQ(ctx.Settings().GetSettingsFilePath(nullptr, 0), 21); // strlen("some/dir/settings.ini")
 
     char buf[64] = {};
-    EXPECT_EQ(ctx.GetSettingsFilePath(buf, sizeof(buf)), 21);
+    EXPECT_EQ(ctx.Settings().GetSettingsFilePath(buf, sizeof(buf)), 21);
     EXPECT_STREQ(buf, "some/dir/settings.ini");
 
     // Truncates to cap-1 chars + NUL but still returns the full length.
     char small[5] = {};
-    EXPECT_EQ(ctx.GetSettingsFilePath(small, 5), 21);
+    EXPECT_EQ(ctx.Settings().GetSettingsFilePath(small, 5), 21);
     EXPECT_STREQ(small, "some"); // 4 chars + NUL
 }
 
@@ -133,14 +133,14 @@ TEST(ModuleContextTest, ReloadSettingsRereadsFileAndFiresCallbacks)
 
     ModuleContext ctx{"pref/", &settings, ini};
     int changeCalls = 0;
-    ctx.RegisterSettingsChangeCallback(&BumpCounter, &changeCalls, nullptr);
+    ctx.Settings().RegisterSettingsChangeCallback(&BumpCounter, &changeCalls, nullptr);
 
     // Before reload the in-memory value is still the default.
-    EXPECT_FLOAT_EQ(ctx.GetSettingFloat("ui.panelWidth"), 320.f);
+    EXPECT_FLOAT_EQ(ctx.Settings().GetSettingFloat("ui.panelWidth"), 320.f);
 
-    ctx.ReloadSettings();
+    ctx.Settings().ReloadSettings();
 
-    EXPECT_FLOAT_EQ(ctx.GetSettingFloat("ui.panelWidth"), 500.f); // picked up from disk
+    EXPECT_FLOAT_EQ(ctx.Settings().GetSettingFloat("ui.panelWidth"), 500.f); // picked up from disk
     EXPECT_EQ(changeCalls, 1); // change callbacks fired so the app re-applies
 
     // A subsequent on-disk edit is reflected on the next reload (reset-then-load
@@ -149,8 +149,8 @@ TEST(ModuleContextTest, ReloadSettingsRereadsFileAndFiresCallbacks)
         std::ofstream f(ini, std::ios::trunc);
         f << "[ui]\nslideSpeed=2\n"; // panelWidth removed → back to default
     }
-    ctx.ReloadSettings();
-    EXPECT_FLOAT_EQ(ctx.GetSettingFloat("ui.panelWidth"), 320.f);
+    ctx.Settings().ReloadSettings();
+    EXPECT_FLOAT_EQ(ctx.Settings().GetSettingFloat("ui.panelWidth"), 320.f);
     EXPECT_EQ(changeCalls, 2);
 
     std::filesystem::remove(ini);
@@ -261,11 +261,11 @@ TEST(ModuleContextTest, SettingsPagesRegisterEnumerateAndClear)
     QObject first;
     QObject second;
 
-    c.ctx.RegisterSettingsPage("playlist", "Playlist", "qrc:/PlaylistSettings.qml", &first, 20);
-    c.ctx.RegisterSettingsPage("audio", "Audio", "qrc:/AudioSettings.qml", &second, 10);
+    c.ctx.Settings().RegisterSettingsPage("playlist", "Playlist", "qrc:/PlaylistSettings.qml", &first, 20);
+    c.ctx.Settings().RegisterSettingsPage("audio", "Audio", "qrc:/AudioSettings.qml", &second, 10);
 
     std::vector<CollectedSettingsPage> pages;
-    c.ctx.EnumerateSettingsPages(&CollectSettingsPage, &pages);
+    c.ctx.Settings().EnumerateSettingsPages(&CollectSettingsPage, &pages);
 
     ASSERT_EQ(pages.size(), 2u);
     EXPECT_EQ(pages[0].id, "playlist");
@@ -277,7 +277,7 @@ TEST(ModuleContextTest, SettingsPagesRegisterEnumerateAndClear)
 
     c.ctx.ClearSubscriptions();
     pages.clear();
-    c.ctx.EnumerateSettingsPages(&CollectSettingsPage, &pages);
+    c.ctx.Settings().EnumerateSettingsPages(&CollectSettingsPage, &pages);
     EXPECT_TRUE(pages.empty());
 }
 
@@ -314,7 +314,7 @@ void CollectPlugin(
 std::vector<CollectedPlugin> EnumeratePlugins(ModuleContext& ctx)
 {
     std::vector<CollectedPlugin> out;
-    ctx.EnumeratePlugins(&CollectPlugin, &out);
+    ctx.Catalog().EnumeratePlugins(&CollectPlugin, &out);
     return out;
 }
 } // namespace
@@ -323,7 +323,7 @@ TEST(ModuleContextTest, EnumeratePluginsReportsLoadedAndDisabledEntries)
 {
     Ctx c;
 
-    ModuleContext::PluginCatalogEntry alpha;
+    PluginCatalog::PluginCatalogEntry alpha;
     alpha.id = "framelift.alpha";
     alpha.displayName = "Alpha";
     alpha.version[0] = 2;
@@ -332,18 +332,18 @@ TEST(ModuleContextTest, EnumeratePluginsReportsLoadedAndDisabledEntries)
     alpha.publisher = "Acme";
     alpha.description = "First plugin";
     alpha.loaded = true;
-    c.ctx.AddPlugin(std::move(alpha));
+    c.ctx.Catalog().AddPlugin(std::move(alpha));
 
-    ModuleContext::PluginCatalogEntry beta; // present but disabled
+    PluginCatalog::PluginCatalogEntry beta; // present but disabled
     beta.id = "framelift.beta";
     beta.enabled = false;
     beta.loaded = false;
-    c.ctx.AddPlugin(std::move(beta));
+    c.ctx.Catalog().AddPlugin(std::move(beta));
 
-    ModuleContext::PluginCatalogEntry gamma; // enabled yet not loaded -> failed
+    PluginCatalog::PluginCatalogEntry gamma; // enabled yet not loaded -> failed
     gamma.id = "framelift.gamma";
     gamma.loaded = false;
-    c.ctx.AddPlugin(std::move(gamma));
+    c.ctx.Catalog().AddPlugin(std::move(gamma));
 
     const auto plugins = EnumeratePlugins(c.ctx);
     ASSERT_EQ(plugins.size(), 3u);
@@ -381,13 +381,13 @@ TEST(ModuleContextTest, SetPluginEnabledUpdatesCatalogueAndPersists)
     std::filesystem::remove(pluginsIni);
     ModuleContext ctx{"pref/", &settings, "unused.ini", &pluginConfig, pluginsIni};
 
-    ModuleContext::PluginCatalogEntry plugin;
+    PluginCatalog::PluginCatalogEntry plugin;
     plugin.id = "framelift.media";
     plugin.loaded = true;
-    ctx.AddPlugin(std::move(plugin));
+    ctx.Catalog().AddPlugin(std::move(plugin));
 
-    ctx.SetPluginEnabled("framelift.media", false);
-    ctx.SetPluginEnabled("unknown.plugin", false);
+    ctx.Catalog().SetPluginEnabled("framelift.media", false);
+    ctx.Catalog().SetPluginEnabled("unknown.plugin", false);
 
     // Catalogue reflects the toggle immediately (drives the live checkbox state).
     const auto plugins = EnumeratePlugins(ctx);

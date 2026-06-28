@@ -314,6 +314,10 @@ public:
     // host-internal IGraphicsBackend*). The player builds its video renderer from it,
     // so the same call works for the OpenGL and Vulkan backends.
     virtual void InitRender(void* graphicsBackend) noexcept = 0;
+    // cb nudges the host to schedule a repaint when a new frame is ready. Like
+    // SetWakeupCallback it may fire on the player's internal decode/render thread, so
+    // the host must marshal any GUI work (e.g. a queued signal). cb/ud must remain
+    // valid for the player's lifetime.
     virtual void SetRenderUpdateCallback(void (*cb)(void* ud), void* ud) noexcept = 0;
     [[nodiscard]] virtual bool HasNewFrame() noexcept = 0;
     virtual void RenderFrame(int w, int h) noexcept = 0;
