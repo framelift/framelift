@@ -1,6 +1,7 @@
 #include <framelift/Log.h>
 
 #include <QtCore/QDebug>
+#include <QtCore/QString>
 #include <QtCore/QTime>
 #include <cstdio>
 
@@ -45,6 +46,29 @@ bool DetectColor()
 }
 
 bool g_color = false;
+
+// Substrings of third-party log lines we deliberately drop. Qt Multimedia's PipeWire
+// audio backend emits these via qWarning() on the *default* category (so QT_LOGGING_RULES
+// can't target them) every time QAudioSink/QMediaDevices probes a device that advertises
+// an IEC958 / S-PDIF passthrough format — harmless pod-parse noise on playback start.
+bool IsSuppressed(const QString& msg)
+{
+    return msg.contains(QLatin1String("spaVisitChoice"));
+}
+
+// Single output point for Qt logging. Applies the pattern set in Init(), drops suppressed
+// third-party noise, and writes the rest to stderr. Host Log::* calls reach here through
+// QtLogSink -> qWarning/etc.; Qt's own internal warnings arrive here directly.
+void FilterMessageHandler(QtMsgType type, const QMessageLogContext& ctx, const QString& msg)
+{
+    if (IsSuppressed(msg))
+    {
+        return;
+    }
+    const QString formatted = qFormatLogMessage(type, ctx, msg);
+    std::fprintf(stderr, "%s\n", qPrintable(formatted));
+    std::fflush(stderr);
+}
 
 // Host sink: receives formatted lines from the SDK (host + every plugin) and
 // routes them to Qt logging. Installed into the host TU by Init() and into each
@@ -111,6 +135,10 @@ void Log::Init()
             "%{if-critical}ERROR%{endif}%{if-fatal}FATAL%{endif}] %{message}"
         );
     }
+
+    // Take over the final output stage so we can drop noisy third-party warnings
+    // (see FilterMessageHandler) that the pattern alone can't filter.
+    qInstallMessageHandler(&FilterMessageHandler);
 
     // Route the host's own Log::* calls into Qt logging.
     SetSink(&QtLogSink);
