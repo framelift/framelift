@@ -179,6 +179,31 @@ SysSample SysSampler::Sample()
 #include <string>
 #include <unistd.h>
 
+#include <dlfcn.h>
+
+#include <framelift/Log.h>
+
+// Minimal NVML surface, declared locally so the build needs no nvml.h and no
+// link-time dependency on libnvidia-ml. Symbols are resolved at runtime via
+// dlopen/dlsym; the proprietary NVIDIA driver ships libnvidia-ml.so(.1).
+namespace
+{
+using NvmlDevice = void*;
+
+struct NvmlUtilization
+{
+    unsigned int gpu;    // percent of time the GPU was busy
+    unsigned int memory; // percent of time GPU memory was read/written
+};
+
+using NvmlReturn = int; // NVML_SUCCESS == 0
+
+using FnNvmlInit = NvmlReturn (*)();
+using FnNvmlShutdown = NvmlReturn (*)();
+using FnNvmlGetHandleByIndex = NvmlReturn (*)(unsigned int, NvmlDevice*);
+using FnNvmlGetUtilizationRates = NvmlReturn (*)(NvmlDevice, NvmlUtilization*);
+} // namespace
+
 struct SysSampler::Impl
 {
     bool cpuPrimed = false;
@@ -186,6 +211,15 @@ struct SysSampler::Impl
     std::chrono::steady_clock::time_point prevWall{};
     long ticksPerSec = 100;
     long numProcessors = 1;
+
+    // NVML: loaded lazily on first GPU sample. nvmlReady gates use; nvmlTried
+    // ensures we attempt the dlopen + init exactly once.
+    void* nvmlHandle = nullptr;
+    bool nvmlTried = false;
+    bool nvmlReady = false;
+    NvmlDevice nvmlDev = nullptr;
+    FnNvmlShutdown nvmlShutdown = nullptr;
+    FnNvmlGetUtilizationRates nvmlGetUtilizationRates = nullptr;
 };
 
 SysSampler::SysSampler() : impl_(new Impl)
@@ -196,6 +230,14 @@ SysSampler::SysSampler() : impl_(new Impl)
 
 SysSampler::~SysSampler()
 {
+    if (impl_->nvmlReady && impl_->nvmlShutdown)
+    {
+        impl_->nvmlShutdown();
+    }
+    if (impl_->nvmlHandle)
+    {
+        dlclose(impl_->nvmlHandle);
+    }
     delete impl_;
 }
 
@@ -294,6 +336,67 @@ static double ReadGpuBusyPercent()
     return std::clamp(static_cast<double>(pct), 0.0, 100.0);
 }
 
+// Load libnvidia-ml and bind the symbols we need on first use. Mirrors the
+// Windows EnsureGpuQuery deferral: nvmlInit enumerates devices and is slow, so
+// it is kept out of the constructor (which runs at plugin load) and reached only
+// once the overlay is actually sampling. Stays silent when the library is simply
+// absent (the normal non-NVIDIA case); warns once if it is present but fails.
+static void EnsureNvml(SysSampler::Impl& s)
+{
+    if (s.nvmlTried)
+    {
+        return;
+    }
+    s.nvmlTried = true;
+
+    s.nvmlHandle = dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (!s.nvmlHandle)
+    {
+        s.nvmlHandle = dlopen("libnvidia-ml.so", RTLD_LAZY | RTLD_LOCAL);
+    }
+    if (!s.nvmlHandle)
+    {
+        return; // No NVIDIA driver/NVML installed — fall back to "N/A".
+    }
+
+    auto init = reinterpret_cast<FnNvmlInit>(dlsym(s.nvmlHandle, "nvmlInit_v2"));
+    auto getHandle = reinterpret_cast<FnNvmlGetHandleByIndex>(dlsym(s.nvmlHandle, "nvmlDeviceGetHandleByIndex_v2"));
+    s.nvmlShutdown = reinterpret_cast<FnNvmlShutdown>(dlsym(s.nvmlHandle, "nvmlShutdown"));
+    s.nvmlGetUtilizationRates =
+        reinterpret_cast<FnNvmlGetUtilizationRates>(dlsym(s.nvmlHandle, "nvmlDeviceGetUtilizationRates"));
+
+    if (!init || !getHandle || !s.nvmlShutdown || !s.nvmlGetUtilizationRates)
+    {
+        Log::Warn("NVML loaded but required symbols are missing; GPU usage unavailable");
+        return;
+    }
+
+    if (init() != 0 || getHandle(0, &s.nvmlDev) != 0 || !s.nvmlDev)
+    {
+        Log::Warn("NVML init/device query failed; GPU usage unavailable");
+        return;
+    }
+
+    s.nvmlReady = true;
+}
+
+// Whole-GPU utilization (device 0) via NVML. Returns -1 when unavailable.
+static double SampleNvmlGpu(SysSampler::Impl& s)
+{
+    EnsureNvml(s);
+    if (!s.nvmlReady)
+    {
+        return -1.0;
+    }
+
+    NvmlUtilization util{};
+    if (s.nvmlGetUtilizationRates(s.nvmlDev, &util) != 0)
+    {
+        return -1.0;
+    }
+    return std::clamp(static_cast<double>(util.gpu), 0.0, 100.0);
+}
+
 SysSample SysSampler::Sample()
 {
     SysSample out;
@@ -316,7 +419,13 @@ SysSample SysSampler::Sample()
     s.prevWall = now;
     s.cpuPrimed = true;
 
-    const double gpu = ReadGpuBusyPercent();
+    // Prefer AMD's sysfs node; fall back to NVML for NVIDIA's proprietary driver,
+    // which does not expose gpu_busy_percent.
+    double gpu = ReadGpuBusyPercent();
+    if (gpu < 0.0)
+    {
+        gpu = SampleNvmlGpu(s);
+    }
     if (gpu >= 0.0)
     {
         out.gpuPercent = gpu;
