@@ -11,7 +11,7 @@ Item {
     property var vm: viewModel
     anchors.fill: parent
 
-    Drawer {
+    FLDrawer {
         id: drawer
         open: root.vm !== null && root.vm.open
         drawerWidth: 340
@@ -19,35 +19,32 @@ Item {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 16
-            spacing: 10
+            anchors.margins: 12
+            spacing: 8
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 6
                 Text {
                     text: "Playlist"
-                    color: Theme.text
-                    font.pixelSize: 20
+                    color: FLTheme.text
+                    font.pixelSize: 16
                     font.weight: Font.DemiBold
                 }
-                Item { Layout.fillWidth: true }
                 Text {
                     text: root.vm !== null && root.vm.currentIndex >= 0
                           ? (root.vm.currentIndex + 1) + " / " + root.vm.entries.length
                           : root.vm !== null ? root.vm.entries.length : 0
-                    color: Theme.textMuted
+                    color: FLTheme.textMuted
+                    font.pixelSize: 12
+                    Layout.fillWidth: true
                 }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                ActionButton { text: "Reload"; onClicked: root.vm.Reload() }
-                ActionButton {
+                FLActionButton { text: "Reload"; implicitHeight: 28; padding: 8; font.pixelSize: 12; onClicked: root.vm.Reload() }
+                FLActionButton {
                     text: root.vm !== null && root.vm.shuffleEnabled ? "Shuffle on" : "Shuffle"
+                    implicitHeight: 28; padding: 8; font.pixelSize: 12
                     onClicked: root.vm.ToggleShuffle()
                 }
-                Item { Layout.fillWidth: true }
-                ActionButton { text: "Close"; onClicked: root.vm.togglePanel() }
             }
 
             ListView {
@@ -61,15 +58,15 @@ Item {
                     required property var modelData
                     required property int index
                     width: ListView.view.width
-                    height: 46
-                    radius: 8
+                    height: 44
+                    radius: 6
                     color: row.modelData.current ? "#408B5CF6"
                           : mouse.containsMouse ? "#18FFFFFF" : "transparent"
                     Text {
                         anchors.fill: parent
                         anchors.margins: 12
                         text: row.modelData.label
-                        color: Theme.text
+                        color: FLTheme.text
                         elide: Text.ElideMiddle
                         verticalAlignment: Text.AlignVCenter
                     }

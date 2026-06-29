@@ -15,7 +15,7 @@ Item {
         color: "#88000000"
         MouseArea { anchors.fill: parent; onClicked: root.vm.cancel() }
     }
-    GlassPanel {
+    FLGlassPanel {
         anchors.centerIn: parent
         width: Math.min(parent.width - 40, 520)
         height: 180
@@ -23,7 +23,7 @@ Item {
             anchors.fill: parent
             anchors.margins: 20
             spacing: 12
-            Text { text: "Open network stream"; color: Theme.text; font.pixelSize: 20; font.weight: Font.DemiBold }
+            Text { text: "Open network stream"; color: FLTheme.text; font.pixelSize: 20; font.weight: Font.DemiBold }
             TextField {
                 id: input
                 Layout.fillWidth: true
@@ -34,8 +34,8 @@ Item {
             }
             RowLayout {
                 Item { Layout.fillWidth: true }
-                ActionButton { text: "Cancel"; onClicked: root.vm.cancel() }
-                ActionButton { text: "Open"; enabled: input.text.length > 0; onClicked: root.vm.submit() }
+                FLActionButton { text: "Cancel"; onClicked: root.vm.cancel() }
+                FLActionButton { text: "Open"; enabled: input.text.length > 0; onClicked: root.vm.submit() }
             }
         }
     }

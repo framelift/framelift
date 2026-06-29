@@ -16,7 +16,7 @@ Item {
         visible: root.vm !== null && root.vm.idle
         gradient: Gradient {
             GradientStop { position: 0; color: "#171125" }
-            GradientStop { position: 1; color: Theme.canvas }
+            GradientStop { position: 1; color: FLTheme.canvas }
         }
 
         Column {
@@ -35,32 +35,33 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "FrameLift"
-                color: Theme.text
+                color: FLTheme.text
                 font.pixelSize: 34
                 font.weight: Font.DemiBold
             }
         }
     }
 
-    GlassPanel {
+    Item {
         id: toast
         anchors.top: parent.top
+        anchors.left: parent.left
         anchors.topMargin: 16
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.min(420, toastText.implicitWidth + 32)
-        height: 42
+        anchors.leftMargin: 16
+        width: toastText.implicitWidth
+        height: toastText.implicitHeight
         opacity: 0
         visible: opacity > 0
         Text {
             id: toastText
-            anchors.centerIn: parent
             text: root.vm !== null ? root.vm.commandLabel : ""
-            color: Theme.text
+            color: FLTheme.text
+            font.pixelSize: 12
         }
         SequentialAnimation {
             id: toastAnimation
-            NumberAnimation { target: toast; property: "opacity"; to: 1; duration: 120 }
-            PauseAnimation { duration: 1800 }
+            PropertyAction { target: toast; property: "opacity"; value: 1 }
+            PauseAnimation { duration: 900 }
             NumberAnimation { target: toast; property: "opacity"; to: 0; duration: 240 }
         }
         Connections {
@@ -69,14 +70,15 @@ Item {
         }
     }
 
-    GlassPanel {
+    FLGlassPanel {
         id: controls
         visible: root.vm !== null && !root.vm.idle && !root.vm.settingsOpen
         opacity: root.controlsVisible ? 1 : 0
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: (root.vm !== null ? root.vm.leftInset : 0) + 16
-        anchors.rightMargin: (root.vm !== null ? root.vm.rightInset : 0) + 16
+
+        // Fixed-width bar, always centred in the window — independent of any open
+        // drawers, so it never gets squeezed when both panels are open.
+        width: Math.min(720, parent.width - 32)
+        anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 16
         height: 64
@@ -86,16 +88,47 @@ Item {
             anchors.fill: parent
             anchors.margins: 12
             spacing: 12
-            ActionButton {
+            FLActionButton {
                 text: root.vm !== null && root.vm.paused ? "Play" : "Pause"
                 onClicked: root.vm.togglePause()
             }
             Slider {
+                id: seekBar
                 Layout.fillWidth: true
+                implicitHeight: 20
                 from: 0
                 to: Math.max(0.001, root.vm !== null ? root.vm.duration : 0)
                 value: pressed ? value : root.vm !== null ? root.vm.position : 0
                 onMoved: root.vm.seek(value)
+
+                background: Rectangle {
+                    x: seekBar.leftPadding
+                    y: seekBar.topPadding + seekBar.availableHeight / 2 - height / 2
+                    width: seekBar.availableWidth
+                    height: 4
+                    radius: 2
+                    color: FLTheme.border
+
+                    Rectangle {
+                        width: seekBar.visualPosition * parent.width
+                        height: parent.height
+                        radius: parent.radius
+                        color: FLTheme.accent
+                    }
+                }
+
+                handle: Rectangle {
+                    x: seekBar.leftPadding + seekBar.visualPosition * (seekBar.availableWidth - width)
+                    y: seekBar.topPadding + seekBar.availableHeight / 2 - height / 2
+                    implicitWidth: 14
+                    implicitHeight: 14
+                    radius: width / 2
+                    color: seekBar.pressed ? Qt.lighter(FLTheme.accent, 1.15) : FLTheme.text
+                    border.color: FLTheme.accent
+                    border.width: seekBar.hovered || seekBar.pressed ? 2 : 0
+                    scale: seekBar.hovered || seekBar.pressed ? 1.1 : 1
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                }
             }
             Text {
                 text: {
@@ -103,8 +136,43 @@ Item {
                     return Math.floor(position / 60) + ":" +
                            String(Math.floor(position % 60)).padStart(2, "0")
                 }
-                color: Theme.textMuted
+                color: FLTheme.textMuted
             }
+        }
+    }
+
+    // Minimal, non-interactable seek indicator: a thin progress bar that flashes
+    // at screen centre whenever a seek is triggered (slider or keyboard), then
+    // fades out almost immediately.
+    Rectangle {
+        id: seekFlash
+        anchors.centerIn: parent
+        width: 240
+        height: 6
+        radius: 3
+        color: "#33FFFFFF"
+        opacity: 0
+        visible: opacity > 0
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            height: parent.height
+            radius: parent.radius
+            width: parent.width * (root.vm !== null && root.vm.duration > 0
+                                   ? Math.min(1, root.vm.position / root.vm.duration) : 0)
+            color: "#888888"
+        }
+
+        SequentialAnimation {
+            id: seekFlashAnim
+            NumberAnimation { target: seekFlash; property: "opacity"; to: 0.5; duration: 70 }
+            PauseAnimation { duration: 280 }
+            NumberAnimation { target: seekFlash; property: "opacity"; to: 0; duration: 150 }
+        }
+        Connections {
+            target: root.vm
+            function onSeekTriggered() { seekFlashAnim.restart() }
         }
     }
 
@@ -112,12 +180,16 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.NoButton
         hoverEnabled: true
-        onPositionChanged: {
+        onPositionChanged: (mouse) => {
             // Only reveal/extend the controls bar when it can actually show — not
             // on the idle screen or while the settings window is up (mirrors the
             // `controls` panel's own visible condition). Otherwise hideTimer would
             // keep restarting on every mouse move with nothing to hide.
             if (root.vm === null || root.vm.idle || root.vm.settingsOpen)
+                return
+            // Don't reveal when the cursor is over an open drawer (its own region,
+            // measured by the inset it publishes) — the bar belongs to the video.
+            if (mouse.x < root.vm.leftInset || mouse.x > width - root.vm.rightInset)
                 return
             root.controlsVisible = true
             hideTimer.restart()

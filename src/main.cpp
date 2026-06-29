@@ -35,6 +35,13 @@ int main(int argc, char* argv[])
     QApplication qtApp(argc, argv);
     QApplication::setOrganizationName("FrameLift");
     QApplication::setApplicationName("FrameLift");
+    // GNOME (and other freedesktop shells) resolve the dock/overview/taskbar icon by
+    // matching the window's app_id (Wayland) / WM_CLASS (X11) against an installed
+    // .desktop file, *not* from QWindow::setIcon(). Pin the desktop file basename so the
+    // app_id is a stable "framelift" that matches the installed framelift.desktop —
+    // without this the shell shows the generic "no icon" placeholder. (No effect on
+    // Windows/macOS.)
+    QApplication::setDesktopFileName("framelift");
     // We drive shutdown explicitly (window close → App quit flow), so don't let Qt quit
     // out from under the host when the last window closes.
     QApplication::setQuitOnLastWindowClosed(false);

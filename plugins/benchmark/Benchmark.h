@@ -7,9 +7,11 @@
 #include <QtCore/QObject>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 class QTimer;
 class BenchmarkSettings;
@@ -21,6 +23,7 @@ struct Stat
     double min = 0.0;
     double max = 0.0;
     double sum = 0.0;
+    double sumSq = 0.0;
     uint64_t count = 0;
 
     void Reset()
@@ -33,6 +36,7 @@ struct Stat
         min = count == 0 ? v : std::min(min, v);
         max = count == 0 ? v : std::max(max, v);
         sum += v;
+        sumSq += v * v;
         ++count;
     }
 
@@ -40,18 +44,33 @@ struct Stat
     {
         return count > 0 ? sum / static_cast<double>(count) : 0.0;
     }
+
+    // Population standard deviation. 0 for fewer than two samples.
+    [[nodiscard]] double Std() const
+    {
+        if (count < 2)
+        {
+            return 0.0;
+        }
+        const double n = static_cast<double>(count);
+        const double variance = std::max(0.0, sumSq / n - (sum / n) * (sum / n));
+        return std::sqrt(variance);
+    }
 };
 
 // Performance benchmark window (F10 to toggle).
-// Shows live UI rendering performance — frame rate and frame time with running
-// min/avg/max — alongside process performance (CPU %, memory, GPU %) and player
-// playback stats (dropped/mistimed frames and the active hardware/software
-// decoder), in a movable/resizable window that spawns as its own OS window
-// beside the app. A "Load file" button starts a chosen video from position 0 for
-// a reproducible run; an optional duration limit pauses playback and freezes the
-// results once playback reaches the configured length. Frame timing is sampled
-// every frame; the polled process/player stats refresh once per second; idle
-// state is pushed via OnMediaEvent.
+// Shows a live UI frame-rate/frame-time readout plus, once a run has recorded
+// samples, the aggregated results that make a benchmark useful: FPS and frame
+// time avg/min/max, frame-time standard deviation, 1% and 0.1% low FPS
+// (percentiles of the slowest frames), and a stutter count (frames over 2× the
+// average). Process performance (CPU %, memory, GPU %) is reported as a live
+// value with its run avg/max, and a context block records the decoder, graphics
+// backend, video resolution, and decode/cache health (dropped, mistimed, decode
+// errors, cache misses) so a result is reproducible. A "Load file" button starts
+// a chosen video from position 0 for a clean run; an optional duration limit
+// pauses playback and freezes the results once playback reaches the configured
+// length. Frame timing is sampled every frame; the polled process/player stats
+// refresh once per second; idle state is pushed via OnMediaEvent.
 class Benchmark final : public QObject, public ModuleBase
 {
     Q_OBJECT
@@ -129,10 +148,19 @@ private:
     std::string hwDec_ = "N/A";
     int64_t dropped_ = 0;
     int64_t mistimed_ = 0;
+    int64_t decodeErrors_ = 0;
+    int64_t cacheMisses_ = 0;
+    int64_t videoW_ = 0;
+    int64_t videoH_ = 0;
+
+    // ── Session-constant context (read once on install) ─────────────────────────
+    std::string gfxBackend_;   // active graphics backend name ("OpenGL"/"Vulkan")
+    bool gpuIsNvidia_ = false; // active adapter is NVIDIA
 
     // ── Benchmark run state ─────────────────────────────────────────────────────
-    Stat frameStat_;               // UI frame time (ms)
-    double frameMsSmoothed_ = 0.0; // EMA of frame time for the live fps readout
+    Stat frameStat_;                  // UI frame time (ms)
+    std::vector<float> frameSamples_; // per-frame times (ms) for percentile/stutter
+    double frameMsSmoothed_ = 0.0;    // EMA of frame time for the live fps readout
     Stat cpuStat_;
     Stat memStat_; // bytes
     Stat gpuStat_;

@@ -130,18 +130,27 @@ set(FRAMELIFT_SOURCES ${FRAMELIFT_HOST_SOURCES})
 
 if (WIN32)
     enable_language(RC)
-    configure_file("${CMAKE_SOURCE_DIR}/src/FrameLift.rc.in"
+    configure_file("${CMAKE_SOURCE_DIR}/packaging/windows/framelift.rc.in"
             "${CMAKE_CURRENT_BINARY_DIR}/FrameLift.rc" @ONLY)
     list(APPEND FRAMELIFT_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/FrameLift.rc")
 endif ()
 
 add_executable(FrameLift ${FRAMELIFT_SOURCES} ${FRAMELIFT_SDK_SOURCES})
 set_source_files_properties(
-        qml/FrameLift/Controls/Theme.qml
-        PROPERTIES QT_RESOURCE_ALIAS Theme.qml QT_QML_SINGLETON_TYPE TRUE)
-set_source_files_properties(qml/FrameLift/Controls/GlassPanel.qml PROPERTIES QT_RESOURCE_ALIAS GlassPanel.qml)
-set_source_files_properties(qml/FrameLift/Controls/ActionButton.qml PROPERTIES QT_RESOURCE_ALIAS ActionButton.qml)
-set_source_files_properties(qml/FrameLift/Controls/Drawer.qml PROPERTIES QT_RESOURCE_ALIAS Drawer.qml)
+        qml/FrameLift/Controls/FLTheme.qml
+        PROPERTIES QT_RESOURCE_ALIAS FLTheme.qml QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/FrameLift/Controls/FLGlassPanel.qml PROPERTIES QT_RESOURCE_ALIAS FLGlassPanel.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLActionButton.qml PROPERTIES QT_RESOURCE_ALIAS FLActionButton.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLDrawer.qml PROPERTIES QT_RESOURCE_ALIAS FLDrawer.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLConfirmDialog.qml PROPERTIES QT_RESOURCE_ALIAS FLConfirmDialog.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLSettingsGroup.qml PROPERTIES QT_RESOURCE_ALIAS FLSettingsGroup.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLSettingRow.qml PROPERTIES QT_RESOURCE_ALIAS FLSettingRow.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLSwitch.qml PROPERTIES QT_RESOURCE_ALIAS FLSwitch.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLTextField.qml PROPERTIES QT_RESOURCE_ALIAS FLTextField.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLSpinBox.qml PROPERTIES QT_RESOURCE_ALIAS FLSpinBox.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLComboBox.qml PROPERTIES QT_RESOURCE_ALIAS FLComboBox.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLSlider.qml PROPERTIES QT_RESOURCE_ALIAS FLSlider.qml)
+set_source_files_properties(qml/FrameLift/Controls/FLKeyCapButton.qml PROPERTIES QT_RESOURCE_ALIAS FLKeyCapButton.qml)
 qt_add_qml_module(
         FrameLift
         URI FrameLift.Controls
@@ -149,10 +158,19 @@ qt_add_qml_module(
         RESOURCE_PREFIX "/qt/qml"
         NO_PLUGIN
         QML_FILES
-        qml/FrameLift/Controls/Theme.qml
-        qml/FrameLift/Controls/GlassPanel.qml
-        qml/FrameLift/Controls/ActionButton.qml
-        qml/FrameLift/Controls/Drawer.qml)
+        qml/FrameLift/Controls/FLTheme.qml
+        qml/FrameLift/Controls/FLGlassPanel.qml
+        qml/FrameLift/Controls/FLActionButton.qml
+        qml/FrameLift/Controls/FLDrawer.qml
+        qml/FrameLift/Controls/FLConfirmDialog.qml
+        qml/FrameLift/Controls/FLSettingsGroup.qml
+        qml/FrameLift/Controls/FLSettingRow.qml
+        qml/FrameLift/Controls/FLSwitch.qml
+        qml/FrameLift/Controls/FLTextField.qml
+        qml/FrameLift/Controls/FLSpinBox.qml
+        qml/FrameLift/Controls/FLComboBox.qml
+        qml/FrameLift/Controls/FLSlider.qml
+        qml/FrameLift/Controls/FLKeyCapButton.qml)
 set_source_files_properties("${CMAKE_SOURCE_DIR}/assets/img/icon.svg" PROPERTIES QT_RESOURCE_ALIAS icon.svg)
 qt_add_resources(
         FrameLift framelift_assets
@@ -265,6 +283,21 @@ endif ()
 # app-local deployment (VCPKG_APPLOCAL_DEPS) — no manual copy needed. Note: Qt's
 # QML/plugin runtime (platform plugins, QML modules) may additionally need
 # windeployqt; revisit when packaging.
+
+# ── Linux desktop integration (icon in the GNOME/KDE shell) ───────────────────
+# The shell resolves the dock/overview icon by matching the window app_id /
+# WM_CLASS ("framelift", pinned via QApplication::setDesktopFileName) against an
+# installed .desktop file, whose Icon= key is looked up in the hicolor icon theme.
+# Install both so a packaged build shows the real icon instead of a placeholder.
+# (Running straight from the build tree won't show it — the files must live under
+# an XDG data dir; `cmake --install` or the packaged tarball provides that.)
+if (UNIX AND NOT APPLE)
+    install(FILES "${CMAKE_SOURCE_DIR}/packaging/linux/framelift.desktop"
+            DESTINATION share/applications COMPONENT runtime)
+    install(FILES "${CMAKE_SOURCE_DIR}/assets/img/icon.svg"
+            DESTINATION share/icons/hicolor/scalable/apps
+            RENAME framelift.svg COMPONENT runtime)
+endif ()
 
 # ── Unit tests (native, IDE-visible) ─────────────────────────────────────────
 # Compiles only platform-independent units; safe to configure alongside the app.

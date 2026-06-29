@@ -38,15 +38,18 @@ public:
 
     // getStr(ud): returns a const char* to the current binding string (plugin-owned).
     // setStr(ud, val): updates the binding string in the plugin.
+    //   group       — owning module's display name, so the UI can group keybinds per plugin.
+    //   defaultBind — the factory-default bind list, so the UI can "reset to default".
     virtual void RegisterKeybindEntry(
         const char* label, const char* actionName, const char* (*getStr)(void* ud),
-        void (*setStr)(void* ud, const char* val), void* ud
+        void (*setStr)(void* ud, const char* val), void* ud, const char* group, const char* defaultBind
     ) noexcept = 0;
 
     virtual void EnumerateKeybindEntries(
         void (*visit)(
             const char* label, const char* actionName, const char* (*getStr)(void* ud),
-            void (*setStr)(void* ud, const char* val), void* ud, void* visitUd
+            void (*setStr)(void* ud, const char* val), void* ud, const char* group, const char* defaultBind,
+            void* visitUd
         ),
         void* visitUd
     ) const noexcept = 0;

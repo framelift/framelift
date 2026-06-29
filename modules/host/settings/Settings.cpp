@@ -9,7 +9,7 @@
 #include "SubtitleSettings.h" // media/ffmpeg
 #include "CacheSettings.h"    // host/read-ahead
 #include "ThemeSettings.h"    // host/ui
-#include "UiSettings.h"       // host/ui
+#include "UISettings.h"       // host/ui
 
 #include <QSettings>
 #include <QString>
@@ -54,7 +54,7 @@ Settings::Settings()
     Add<PlaybackSettings>();
     Add<SubtitleSettings>();
     Add<CacheSettings>();
-    Add<UiSettings>();
+    Add<UISettings>();
     Add<FilesSettings>();
     Add<AudioSettings>();
     Add<ThemeSettings>();
@@ -68,7 +68,7 @@ void Settings::ResetToDefaults()
     Get<PlaybackSettings>() = {};
     Get<SubtitleSettings>() = {};
     Get<CacheSettings>() = {};
-    Get<UiSettings>() = {};
+    Get<UISettings>() = {};
     Get<FilesSettings>() = {};
     Get<AudioSettings>() = {};
     Get<ThemeSettings>() = {};
@@ -84,7 +84,7 @@ SettingsRegistry BuildSettingsRegistry(Settings& s)
     RegisterPlaybackSettings(reg, s.Get<PlaybackSettings>());
     RegisterSubtitleSettings(reg, s.Get<SubtitleSettings>());
     RegisterCacheSettings(reg, s.Get<CacheSettings>());
-    RegisterUiSettings(reg, s.Get<UiSettings>());
+    RegisterUISettings(reg, s.Get<UISettings>());
     RegisterFilesSettings(reg, s.Get<FilesSettings>());
     RegisterAudioSettings(reg, s.Get<AudioSettings>());
     RegisterThemeSettings(reg, s.Get<ThemeSettings>());

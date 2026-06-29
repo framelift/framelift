@@ -61,7 +61,7 @@ public:
 
     [[nodiscard]] std::unique_ptr<IVideoRenderer> CreateVideoRenderer() override;
 
-    [[nodiscard]] uintptr_t CreateUiTexture(const unsigned char*, int, int) override
+    [[nodiscard]] uintptr_t CreateUITexture(const unsigned char*, int, int) override
     {
         return 0;
     }

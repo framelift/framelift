@@ -2,6 +2,7 @@
 
 #include "FileDialogServiceImpl.h"
 #include "GraphicsApi.h"
+#include "GraphicsInfoService.h"
 #include "HotkeysImpl.h"
 #include "JsonServiceImpl.h"
 #include "ModuleContext.h"
@@ -109,6 +110,7 @@ private:
     FileDialogServiceImpl fileDialogService_{&settings_};
     HotkeysImpl keys_;
     JsonServiceImpl jsonService_;
+    std::unique_ptr<GraphicsInfoService> graphicsInfo_;
 
     std::unique_ptr<ModuleContext> moduleCtx_;
     std::unique_ptr<PlaybackControls> playbackControls_;

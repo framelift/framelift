@@ -167,6 +167,8 @@ void App::InitServices(const std::string& prefDir, const std::string& settingsPa
     moduleCtx_->RegisterService<IFileDialog>(&fileDialogService_);
     moduleCtx_->RegisterService<IJson>(&jsonService_);
     moduleCtx_->RegisterService<ILogBuffer>(&HostLogBuffer());
+    graphicsInfo_ = std::make_unique<GraphicsInfoService>(appWindow_.get());
+    moduleCtx_->RegisterService<IGraphicsInfo>(graphicsInfo_.get());
 
     // Controllers own their own event-bus wiring (settings re-apply, audio ducking,
     // theme reaction) so App holds no subscriptions.

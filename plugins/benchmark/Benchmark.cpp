@@ -3,9 +3,11 @@
 
 #include <QtCore/QStringList>
 #include <QtCore/QTimer>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "Version.h"
 #include <framelift/platform.h>
@@ -50,6 +52,15 @@ void Benchmark::OnInstall(IModuleContext& ctx)
     {
         props->ObserveProperty(PlayerProperty::TimePos);
     }
+    // The graphics backend is selected once at startup and never switches, so read it once.
+    if (auto* gfx = ctx.GetService<IGraphicsInfo>())
+    {
+        char buf[64] = {};
+        gfx->GetBackendName(buf, sizeof(buf));
+        gfxBackend_ = buf;
+        gpuIsNvidia_ = gfx->HasNvidiaAdapter();
+    }
+    frameSamples_.reserve(4096);
     refreshTimer_ = new QTimer(this);
     refreshTimer_->setInterval(16);
     connect(
@@ -69,6 +80,7 @@ void Benchmark::OnInstall(IModuleContext& ctx)
                 if (accumulating_ && !complete_ && !isIdle_)
                 {
                     frameStat_.Add(dtMs);
+                    frameSamples_.push_back(static_cast<float>(dtMs));
                 }
             }
             lastFrameTick_ = now;
@@ -129,17 +141,98 @@ void Benchmark::ApplySettings(bool limitDuration, float benchmarkDuration)
     Q_EMIT changed();
 }
 
+namespace
+{
+// Frame time (ms) at the given percentile of `samples` — e.g. p=99 is the frame
+// slower than 99% of frames, whose inverse is the "1% low" fps. Returns 0 when empty.
+double PercentileMs(std::vector<float> samples, const double p)
+{
+    if (samples.empty())
+    {
+        return 0.0;
+    }
+    std::sort(samples.begin(), samples.end());
+    const double rank = p / 100.0 * static_cast<double>(samples.size() - 1);
+    const auto idx = static_cast<size_t>(std::clamp(rank, 0.0, static_cast<double>(samples.size() - 1)));
+    return samples[idx];
+}
+
+QString Fps(const double ms)
+{
+    return ms > 0.0 ? QString::number(1000.0 / ms, 'f', 0) : QStringLiteral("0");
+}
+} // namespace
+
 QString Benchmark::Summary() const
 {
-    const double fps = frameMsSmoothed_ > 0.0 ? 1000.0 / frameMsSmoothed_ : 0.0;
+    const double liveFps = frameMsSmoothed_ > 0.0 ? 1000.0 / frameMsSmoothed_ : 0.0;
     QStringList rows;
-    rows << QStringLiteral("UI  %1 fps  ·  %2 ms").arg(fps, 0, 'f', 0).arg(frameMsSmoothed_, 0, 'f', 1);
-    rows << QStringLiteral("CPU  %1%   Memory  %2 MB")
+    rows << QStringLiteral("UI  %1 fps  ·  %2 ms").arg(liveFps, 0, 'f', 0).arg(frameMsSmoothed_, 0, 'f', 1);
+
+    // ── Aggregated run results (only once samples exist) ─────────────────────────
+    if (frameStat_.count > 0)
+    {
+        // FPS min/max invert frame-time max/min: the slowest frame is the lowest fps.
+        rows << QStringLiteral("FPS    avg %1  min %2  max %3")
+                    .arg(Fps(frameStat_.Avg()), Fps(frameStat_.max), Fps(frameStat_.min));
+        rows << QStringLiteral("Frame  avg %1  min %2  max %3  σ %4 ms")
+                    .arg(frameStat_.Avg(), 0, 'f', 1)
+                    .arg(frameStat_.min, 0, 'f', 1)
+                    .arg(frameStat_.max, 0, 'f', 1)
+                    .arg(frameStat_.Std(), 0, 'f', 2);
+        rows << QStringLiteral("Lows   1% %1 fps  ·  0.1% %2 fps")
+                    .arg(Fps(PercentileMs(frameSamples_, 99.0)), Fps(PercentileMs(frameSamples_, 99.9)));
+
+        const double avgMs = frameStat_.Avg();
+        const auto stutter = static_cast<int64_t>(std::count_if(
+            frameSamples_.begin(), frameSamples_.end(),
+            [avgMs](const float v)
+            {
+                return v > 2.0 * avgMs;
+            }
+        ));
+        rows << QStringLiteral("Stutter %1 (>2× avg)  ·  frames %2  ·  %3 s")
+                    .arg(stutter)
+                    .arg(frameStat_.count)
+                    .arg(timePos_, 0, 'f', 0);
+    }
+
+    // ── Process performance: live value + run avg/max ────────────────────────────
+    rows << QStringLiteral("CPU  %1%  (avg %2 / max %3)")
                 .arg(sys_.cpuPercent, 0, 'f', 0)
-                .arg(static_cast<double>(sys_.memBytes) / (1024.0 * 1024.0), 0, 'f', 1);
-    rows << QStringLiteral("GPU  %1").arg(sys_.gpuValid ? QString::number(sys_.gpuPercent, 'f', 0) + "%" : "N/A");
+                .arg(cpuStat_.Avg(), 0, 'f', 0)
+                .arg(cpuStat_.max, 0, 'f', 0);
+    const double toMiB = 1.0 / (1024.0 * 1024.0);
+    rows << QStringLiteral("Mem  %1 MB  (avg %2 / max %3)")
+                .arg(static_cast<double>(sys_.memBytes) * toMiB, 0, 'f', 0)
+                .arg(memStat_.Avg() * toMiB, 0, 'f', 0)
+                .arg(memStat_.max * toMiB, 0, 'f', 0);
+    if (sys_.gpuValid)
+    {
+        rows << QStringLiteral("GPU  %1%  (avg %2 / max %3)")
+                    .arg(sys_.gpuPercent, 0, 'f', 0)
+                    .arg(gpuStat_.Avg(), 0, 'f', 0)
+                    .arg(gpuStat_.max, 0, 'f', 0);
+    }
+    else
+    {
+        rows << QStringLiteral("GPU  N/A");
+    }
+
+    // ── Context: what produced these numbers ─────────────────────────────────────
     rows << QStringLiteral("Decoder  %1").arg(QString::fromStdString(hwDec_));
+    QString backend = gfxBackend_.empty() ? QStringLiteral("unknown") : QString::fromStdString(gfxBackend_);
+    if (gpuIsNvidia_)
+    {
+        backend += QStringLiteral(" · NVIDIA");
+    }
+    rows << QStringLiteral("Backend  %1").arg(backend);
+    if (videoW_ > 0 && videoH_ > 0)
+    {
+        rows << QStringLiteral("Video  %1×%2").arg(videoW_).arg(videoH_);
+    }
     rows << QStringLiteral("Dropped %1  ·  Mistimed %2").arg(dropped_).arg(mistimed_);
+    rows << QStringLiteral("Decode err %1  ·  Cache miss %2").arg(decodeErrors_).arg(cacheMisses_);
     return rows.join('\n');
 }
 
@@ -171,9 +264,12 @@ void Benchmark::resetRun()
 void Benchmark::ResetStats()
 {
     frameStat_.Reset();
+    frameSamples_.clear();
     cpuStat_.Reset();
     memStat_.Reset();
     gpuStat_.Reset();
+    decodeErrors_ = cacheMisses_ = 0;
+    videoW_ = videoH_ = 0;
     complete_ = false;
 }
 
@@ -206,6 +302,8 @@ void Benchmark::HandleMediaEvent(const MediaEvent& event)
         {
             hwDec_ = "N/A";
             dropped_ = mistimed_ = 0;
+            decodeErrors_ = cacheMisses_ = 0;
+            videoW_ = videoH_ = 0;
         }
         return;
     }
@@ -261,4 +359,15 @@ void Benchmark::RequestRefresh()
     player->GetStringAsync(PlayerProperty::HwDecCurrent, strCb, new StrField{&hwDec_, "N/A"});
     player->GetInt64Async(PlayerProperty::DroppedFrames, i64Cb, new I64Field{&dropped_, 0});
     player->GetInt64Async(PlayerProperty::MistimedFrames, i64Cb, new I64Field{&mistimed_, 0});
+    player->GetInt64Async(PlayerProperty::DecodeErrors, i64Cb, new I64Field{&decodeErrors_, 0});
+    player->GetInt64Async(PlayerProperty::CacheMisses, i64Cb, new I64Field{&cacheMisses_, 0});
+    player->GetDisplaySizeAsync(
+        [](const DisplaySize* size, const bool ok, void* ud)
+        {
+            auto* self = static_cast<Benchmark*>(ud);
+            self->videoW_ = (ok && size) ? size->width : 0;
+            self->videoH_ = (ok && size) ? size->height : 0;
+        },
+        this
+    );
 }

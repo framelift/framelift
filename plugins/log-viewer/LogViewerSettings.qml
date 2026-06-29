@@ -22,7 +22,7 @@ Item {
                 { "label": "Errors", "prop": "showError" },
                 { "label": "Performance only", "prop": "perfOnly" }
             ]
-            delegate: SettingRow {
+            delegate: FLSettingRow {
                 required property var modelData
                 title: modelData.label
                 description: modelData.prop === "perfOnly"

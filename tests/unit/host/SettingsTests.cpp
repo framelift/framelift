@@ -7,7 +7,7 @@
 #include "PlaybackSettings.h"
 #include "SubtitleSettings.h"
 #include "ThemeSettings.h"
-#include "UiSettings.h"
+#include "UISettings.h"
 
 #include <gtest/gtest.h>
 #include <cstddef>
@@ -22,7 +22,7 @@ TEST(SettingsTest, DefaultsAreSane)
     const Settings s;
     EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec);
     EXPECT_EQ(s.Get<PlaybackSettings>().hwdecMode, "auto");
-    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f);
+    EXPECT_FLOAT_EQ(s.Get<UISettings>().panelWidth, 320.f);
     EXPECT_EQ(s.Get<AudioSettings>().dynaudnormFrameLen, 100);
     EXPECT_EQ(s.Get<FilesSettings>().videoExtensions.rfind("mp4", 0), 0u); // starts with "mp4"
 }
@@ -74,7 +74,7 @@ dynaudnormFrameLen=250
 
     EXPECT_FALSE(s.Get<PlaybackSettings>().hwdec);
     EXPECT_EQ(s.Get<PlaybackSettings>().hwdecMode, "off");
-    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 500.f);
+    EXPECT_FLOAT_EQ(s.Get<UISettings>().panelWidth, 500.f);
     EXPECT_EQ(s.Get<FilesSettings>().videoExtensions, "avi;mov");
     EXPECT_EQ(s.Get<AudioSettings>().dynaudnormFrameLen, 250);
 }
@@ -140,7 +140,7 @@ TEST(SettingsTest, MissingKeysKeepDefaults)
     Settings s;
     s.Load(f.str());
 
-    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 400.f); // overridden
+    EXPECT_FLOAT_EQ(s.Get<UISettings>().panelWidth, 400.f); // overridden
     EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec); // untouched default
     EXPECT_EQ(s.Get<FilesSettings>().videoExtensions.rfind("mp4", 0), 0u); // untouched default
 }
@@ -152,7 +152,7 @@ TEST(SettingsTest, UnknownKeysAndSectionsIgnored)
     Settings s;
     s.Load(f.str());
 
-    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 350.f);
+    EXPECT_FLOAT_EQ(s.Get<UISettings>().panelWidth, 350.f);
     // No crash, other fields unaffected.
     EXPECT_TRUE(s.Get<PlaybackSettings>().hwdec);
 }
@@ -165,7 +165,7 @@ TEST(SettingsTest, MalformedNumericValueIsIgnored)
     s.Load(f.str());
 
     // std::stof throws → caught → field keeps its default.
-    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f);
+    EXPECT_FLOAT_EQ(s.Get<UISettings>().panelWidth, 320.f);
 }
 
 // ── Incorrect setting type handling (issue #2) ──────────────────────────────────
@@ -272,7 +272,7 @@ TEST(SettingsTest, EmptyValueKeepsDefault)
     s.Load(f.str());
 
     // std::stof("") throws → caught → field keeps its default.
-    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f);
+    EXPECT_FLOAT_EQ(s.Get<UISettings>().panelWidth, 320.f);
 }
 
 TEST(SettingsTest, MissingFileLeavesDefaults)
@@ -282,7 +282,7 @@ TEST(SettingsTest, MissingFileLeavesDefaults)
     Settings s;
     const auto missing = UniqueTempPath();
     s.Load(missing.string());
-    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f);
+    EXPECT_FLOAT_EQ(s.Get<UISettings>().panelWidth, 320.f);
     EXPECT_TRUE(std::filesystem::exists(missing)); // Save() is synchronous now
     std::error_code ec;
     std::filesystem::remove(missing, ec);
@@ -299,13 +299,13 @@ TEST(SettingsTest, EmptyFileSeedsDefaults)
     Settings s;
     s.Load(f.str());
 
-    EXPECT_FLOAT_EQ(s.Get<UiSettings>().panelWidth, 320.f); // in-memory defaults intact
+    EXPECT_FLOAT_EQ(s.Get<UISettings>().panelWidth, 320.f); // in-memory defaults intact
     EXPECT_GT(std::filesystem::file_size(f.path), 0u); // defaults written back to disk
 
     // Re-loading the now-populated file yields the same defaults.
     Settings reloaded;
     reloaded.Load(f.str());
-    EXPECT_FLOAT_EQ(reloaded.Get<UiSettings>().panelWidth, 320.f);
+    EXPECT_FLOAT_EQ(reloaded.Get<UISettings>().panelWidth, 320.f);
 }
 
 TEST(SettingsTest, SaveLoadRoundTrip)
@@ -315,7 +315,7 @@ TEST(SettingsTest, SaveLoadRoundTrip)
     Settings s;
     s.Get<PlaybackSettings>().hwdec = false;
     s.Get<PlaybackSettings>().hwdecMode = "off";
-    s.Get<UiSettings>().panelWidth = 444.f;
+    s.Get<UISettings>().panelWidth = 444.f;
     s.Get<FilesSettings>().videoExtensions = "mkv;webm";
     s.Get<AudioSettings>().dynaudnormFrameLen = 321;
     s.Get<KeybindSettings>().togglePause = "P";
@@ -326,7 +326,7 @@ TEST(SettingsTest, SaveLoadRoundTrip)
 
     EXPECT_FALSE(loaded.Get<PlaybackSettings>().hwdec);
     EXPECT_EQ(loaded.Get<PlaybackSettings>().hwdecMode, "off");
-    EXPECT_FLOAT_EQ(loaded.Get<UiSettings>().panelWidth, 444.f);
+    EXPECT_FLOAT_EQ(loaded.Get<UISettings>().panelWidth, 444.f);
     EXPECT_EQ(loaded.Get<FilesSettings>().videoExtensions, "mkv;webm");
     EXPECT_EQ(loaded.Get<AudioSettings>().dynaudnormFrameLen, 321);
     EXPECT_EQ(loaded.Get<KeybindSettings>().togglePause, "P");

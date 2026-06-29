@@ -399,6 +399,13 @@ bool QtAppWindow::eventFilter(QObject* watched, QEvent* event)
     case QEvent::KeyPress:
     case QEvent::KeyRelease: {
         const auto* ke = static_cast<QKeyEvent*>(event);
+        // A held key emits a stream of auto-repeat KeyPress/KeyRelease events; drop them so
+        // hotkeys fire once per physical press instead of repeating.
+        if (ke->isAutoRepeat())
+        {
+            deliver = false;
+            break;
+        }
         out.type = event->type() == QEvent::KeyPress ? AppEventType::KeyDown : AppEventType::KeyUp;
         out.key = {TranslateKey(ke->key()), TranslateMods(ke->modifiers())};
         break;

@@ -86,6 +86,7 @@ Q_SIGNALS:
     void playbackStateChanged();
     void playbackPositionChanged();
     void commandShown();
+    void seekTriggered();
     void layoutChanged();
 
 private:

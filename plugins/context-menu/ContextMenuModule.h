@@ -5,6 +5,7 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QVariantList>
+#include <QtCore/QVariantMap>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,11 @@ class ContextMenuModule final : public QObject, public ModuleBase, public Contex
     Q_PROPERTY(bool muted READ Muted NOTIFY menuChanged)
     Q_PROPERTY(bool normalizeEnabled READ NormalizeEnabled NOTIFY menuChanged)
     Q_PROPERTY(bool subtitlesEnabled READ SubtitlesEnabled NOTIFY menuChanged)
+    Q_PROPERTY(QVariantList audioTracks READ QmlAudioTracks NOTIFY tracksChanged)
+    Q_PROPERTY(QVariantList subtitleTracks READ QmlSubtitleTracks NOTIFY tracksChanged)
+    // Resolved keyboard shortcuts for the host's core actions, keyed by hotkey id
+    // (e.g. "togglePause") so QML can show them next to the built-in menu items.
+    Q_PROPERTY(QVariantMap coreShortcuts READ QmlCoreShortcuts NOTIFY menuChanged)
 
 public:
     // ── ContextMenu service ABI ────────────────────────────────────────────────
@@ -43,6 +49,13 @@ public:
     void AddSectionRaw(void (*builder)(ContextMenu&, void*), void* ud, void (*cleanup)(void*)) noexcept override;
 
     [[nodiscard]] QVariantList QmlExtraItems();
+
+    // Live audio / subtitle track lists for the menu's submenus. Each row is a
+    // {id, label, selected} map; rebuilt from the player on every read (the lists
+    // are small and only the open submenu binds to them).
+    [[nodiscard]] QVariantList QmlAudioTracks() const;
+    [[nodiscard]] QVariantList QmlSubtitleTracks() const;
+    [[nodiscard]] QVariantMap QmlCoreShortcuts() const;
 
     [[nodiscard]] bool Muted() const
     {
@@ -75,11 +88,14 @@ public:
     Q_INVOKABLE void toggleMute();
     Q_INVOKABLE void toggleNormalize();
     Q_INVOKABLE void toggleSubtitles();
+    Q_INVOKABLE void selectAudioTrack(qint64 id);
+    Q_INVOKABLE void selectSubtitleTrack(qint64 id);
     Q_INVOKABLE void invokeExtra(int index);
     Q_INVOKABLE void quit();
 
 Q_SIGNALS:
     void menuChanged();
+    void tracksChanged();
 
 protected:
     const char* ModuleName() const override

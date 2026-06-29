@@ -21,7 +21,7 @@ Item {
         minimumHeight: 520
         visible: root.vm !== null && root.vm.open
         title: "FrameLift Settings"
-        color: Theme.canvas
+        color: FLTheme.canvas
 
         onClosing: function(close) {
             close.accepted = false
@@ -44,7 +44,7 @@ Item {
 
                     Text {
                         text: "Settings"
-                        color: Theme.text
+                        color: FLTheme.text
                         font.pixelSize: 24
                         font.weight: Font.DemiBold
                     }
@@ -69,7 +69,7 @@ Item {
                                 anchors.fill: parent
                                 anchors.leftMargin: 12
                                 text: pageDelegate.modelData.title
-                                color: Theme.text
+                                color: FLTheme.text
                                 verticalAlignment: Text.AlignVCenter
                                 elide: Text.ElideRight
                             }
@@ -95,7 +95,7 @@ Item {
                 Text {
                     text: root.vm !== null && root.vm.activePageViewModel !== null
                           ? root.vm.activePageViewModel.title : ""
-                    color: Theme.text
+                    color: FLTheme.text
                     font.pixelSize: 22
                     font.weight: Font.DemiBold
                 }
@@ -136,17 +136,17 @@ Item {
                     property var pageVm: root.vm !== null ? root.vm.activePageViewModel : null
 
                     Item { Layout.fillWidth: true }
-                    ActionButton {
+                    FLActionButton {
                         text: "Reset"
                         enabled: parent.pageVm !== null && typeof parent.pageVm.reset === "function"
                         onClicked: parent.pageVm.reset()
                     }
-                    ActionButton {
+                    FLActionButton {
                         text: parent.pageVm !== null && parent.pageVm.dirty ? "Save *" : "Save"
                         enabled: parent.pageVm !== null && typeof parent.pageVm.save === "function"
                         onClicked: parent.pageVm.save()
                     }
-                    ActionButton {
+                    FLActionButton {
                         text: "Close"
                         onClicked: if (root.vm !== null) root.vm.closeQml()
                     }

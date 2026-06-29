@@ -168,7 +168,7 @@ void ModuleBase::RegisterKeybinds(IModuleContext& ctx)
 {
     for (auto& kb : keybinds_)
     {
-        framelift::RegisterKeybindEntry(ctx, kb.label, kb.action, *kb.storage);
+        framelift::RegisterKeybindEntry(ctx, kb.label, kb.action, *kb.storage, ModuleName(), kb.def);
     }
 }
 

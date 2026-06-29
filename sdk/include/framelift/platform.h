@@ -3,4 +3,5 @@
 #pragma once
 #include <framelift/platform/IAppWindow.h>
 #include <framelift/platform/IFileDialog.h>
+#include <framelift/platform/IGraphicsInfo.h>
 #include <framelift/platform/IMediaPlayer.h>

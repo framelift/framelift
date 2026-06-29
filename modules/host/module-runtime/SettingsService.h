@@ -19,6 +19,8 @@ struct KeybindEntryRec
     const char* (*getStr)(void*) = nullptr;
     void (*setStr)(void*, const char*) = nullptr;
     void* ud = nullptr;
+    std::string group;       // owning module display name (for per-plugin grouping)
+    std::string defaultBind; // factory-default bind list (for "reset to default")
 };
 
 struct ModuleSettingRec
@@ -93,10 +95,13 @@ public:
 
     void RegisterKeybindEntry(
         const char* label, const char* actionName, const char* (*getStr)(void*), void (*setStr)(void*, const char*),
-        void* ud
+        void* ud, const char* group, const char* defaultBind
     ) noexcept override;
     void EnumerateKeybindEntries(
-        void (*visit)(const char*, const char*, const char* (*)(void*), void (*)(void*, const char*), void*, void*),
+        void (*visit)(
+            const char*, const char*, const char* (*)(void*), void (*)(void*, const char*), void*, const char*,
+            const char*, void*
+        ),
         void* visitUd
     ) const noexcept override;
 

@@ -79,10 +79,12 @@ set(_FRAMELIFT_HOST_READ_AHEAD_SOURCES
 set(_FRAMELIFT_HOST_UI_SOURCES
         "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeSettings.h"
         "${CMAKE_SOURCE_DIR}/modules/host/ui/ThemeUtil.h"
-        "${CMAKE_SOURCE_DIR}/modules/host/ui/UiSettings.h"
+        "${CMAKE_SOURCE_DIR}/modules/host/ui/UISettings.h"
 )
 
 set(_FRAMELIFT_HOST_WINDOW_SOURCES
+        "${CMAKE_SOURCE_DIR}/modules/platform/window-qt/GraphicsInfoService.cpp"
+        "${CMAKE_SOURCE_DIR}/modules/platform/window-qt/GraphicsInfoService.h"
         "${CMAKE_SOURCE_DIR}/modules/platform/window-qt/QtAppWindow.cpp"
         "${CMAKE_SOURCE_DIR}/modules/platform/window-qt/QtAppWindow.h"
         "${CMAKE_SOURCE_DIR}/modules/platform/window-qt/QmlCompositor.cpp"

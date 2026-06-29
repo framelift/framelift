@@ -37,21 +37,11 @@ void LogViewer::OnInstall(IModuleContext& ctx)
         {
             if (Pull())
             {
-                Q_EMIT changed();
+                EmitLinesChanged();
             }
         }
     );
     // Timer is gated on open state (started in SetOpen), not running while hidden.
-
-    // Invalidate the QmlLines cache on every change to the lines projection
-    // (new entries, filter text, perf-only, level toggles all emit `changed`).
-    connect(
-        this, &LogViewer::changed, this,
-        [this]
-        {
-            linesCacheDirty_ = true;
-        }
-    );
 }
 
 void LogViewer::SetOpen(const bool open)
@@ -73,7 +63,10 @@ void LogViewer::SetOpen(const bool open)
             refreshTimer_->stop();
         }
     }
-    Q_EMIT changed();
+    // Refresh the line projection first (drained backlog above), *then* flip the
+    // panel's visibility — so the model is already populated when QML reveals it.
+    EmitLinesChanged();
+    Q_EMIT panelStateChanged();
 }
 
 void LogViewer::LoadSettings(IModuleSettings& ps)
@@ -107,7 +100,7 @@ void LogViewer::ApplySettings(bool showDebug, bool showInfo, bool showWarn, bool
         SaveSettings(ps);
         ps.Save();
     }
-    Q_EMIT changed();
+    EmitLinesChanged();
 }
 
 QVariantList LogViewer::QmlLines() const
@@ -137,7 +130,7 @@ QVariantList LogViewer::QmlLines() const
 void LogViewer::clearLines()
 {
     entries_.clear();
-    Q_EMIT changed();
+    EmitLinesChanged();
 }
 
 void LogViewer::OnEntry(

@@ -160,9 +160,7 @@ void SettingsService::RegisterSettingsChangeCallback(void (*cb)(void*), void* ud
     changeCallbacks_.push_back({cb, ud, cleanup});
 }
 
-void SettingsService::EnumerateSettings(
-    void (*visit)(const FrameLiftSettingDesc*, void*), void* visitUd
-) const noexcept
+void SettingsService::EnumerateSettings(void (*visit)(const FrameLiftSettingDesc*, void*), void* visitUd) const noexcept
 {
     if (!visit)
     {
@@ -196,13 +194,8 @@ void SettingsService::RegisterModuleSetting(const FrameLiftModuleSettingDesc* de
         return;
     }
     moduleSettingEntries_.push_back(
-        {desc->key,
-         desc->type,
-         desc->desc ? desc->desc : "",
-         desc->defaultValue ? desc->defaultValue : "",
-         desc->getValue,
-         desc->setValue,
-         desc->ud}
+        {desc->key, desc->type, desc->desc ? desc->desc : "", desc->defaultValue ? desc->defaultValue : "",
+         desc->getValue, desc->setValue, desc->ud}
     );
 }
 
@@ -217,13 +210,7 @@ void SettingsService::EnumerateModuleSettings(
     for (const auto& rec : moduleSettingEntries_)
     {
         const FrameLiftModuleSettingDesc desc{
-            rec.key.c_str(),
-            rec.type,
-            rec.desc.c_str(),
-            rec.defaultValue.c_str(),
-            rec.getValue,
-            rec.setValue,
-            rec.ud
+            rec.key.c_str(), rec.type, rec.desc.c_str(), rec.defaultValue.c_str(), rec.getValue, rec.setValue, rec.ud
         };
         visit(&desc, visitUd);
     }
@@ -263,20 +250,28 @@ void SettingsService::EnumerateSettingsPages(
 
 void SettingsService::RegisterKeybindEntry(
     const char* label, const char* actionName, const char* (*getStr)(void*), void (*setStr)(void*, const char*),
-    void* ud
+    void* ud, const char* group, const char* defaultBind
 ) noexcept
 {
-    keybindEntries_.push_back({label, actionName, getStr, setStr, ud});
+    keybindEntries_.push_back(
+        {label, actionName, getStr, setStr, ud, group ? group : "", defaultBind ? defaultBind : ""}
+    );
 }
 
 void SettingsService::EnumerateKeybindEntries(
-    void (*visit)(const char*, const char*, const char* (*)(void*), void (*)(void*, const char*), void*, void*),
+    void (*visit)(
+        const char*, const char*, const char* (*)(void*), void (*)(void*, const char*), void*, const char*, const char*,
+        void*
+    ),
     void* visitUd
 ) const noexcept
 {
     for (const auto& e : keybindEntries_)
     {
-        visit(e.label.c_str(), e.actionName.c_str(), e.getStr, e.setStr, e.ud, visitUd);
+        visit(
+            e.label.c_str(), e.actionName.c_str(), e.getStr, e.setStr, e.ud, e.group.c_str(), e.defaultBind.c_str(),
+            visitUd
+        );
     }
 }
 

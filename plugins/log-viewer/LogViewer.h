@@ -20,7 +20,12 @@ class LogViewerSettings;
 class LogViewer final : public QObject, public ModuleBase
 {
     Q_OBJECT
-    Q_PROPERTY(bool open READ IsOpen NOTIFY changed)
+    // `open` drives the panel's `visible` in QML. Keep it on its own signal, separate
+    // from the content signal: funnelling both through one NOTIFY meant a single emit
+    // flipped visibility *and* changed the model in the same pass, and QML dropped the
+    // ListView content update during that visibility transition — so the view stayed
+    // blank until the next unrelated `changed` arrived. (Mirrors History's split.)
+    Q_PROPERTY(bool open READ IsOpen NOTIFY panelStateChanged)
     Q_PROPERTY(QVariantList lines READ QmlLines NOTIFY changed)
     Q_PROPERTY(QString filterText READ FilterText WRITE SetFilterText NOTIFY changed)
     Q_PROPERTY(bool perfOnly READ PerfOnly WRITE SetPerfOnly NOTIFY changed)
@@ -51,7 +56,7 @@ public:
     void SetFilterText(const QString& value)
     {
         filterText_ = value.toStdString();
-        Q_EMIT changed();
+        EmitLinesChanged();
     }
 
     [[nodiscard]] bool PerfOnly() const
@@ -62,7 +67,7 @@ public:
     void SetPerfOnly(bool value)
     {
         perfOnly_ = value;
-        Q_EMIT changed();
+        EmitLinesChanged();
     }
 
     Q_INVOKABLE void clearLines();
@@ -80,6 +85,7 @@ protected:
 
 Q_SIGNALS:
     void changed();
+    void panelStateChanged();
 
 private:
     struct Entry
@@ -98,6 +104,17 @@ private:
     // Drain newly-appended lines from the ring buffer; returns true iff ≥1 entry was added.
     bool Pull();
     [[nodiscard]] bool Passes(const Entry& e) const;
+
+    // Invalidate the QmlLines cache, then emit `changed`. The dirty flag MUST be set
+    // before the emit: QML's `lines` binding may re-evaluate (calling QmlLines) ahead
+    // of any slot connected to `changed`, so a connect-based invalidation would hand
+    // QML the stale cache and only refresh on the *next* emit — leaving the viewer
+    // blank on open until the next log line arrived.
+    void EmitLinesChanged()
+    {
+        linesCacheDirty_ = true;
+        Q_EMIT changed();
+    }
 
     ILogBuffer* logs_ = nullptr;
     unsigned long long lastSeq_ = 0;
@@ -121,8 +138,8 @@ private:
 
     // ── QML lines cache ────────────────────────────────────────────────────────
     // QmlLines() filters and rebuilds a QVariantList on every read; with the ring
-    // buffer holding up to kMaxEntries lines this is costly. Cache it and
-    // invalidate whenever changed fires (the NOTIFY for `lines` and the filters).
+    // buffer holding up to kMaxEntries lines this is costly. Cache it and invalidate
+    // via EmitLinesChanged() (which sets the flag *before* emitting `changed`).
     mutable QVariantList linesCache_;
     mutable bool linesCacheDirty_ = true;
 

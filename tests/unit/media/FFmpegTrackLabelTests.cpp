@@ -31,6 +31,19 @@ TEST(FFmpegTrackLabelTests, FallsBackToTrackOrdinal)
     EXPECT_STREQ(out, "Track 3");
 }
 
+TEST(FFmpegTrackLabelTests, UndeterminedLanguageFallsBackToOrdinal)
+{
+    char out[256];
+    MakeTrackLabel(out, nullptr, "und", 2, nullptr);
+    EXPECT_STREQ(out, "Track 2");
+
+    // Case-insensitive, and only the exact 3-letter code is treated as undetermined.
+    MakeTrackLabel(out, nullptr, "UND", 4, nullptr);
+    EXPECT_STREQ(out, "Track 4");
+    MakeTrackLabel(out, nullptr, "undetermined", 5, nullptr);
+    EXPECT_STREQ(out, "undetermined");
+}
+
 TEST(FFmpegTrackLabelTests, ExternalFileNameUsedWhenNoMetadata)
 {
     char out[256];

@@ -11,7 +11,7 @@ Item {
     property var vm: viewModel
     anchors.fill: parent
 
-    Drawer {
+    FLDrawer {
         id: drawer
         open: root.vm !== null && root.vm.open
         rightSide: true
@@ -19,22 +19,55 @@ Item {
         onXChanged: if (root.vm !== null) root.vm.publishVisibleWidth(Math.max(0, root.width - x))
 
         ColumnLayout {
+            id: panel
             anchors.fill: parent
-            anchors.margins: 16
-            spacing: 10
+            anchors.margins: 12
+            spacing: 8
+
+            property bool searchOpen: false
 
             RowLayout {
                 Layout.fillWidth: true
-                Text { text: "History"; color: Theme.text; font.pixelSize: 20; font.weight: Font.DemiBold }
-                Item { Layout.fillWidth: true }
-                ActionButton { text: "Clear"; onClicked: root.vm.Clear() }
-                ActionButton { text: "Close"; onClicked: root.vm.togglePanel() }
+                spacing: 6
+                Text {
+                    text: "History"
+                    color: FLTheme.text
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                FLActionButton {
+                    text: "Search"
+                    implicitHeight: 28; padding: 8; font.pixelSize: 12
+                    onClicked: {
+                        panel.searchOpen = !panel.searchOpen
+                        if (!panel.searchOpen && root.vm !== null) root.vm.search = ""
+                    }
+                }
+                FLActionButton { text: "Clear"; implicitHeight: 28; padding: 8; font.pixelSize: 12; onClicked: clearConfirm.open = true }
             }
             TextField {
+                id: searchField
                 Layout.fillWidth: true
+                visible: panel.searchOpen
                 placeholderText: "Search recent files"
+                placeholderTextColor: FLTheme.textMuted
+                color: FLTheme.text
+                font.pixelSize: 13
+                leftPadding: 10
+                rightPadding: 10
+                topPadding: 6
+                bottomPadding: 6
+                selectByMouse: true
                 text: root.vm !== null ? root.vm.search : ""
                 onTextEdited: if (root.vm !== null) root.vm.search = text
+                onVisibleChanged: if (visible) forceActiveFocus()
+                background: Rectangle {
+                    radius: 6
+                    color: "#14000000"
+                    border.width: 1
+                    border.color: searchField.activeFocus ? FLTheme.accent : FLTheme.border
+                }
             }
             ListView {
                 Layout.fillWidth: true
@@ -47,16 +80,16 @@ Item {
                     required property var modelData
                     required property int index
                     width: ListView.view.width
-                    height: 68
-                    radius: 8
+                    height: 58
+                    radius: 6
                     color: row.modelData.selected ? "#408B5CF6" : mouse.containsMouse ? "#18FFFFFF" : "transparent"
                     Column {
                         anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 2
-                        Text { text: row.modelData.label; color: Theme.text; elide: Text.ElideMiddle; width: parent.width }
-                        Text { text: row.modelData.directory; color: Theme.textMuted; elide: Text.ElideMiddle; width: parent.width; font.pixelSize: 11 }
-                        Text { text: row.modelData.meta; color: Theme.textMuted; font.pixelSize: 11 }
+                        anchors.margins: 8
+                        spacing: 1
+                        Text { text: row.modelData.label; color: FLTheme.text; elide: Text.ElideMiddle; width: parent.width }
+                        Text { text: row.modelData.directory; color: FLTheme.textMuted; elide: Text.ElideMiddle; width: parent.width; font.pixelSize: 11 }
+                        Text { text: row.modelData.meta; color: FLTheme.textMuted; font.pixelSize: 11 }
                     }
                     MouseArea {
                         id: mouse
@@ -67,5 +100,14 @@ Item {
                 }
             }
         }
+    }
+
+    FLConfirmDialog {
+        id: clearConfirm
+        title: "Clear history"
+        message: "Remove all entries from your recent files history? This cannot be undone."
+        confirmText: "Clear"
+        destructive: true
+        onAccepted: if (root.vm !== null) root.vm.Clear()
     }
 }

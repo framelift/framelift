@@ -1,5 +1,6 @@
 #include "Overlay.h"
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "Version.h"
@@ -32,6 +33,12 @@ void Overlay::OnInstall(IModuleContext& ctx)
         [this](const NotificationEvent& e)
         {
             ShowCommand(e.text);
+            // Keyboard seeks announce themselves as "Seek ..." notifications;
+            // flash the floating seekbar for those too (slider seeks emit from seek()).
+            if (std::string_view(e.text).starts_with("Seek"))
+            {
+                Q_EMIT seekTriggered();
+            }
         }
     );
 
@@ -73,6 +80,7 @@ void Overlay::seek(const double seconds)
     if (playback_)
     {
         playback_->SeekAbsolute(std::clamp(seconds, 0.0, duration_));
+        Q_EMIT seekTriggered();
     }
 }
 

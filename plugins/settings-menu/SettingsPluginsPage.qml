@@ -15,7 +15,7 @@ Item {
         spacing: 8
         clip: true
 
-        delegate: GlassPanel {
+        delegate: FLGlassPanel {
             id: pluginDelegate
             required property var modelData
             width: ListView.view.width
@@ -31,7 +31,7 @@ Item {
                     spacing: 3
                     Text {
                         text: pluginDelegate.modelData.name
-                        color: Theme.text
+                        color: FLTheme.text
                         font.pixelSize: 15
                         font.weight: Font.DemiBold
                         Layout.fillWidth: true
@@ -39,7 +39,7 @@ Item {
                     }
                     Text {
                         text: pluginDelegate.modelData.description
-                        color: Theme.textMuted
+                        color: FLTheme.textMuted
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
@@ -47,7 +47,7 @@ Item {
                         text: pluginDelegate.modelData.loadFailed
                               ? "Failed to load"
                               : pluginDelegate.modelData.loaded ? "Loaded" : "Pending restart"
-                        color: pluginDelegate.modelData.loadFailed ? Theme.danger : Theme.textMuted
+                        color: pluginDelegate.modelData.loadFailed ? FLTheme.danger : FLTheme.textMuted
                         font.pixelSize: 12
                     }
                 }

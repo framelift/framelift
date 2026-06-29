@@ -53,7 +53,7 @@ std::unique_ptr<IVideoRenderer> GlGraphicsBackend::CreateVideoRenderer()
     return std::make_unique<GlVideoRenderer>();
 }
 
-uintptr_t GlGraphicsBackend::CreateUiTexture(const unsigned char* rgba, int w, int h)
+uintptr_t GlGraphicsBackend::CreateUITexture(const unsigned char* rgba, int w, int h)
 {
     if (!rgba || w <= 0 || h <= 0)
     {

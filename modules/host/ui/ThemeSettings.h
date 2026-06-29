@@ -4,7 +4,7 @@
 
 #include <string>
 
-// Theme settings — owned by the host/ui module.
+// FLTheme settings — owned by the host/ui module.
 
 struct ThemeSettings
 {

@@ -1,7 +1,7 @@
 #include "PluginConfig.h"
 #include "ModuleContext.h"
 #include "Settings.h"
-#include "UiSettings.h"
+#include "UISettings.h"
 
 #include <cstring>
 #include <filesystem>
@@ -56,7 +56,7 @@ TEST(ModuleContextTest, CommitRoundTripsPerType)
     EXPECT_EQ(c.ctx.Settings().GetSettingInt("audio.dynaudnormFrameLen"), 250);
     EXPECT_EQ(GetStr(c.ctx, "files.videoExtensions"), "avi;mov");
     // The commit also reflects in the underlying Settings object.
-    EXPECT_FLOAT_EQ(c.settings.Get<UiSettings>().panelWidth, 500.f);
+    EXPECT_FLOAT_EQ(c.settings.Get<UISettings>().panelWidth, 500.f);
 }
 
 TEST(ModuleContextTest, GetSettingStringReportsFullLength)

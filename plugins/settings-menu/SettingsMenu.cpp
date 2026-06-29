@@ -5,7 +5,9 @@
 
 #include <QtCore/QMetaObject>
 #include <QtCore/QSet>
+#include <QtCore/QVariantList>
 #include <QtCore/QVariantMap>
+#include <QtCore/Qt>
 #include <algorithm>
 #include <cstddef>
 #include <string>
@@ -61,7 +63,7 @@ const char* SettingsPageQmlForSection(const std::string& id)
     {
         return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/PlaybackSettings.qml";
     }
-    if (id == "subtitle")
+    if (id == "subtitles")
     {
         return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/SubtitleSettings.qml";
     }
@@ -71,13 +73,18 @@ const char* SettingsPageQmlForSection(const std::string& id)
     }
     if (id == "ui")
     {
-        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/UiSettings.qml";
+        return "qrc:/qt/qml/FrameLift/Plugins/SettingsMenu/UISettings.qml";
     }
     return nullptr;
 }
 
 QString PageTitleFromId(const std::string& id)
 {
+    // Display names for sections whose pretty title isn't just a capitalised id.
+    if (id == "ui")
+    {
+        return QStringLiteral("UI");
+    }
     QString title = QString::fromStdString(id);
     if (title.isEmpty())
     {
@@ -119,6 +126,9 @@ std::string& EditModel::Str(const std::string& key)
 SettingsSectionPageModel::SettingsSectionPageModel(SettingsMenu& owner, QString id, QString title)
     : owner_(owner), id_(std::move(id)), title_(std::move(title))
 {
+    // Re-seeding the draft (open, save, reset) happens on the owner; relay it as a
+    // page-level change so hand-authored field bindings re-read their values.
+    QObject::connect(&owner_, &SettingsMenu::qmlChanged, this, &SettingsSectionPageModel::changed);
 }
 
 QString SettingsSectionPageModel::Title() const
@@ -134,6 +144,11 @@ QVariantList SettingsSectionPageModel::Fields()
 bool SettingsSectionPageModel::Dirty() const
 {
     return owner_.Dirty();
+}
+
+QVariant SettingsSectionPageModel::fieldValue(const QString& key) const
+{
+    return owner_.FieldValue(key);
 }
 
 void SettingsSectionPageModel::setFieldValue(const QString& key, const QVariant& value)
@@ -187,6 +202,83 @@ void SettingsPluginsPageModel::reset()
 {
 }
 
+KeybindsPageModel::KeybindsPageModel(SettingsMenu& owner) : owner_(owner)
+{
+    // Relay owner-level changes (open/save/reset/capture) so the page re-reads entries,
+    // capture state and conflict text.
+    QObject::connect(&owner_, &SettingsMenu::qmlChanged, this, &KeybindsPageModel::changed);
+}
+
+QString KeybindsPageModel::Title() const
+{
+    return QStringLiteral("Keybinds");
+}
+
+QVariantList KeybindsPageModel::CoreEntries() const
+{
+    return owner_.CoreKeybindEntries();
+}
+
+QVariantList KeybindsPageModel::PluginGroups() const
+{
+    return owner_.PluginKeybindGroups();
+}
+
+bool KeybindsPageModel::Dirty() const
+{
+    return owner_.Dirty();
+}
+
+bool KeybindsPageModel::Capturing() const
+{
+    return owner_.Capturing();
+}
+
+QString KeybindsPageModel::CapturingAction() const
+{
+    return owner_.CapturingActionName();
+}
+
+int KeybindsPageModel::CapturingSlot() const
+{
+    return owner_.CapturingSlot();
+}
+
+QString KeybindsPageModel::Conflict() const
+{
+    return owner_.KeybindConflict();
+}
+
+void KeybindsPageModel::beginCapture(const QString& action, int slot)
+{
+    owner_.BeginCapture(action, slot);
+}
+
+void KeybindsPageModel::captureKey(int qtKey, int qtMods)
+{
+    owner_.CaptureKey(qtKey, qtMods);
+}
+
+void KeybindsPageModel::cancelCapture()
+{
+    owner_.CancelCapture();
+}
+
+void KeybindsPageModel::clearSlot(const QString& action, int slot)
+{
+    owner_.ClearKeybindSlot(action, slot);
+}
+
+void KeybindsPageModel::save()
+{
+    owner_.saveActivePage();
+}
+
+void KeybindsPageModel::reset()
+{
+    owner_.resetActivePage();
+}
+
 const char* SettingsMenu::ModuleName() const
 {
     return "SettingsMenu";
@@ -231,25 +323,15 @@ void SettingsMenu::OnInstall(IModuleContext& ctx)
             [this](ContextMenu& m)
             {
                 m.AddSeparator();
+                // Audio/Subtitle settings are reachable from the context menu's
+                // Audio and Subtitle submenus (owned by the ContextMenu plugin,
+                // which publishes OpenSettingsPageEvent). Only the top-level
+                // Settings entry is contributed here.
                 framelift::AddItem(
                     m, "Settings", "openSettings",
                     [this]
                     {
                         OpenPage(nullptr);
-                    }
-                );
-                framelift::AddItem(
-                    m, "Audio Settings",
-                    [this]
-                    {
-                        OpenPage("audio");
-                    }
-                );
-                framelift::AddItem(
-                    m, "Subtitle Settings",
-                    [this]
-                    {
-                        OpenPage("subtitle");
                     }
                 );
             }
@@ -372,7 +454,37 @@ void SettingsMenu::SeedFromContext()
         },
         this
     );
+
+    SeedPluginKeybinds();
     dirty_ = false;
+}
+
+void SettingsMenu::SeedPluginKeybinds()
+{
+    pluginKeybinds_.clear();
+    auto* registry = SettingsReg();
+    if (!registry)
+    {
+        return;
+    }
+    registry->EnumerateKeybindEntries(
+        [](const char* label, const char* actionName, const char* (*getStr)(void*), void (*setStr)(void*, const char*),
+           void* ud, const char* group, const char* defaultBind, void* visitUd)
+        {
+            auto* self = static_cast<SettingsMenu*>(visitUd);
+            PluginKeybindDraft d;
+            d.label = label ? label : "";
+            d.action = actionName ? actionName : "";
+            d.group = group && *group ? group : "Plugin";
+            d.defaultBind = defaultBind ? defaultBind : "";
+            d.getStr = getStr;
+            d.setStr = setStr;
+            d.ud = ud;
+            d.draft = getStr ? getStr(ud) : "";
+            self->pluginKeybinds_.push_back(std::move(d));
+        },
+        this
+    );
 }
 
 void SettingsMenu::RefreshFields()
@@ -624,9 +736,21 @@ void SettingsMenu::RegisterBuiltInPages()
         {
             continue;
         }
-        auto model = std::make_unique<SettingsSectionPageModel>(*this, id, PageTitleFromId(section));
-        QObject* modelPtr = model.get();
-        pageModels_.push_back(std::move(model));
+        QObject* modelPtr = nullptr;
+        if (section == "keybinds")
+        {
+            // The Keybinds page has a bespoke capture UI + per-plugin grouping, so it
+            // uses KeybindsPageModel rather than the generic field renderer.
+            auto model = std::make_unique<KeybindsPageModel>(*this);
+            modelPtr = model.get();
+            pageModels_.push_back(std::move(model));
+        }
+        else
+        {
+            auto model = std::make_unique<SettingsSectionPageModel>(*this, id, PageTitleFromId(section));
+            modelPtr = model.get();
+            pageModels_.push_back(std::move(model));
+        }
         registry->RegisterSettingsPage(
             section.c_str(), PageTitleFromId(section).toUtf8().constData(), qmlUrl, modelPtr, order
         );
@@ -756,6 +880,26 @@ void SettingsMenu::Save()
         }
     }
     store->SaveSettings();
+
+    // Apply keybind drafts to the live Hotkeys (deferred from capture so all settings
+    // changes take effect on Save). Core values were just committed above; plugin
+    // values are written back through their setter (the plugin persists on shutdown).
+    if (auto* hk = ctx_ ? ctx_->GetService<Hotkeys>() : nullptr)
+    {
+        for (const auto& e : kCoreKeybinds)
+        {
+            hk->RebindList(e.name, model_.Str(e.key).c_str());
+        }
+        for (auto& d : pluginKeybinds_)
+        {
+            if (d.setStr)
+            {
+                d.setStr(d.ud, d.draft.c_str());
+            }
+            hk->RebindList(d.action.c_str(), d.draft.c_str());
+        }
+    }
+
     dirty_ = false;
     Q_EMIT qmlChanged();
 }
@@ -786,6 +930,10 @@ void SettingsMenu::Reset()
     for (const auto& f : fields_)
     {
         ResetValue(f);
+    }
+    for (auto& d : pluginKeybinds_)
+    {
+        d.draft = d.defaultBind;
     }
     dirty_ = true;
     Q_EMIT qmlChanged();
@@ -824,6 +972,35 @@ float SettingsMenu::SettingFloat(const std::string& key)
 std::string SettingsMenu::SettingString(const std::string& key)
 {
     return model_.Str(key);
+}
+
+QVariant SettingsMenu::FieldValue(const QString& key)
+{
+    const std::string fieldKey = key.toStdString();
+    const auto it = std::ranges::find_if(
+        fields_,
+        [&](const FieldMeta& field)
+        {
+            return field.key == fieldKey;
+        }
+    );
+    if (it == fields_.end())
+    {
+        return {};
+    }
+    switch (it->type)
+    {
+    case 0:
+        return model_.Bool(fieldKey);
+    case 1:
+        return model_.Int(fieldKey);
+    case 2:
+        return model_.Float(fieldKey);
+    case 3:
+        return QString::fromStdString(model_.Str(fieldKey));
+    default:
+        return {};
+    }
 }
 
 void SettingsMenu::Open() noexcept
@@ -867,10 +1044,7 @@ void SettingsMenu::SetCapturing(const bool v)
     isCapturing_ = v;
     if (!v)
     {
-        capturingBind_ = nullptr;
-        capturingGetStr_ = nullptr;
-        capturingSetStr_ = nullptr;
-        capturingUd_ = nullptr;
+        capturingDraft_ = nullptr;
         capturingName_.clear();
     }
 }
@@ -882,6 +1056,8 @@ std::string SettingsMenu::FindKeyOwnerLabel(const std::string& canonicalKey, con
         return {};
     }
     const std::string except = exceptAction ? exceptAction : "";
+    // Conflict detection runs against the editable drafts (core in model_, plugin in
+    // pluginKeybinds_), so a key the user just reassigned is seen immediately.
     for (const auto& e : kCoreKeybinds)
     {
         if (e.name != except && keybinds::Contains(model_.Str(e.key), canonicalKey))
@@ -889,90 +1065,208 @@ std::string SettingsMenu::FindKeyOwnerLabel(const std::string& canonicalKey, con
             return e.label;
         }
     }
-
-    struct SearchCtx
+    for (const auto& d : pluginKeybinds_)
     {
-        const std::string* key;
-        const std::string* except;
-        std::string found;
-    };
-
-    SearchCtx sc{&canonicalKey, &except, {}};
-    if (auto* reg = SettingsReg())
-    {
-        reg->EnumerateKeybindEntries(
-            [](const char* label, const char* actionName, const char* (*getStr)(void*), void (*)(void*, const char*),
-               void* ud, void* pv)
-            {
-                auto& s = *static_cast<SearchCtx*>(pv);
-                if (!s.found.empty() || (actionName && *s.except == actionName))
-                {
-                    return;
-                }
-                const std::string list = getStr ? getStr(ud) : "";
-                if (keybinds::Contains(list, *s.key))
-                {
-                    s.found = label ? label : "";
-                }
-            },
-            &sc
-        );
+        if (d.action != except && keybinds::Contains(d.draft, canonicalKey))
+        {
+            return d.label;
+        }
     }
-    return sc.found;
+    return {};
 }
 
-bool SettingsMenu::HandleKeyDownEvent(const AppEvent& e)
+std::string* SettingsMenu::DraftForAction(const std::string& action)
+{
+    for (const auto& e : kCoreKeybinds)
+    {
+        if (action == e.name)
+        {
+            return &model_.Str(e.key);
+        }
+    }
+    for (auto& d : pluginKeybinds_)
+    {
+        if (action == d.action)
+        {
+            return &d.draft;
+        }
+    }
+    return nullptr;
+}
+
+void SettingsMenu::BeginCapture(const QString& action, const int slot)
+{
+    const std::string name = action.toStdString();
+    std::string* draft = DraftForAction(name);
+    if (!draft)
+    {
+        return;
+    }
+    capturingDraft_ = draft;
+    capturingName_ = name;
+    capturingSlot_ = slot;
+    keybindConflict_.clear();
+    SetCapturing(true);
+    Q_EMIT qmlChanged();
+}
+
+void SettingsMenu::CancelCapture()
+{
+    if (isCapturing_)
+    {
+        SetCapturing(false);
+        Q_EMIT qmlChanged();
+    }
+}
+
+void SettingsMenu::CaptureKey(const int qtKey, const int qtMods)
 {
     if (!isCapturing_)
     {
-        return open_;
+        return;
     }
-    const AppEvent::KeyPayload& kp = e.AsKey();
-    if (kp.key == Keys::Escape)
+    Mod mods = Mod::None;
+    if (qtMods & static_cast<int>(Qt::ControlModifier))
     {
-        SetCapturing(false);
-        return true;
+        mods = mods | Mod::Ctrl;
     }
-    char bindBuf[64] = {};
-    KeyBindToString(kp.key, kp.mods, bindBuf, sizeof(bindBuf));
-    const std::string keyStr = bindBuf;
+    if (qtMods & static_cast<int>(Qt::ShiftModifier))
+    {
+        mods = mods | Mod::Shift;
+    }
+    if (qtMods & static_cast<int>(Qt::AltModifier))
+    {
+        mods = mods | Mod::Alt;
+    }
+    // Key constants mirror Qt::Key (AppEvent.h), so event.key is already a framelift Key.
+    char buf[64] = {};
+    KeyBindToString(static_cast<Key>(qtKey), mods, buf, sizeof(buf));
+    ApplyCanonicalKey(buf);
+}
+
+void SettingsMenu::ApplyCanonicalKey(const std::string& keyStr)
+{
+    if (!isCapturing_ || !capturingDraft_)
+    {
+        return;
+    }
+    // KeyBindToString yields "?" for an unknown / modifier-only key — ignore it and
+    // stay in capture so the user can press a real key.
+    if (keyStr.empty() || keyStr.find('?') != std::string::npos)
+    {
+        return;
+    }
 
     const std::string owner = FindKeyOwnerLabel(keyStr, capturingName_.c_str());
     if (!owner.empty())
     {
         keybindConflict_ = "\"" + keyStr + "\" is already bound to " + owner;
         SetCapturing(false);
-        return true;
+        Q_EMIT qmlChanged();
+        return;
     }
-
-    const std::string cur = capturingBind_     ? *capturingBind_
-                            : capturingGetStr_ ? capturingGetStr_(capturingUd_)
-                                               : std::string{};
-    if (keybinds::Contains(cur, keyStr))
+    if (!keybinds::Contains(*capturingDraft_, keyStr))
     {
-        keybindConflict_.clear();
-        SetCapturing(false);
-        return true;
-    }
-
-    const std::string next = keybinds::SetSlot(cur, capturingSlot_, keyStr);
-    if (capturingBind_)
-    {
-        *capturingBind_ = next;
-    }
-    else if (capturingSetStr_)
-    {
-        capturingSetStr_(capturingUd_, next.c_str());
-    }
-    if (!capturingName_.empty())
-    {
-        if (auto* hk = ctx_ ? ctx_->GetService<Hotkeys>() : nullptr)
-        {
-            hk->RebindList(capturingName_.c_str(), next.c_str());
-        }
+        *capturingDraft_ = keybinds::SetSlot(*capturingDraft_, capturingSlot_, keyStr);
+        dirty_ = true;
     }
     keybindConflict_.clear();
-    dirty_ = true;
     SetCapturing(false);
-    return true;
+    Q_EMIT qmlChanged();
+}
+
+void SettingsMenu::ClearKeybindSlot(const QString& action, const int slot)
+{
+    std::string* draft = DraftForAction(action.toStdString());
+    if (!draft)
+    {
+        return;
+    }
+    *draft = keybinds::SetSlot(*draft, slot, "");
+    dirty_ = true;
+    keybindConflict_.clear();
+    Q_EMIT qmlChanged();
+}
+
+namespace
+{
+QVariantMap KeybindEntryRow(const QString& label, const QString& action, bool isCore, const std::string& list)
+{
+    QVariantMap row;
+    row.insert(QStringLiteral("label"), label);
+    row.insert(QStringLiteral("action"), action);
+    row.insert(QStringLiteral("isCore"), isCore);
+    row.insert(QStringLiteral("primary"), QString::fromStdString(keybinds::Slot(list, 0)));
+    row.insert(QStringLiteral("alternate"), QString::fromStdString(keybinds::Slot(list, 1)));
+    return row;
+}
+} // namespace
+
+QVariantList SettingsMenu::CoreKeybindEntries()
+{
+    RefreshFields();
+    QVariantList result;
+    for (const auto& e : kCoreKeybinds)
+    {
+        result.push_back(
+            KeybindEntryRow(QString::fromUtf8(e.label), QString::fromUtf8(e.name), true, model_.Str(e.key))
+        );
+    }
+    return result;
+}
+
+QVariantList SettingsMenu::PluginKeybindGroups()
+{
+    RefreshFields();
+    QVariantList groups;
+    std::vector<QString> order; // preserve registration order of groups
+    for (const auto& d : pluginKeybinds_)
+    {
+        const QString title = QString::fromStdString(d.group);
+        if (std::find(order.begin(), order.end(), title) == order.end())
+        {
+            order.push_back(title);
+            QVariantMap group;
+            group.insert(QStringLiteral("title"), title);
+            group.insert(QStringLiteral("entries"), QVariantList{});
+            groups.push_back(group);
+        }
+        const int idx = static_cast<int>(std::find(order.begin(), order.end(), title) - order.begin());
+        QVariantMap group = groups[idx].toMap();
+        QVariantList list = group.value(QStringLiteral("entries")).toList();
+        list.push_back(
+            KeybindEntryRow(QString::fromStdString(d.label), QString::fromStdString(d.action), false, d.draft)
+        );
+        group.insert(QStringLiteral("entries"), list);
+        groups[idx] = group;
+    }
+    return groups;
+}
+
+bool SettingsMenu::Capturing() const noexcept
+{
+    return isCapturing_;
+}
+
+QString SettingsMenu::CapturingActionName() const
+{
+    return QString::fromStdString(capturingName_);
+}
+
+int SettingsMenu::CapturingSlot() const noexcept
+{
+    return capturingSlot_;
+}
+
+QString SettingsMenu::KeybindConflict() const
+{
+    return QString::fromStdString(keybindConflict_);
+}
+
+bool SettingsMenu::HandleKeyDownEvent(const AppEvent&)
+{
+    // Key capture is driven from the settings ApplicationWindow's QML (a separate Qt
+    // window whose key events never reach this host AppEvent hook). This handler only
+    // swallows main-window keybinds while the settings UI is open.
+    return open_;
 }

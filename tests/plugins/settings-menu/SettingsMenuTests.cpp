@@ -9,11 +9,13 @@
 #include "AudioSettings.h"
 #include "CoreSettings.h"
 #include "ThemeSettings.h"
-#include "UiSettings.h"
+#include "UISettings.h"
 
+#include <QtCore/QVariantList>
+#include <QtCore/QVariantMap>
+#include <QtCore/Qt>
 #include <cstring>
 #include <gtest/gtest.h>
-#include <QtCore/QVariantMap>
 #include <ranges>
 
 namespace
@@ -33,7 +35,7 @@ bool PagesContainId(const QVariantList& pages, const QString& id)
 TEST(SettingsMenuTest, SeedsEditingModelFromContextOnInstall)
 {
     Settings settings;
-    settings.Get<UiSettings>().panelWidth = 500.f; // non-default host values
+    settings.Get<UISettings>().panelWidth = 500.f; // non-default host values
     settings.Get<AudioSettings>().dynaudnormFrameLen = 321;
     settings.Get<FilesSettings>().videoExtensions = "avi;mov";
 
@@ -91,7 +93,9 @@ TEST(SettingsMenuTest, DoesNotInventModulePagesFromRawFields)
         {
             return "1";
         },
-        [](void*, const char*) {},
+        [](void*, const char*)
+        {
+        },
         nullptr
     };
     ctx.Settings().RegisterModuleSetting(&desc);
@@ -164,15 +168,135 @@ TEST(KeybindListTest, SlotReadsByPosition)
 
 TEST(KeybindListTest, SetSlotEditsOneSlot)
 {
-    EXPECT_EQ(keybinds::SetSlot("", 0, "F"), "F");          // set primary
-    EXPECT_EQ(keybinds::SetSlot("F", 1, "F2"), "F;F2");     // add alternate
-    EXPECT_EQ(keybinds::SetSlot("F;F2", 0, ""), "F2");      // clear primary compacts
-    EXPECT_EQ(keybinds::SetSlot("F;F2", 1, ""), "F");       // clear alternate
-    EXPECT_EQ(keybinds::SetSlot("F;F2", 0, "G"), "G;F2");   // replace primary
+    EXPECT_EQ(keybinds::SetSlot("", 0, "F"), "F");        // set primary
+    EXPECT_EQ(keybinds::SetSlot("F", 1, "F2"), "F;F2");   // add alternate
+    EXPECT_EQ(keybinds::SetSlot("F;F2", 0, ""), "F2");    // clear primary compacts
+    EXPECT_EQ(keybinds::SetSlot("F;F2", 1, ""), "F");     // clear alternate
+    EXPECT_EQ(keybinds::SetSlot("F;F2", 0, "G"), "G;F2"); // replace primary
 }
 
 TEST(KeybindListTest, SetSlotAvoidsDuplicateAcrossSlots)
 {
     // Assigning a key already held by the other slot moves it rather than duplicating.
     EXPECT_EQ(keybinds::SetSlot("F;F2", 0, "F2"), "F2");
+}
+
+// ── Keybinds page capture (Qt-driven, into drafts) ────────────────────────────
+
+namespace
+{
+QVariantMap FindKeybindEntry(const QVariantList& entries, const QString& action)
+{
+    for (const QVariant& v : entries)
+    {
+        const QVariantMap m = v.toMap();
+        if (m.value(QStringLiteral("action")).toString() == action)
+        {
+            return m;
+        }
+    }
+    return {};
+}
+} // namespace
+
+TEST(SettingsMenuKeybindsTest, CapturesCoreKeyIntoDraftSlots)
+{
+    Settings settings;
+    const TempFile ini;
+    ModuleContext ctx("pref/", &settings, ini.str());
+    SettingsMenu sm;
+    sm.Install(ctx);
+
+    // Primary slot: Ctrl+P (an unbound chord) replaces the default.
+    sm.BeginCapture(QStringLiteral("togglePause"), 0);
+    EXPECT_TRUE(sm.Capturing());
+    sm.CaptureKey(static_cast<int>(Keys::P), static_cast<int>(Qt::ControlModifier));
+    EXPECT_FALSE(sm.Capturing());
+    EXPECT_EQ(sm.SettingString("keybinds.togglePause"), "Ctrl+P");
+
+    // Alternate slot: add G.
+    sm.BeginCapture(QStringLiteral("togglePause"), 1);
+    sm.CaptureKey(static_cast<int>(Keys::G), 0);
+    EXPECT_EQ(sm.SettingString("keybinds.togglePause"), "Ctrl+P;G");
+
+    // Clearing the alternate compacts back to just the primary.
+    sm.ClearKeybindSlot(QStringLiteral("togglePause"), 1);
+    EXPECT_EQ(sm.SettingString("keybinds.togglePause"), "Ctrl+P");
+}
+
+TEST(SettingsMenuKeybindsTest, RejectsKeyAlreadyBoundElsewhere)
+{
+    Settings settings;
+    const TempFile ini;
+    ModuleContext ctx("pref/", &settings, ini.str());
+    SettingsMenu sm;
+    sm.Install(ctx);
+
+    // "M" is the default for toggleMute — capturing it for togglePause must conflict.
+    sm.BeginCapture(QStringLiteral("togglePause"), 0);
+    sm.CaptureKey(static_cast<int>(Keys::M), 0);
+
+    EXPECT_FALSE(sm.Capturing());
+    EXPECT_FALSE(sm.KeybindConflict().isEmpty());
+    EXPECT_EQ(sm.SettingString("keybinds.togglePause"), "Space"); // unchanged default
+}
+
+TEST(SettingsMenuKeybindsTest, ExposesCoreAndPluginGroups)
+{
+    Settings settings;
+    const TempFile ini;
+    ModuleContext ctx("pref/", &settings, ini.str());
+    SettingsMenu sm;
+    sm.Install(ctx);
+
+    const QVariantList core = sm.CoreKeybindEntries();
+    EXPECT_FALSE(FindKeybindEntry(core, QStringLiteral("togglePause")).isEmpty());
+
+    // SettingsMenu's own "openSettings" keybind is auto-registered via ModuleBase and
+    // must surface under its module's group.
+    const QVariantList groups = sm.PluginKeybindGroups();
+    ASSERT_FALSE(groups.isEmpty());
+    bool foundOpenSettings = false;
+    for (const QVariant& g : groups)
+    {
+        const QVariantList entries = g.toMap().value(QStringLiteral("entries")).toList();
+        if (!FindKeybindEntry(entries, QStringLiteral("openSettings")).isEmpty())
+        {
+            foundOpenSettings = true;
+            EXPECT_EQ(g.toMap().value(QStringLiteral("title")).toString(), QStringLiteral("SettingsMenu"));
+        }
+    }
+    EXPECT_TRUE(foundOpenSettings);
+}
+
+TEST(SettingsMenuKeybindsTest, ResetRestoresPluginDefault)
+{
+    Settings settings;
+    const TempFile ini;
+    ModuleContext ctx("pref/", &settings, ini.str());
+    SettingsMenu sm;
+    sm.Install(ctx);
+
+    // Rebind openSettings, then Reset should restore its factory default ("Ctrl+Comma").
+    sm.BeginCapture(QStringLiteral("openSettings"), 0);
+    sm.CaptureKey(static_cast<int>(Keys::F8), 0);
+
+    auto openSettingsPrimary = [&]
+    {
+        const QVariantList groups = sm.PluginKeybindGroups();
+        for (const QVariant& g : groups)
+        {
+            const QVariantMap e =
+                FindKeybindEntry(g.toMap().value(QStringLiteral("entries")).toList(), QStringLiteral("openSettings"));
+            if (!e.isEmpty())
+            {
+                return e.value(QStringLiteral("primary")).toString();
+            }
+        }
+        return QString{};
+    };
+    EXPECT_EQ(openSettingsPrimary(), QStringLiteral("F8"));
+
+    sm.resetActivePage();
+    EXPECT_EQ(openSettingsPrimary(), QStringLiteral("Ctrl+Comma"));
 }

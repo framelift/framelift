@@ -29,7 +29,7 @@ public:
     }
 
     [[nodiscard]] std::unique_ptr<IVideoRenderer> CreateVideoRenderer() override;
-    [[nodiscard]] uintptr_t CreateUiTexture(const unsigned char* rgba, int w, int h) override;
+    [[nodiscard]] uintptr_t CreateUITexture(const unsigned char* rgba, int w, int h) override;
 
     [[nodiscard]] void* GetProcAddr(const char* name) const override;
 

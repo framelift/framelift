@@ -135,6 +135,16 @@ void ContextMenuModule::HandleMediaEvent(const MediaEvent& e)
     {
         playerIdle_ = e.property.value.flag != 0;
         Q_EMIT menuChanged();
+        Q_EMIT tracksChanged(); // idle ⇒ no tracks; loaded ⇒ refresh
+        return;
+    }
+
+    // The track lists become available once a file is loaded and change when the
+    // audio output is reconfigured; refresh the submenu projections on both.
+    if (e.type == MediaEventType::FileLoaded || e.type == MediaEventType::AudioReconfig ||
+        e.type == MediaEventType::EndFile)
+    {
+        Q_EMIT tracksChanged();
     }
 }
 
@@ -163,6 +173,78 @@ QVariantList ContextMenuModule::QmlExtraItems()
     extraItemsCache_ = std::move(result);
     extraItemsCacheDirty_ = false;
     return extraItemsCache_;
+}
+
+QVariantList ContextMenuModule::QmlAudioTracks() const
+{
+    QVariantList rows;
+    if (audio_)
+    {
+        audio_->EnumerateAudioTracks(
+            [](const AudioTrack* t, void* ud)
+            {
+                auto* out = static_cast<QVariantList*>(ud);
+                QVariantMap row;
+                row.insert(QStringLiteral("id"), static_cast<qlonglong>(t->id));
+                row.insert(QStringLiteral("label"), QString::fromUtf8(t->label));
+                row.insert(QStringLiteral("selected"), t->selected);
+                out->push_back(row);
+            },
+            &rows
+        );
+    }
+    return rows;
+}
+
+QVariantList ContextMenuModule::QmlSubtitleTracks() const
+{
+    QVariantList rows;
+    if (subtitles_)
+    {
+        subtitles_->EnumerateSubtitleTracks(
+            [](const SubtitleTrack* t, void* ud)
+            {
+                auto* out = static_cast<QVariantList*>(ud);
+                QVariantMap row;
+                row.insert(QStringLiteral("id"), static_cast<qlonglong>(t->id));
+                row.insert(QStringLiteral("label"), QString::fromUtf8(t->label));
+                row.insert(QStringLiteral("selected"), t->selected);
+                out->push_back(row);
+            },
+            &rows
+        );
+    }
+    return rows;
+}
+
+QVariantMap ContextMenuModule::QmlCoreShortcuts() const
+{
+    QVariantMap shortcuts;
+    for (const char* name :
+         {"openFileDialog", "togglePause", "toggleFullscreen", "toggleMute", "toggleSubtitles", "quit"})
+    {
+        shortcuts.insert(QString::fromUtf8(name), QString::fromStdString(ShortcutFor(name)));
+    }
+    return shortcuts;
+}
+
+void ContextMenuModule::selectAudioTrack(const qint64 id)
+{
+    if (audio_)
+    {
+        audio_->SelectAudioTrack(id);
+        Q_EMIT tracksChanged();
+    }
+}
+
+void ContextMenuModule::selectSubtitleTrack(const qint64 id)
+{
+    if (subtitles_)
+    {
+        subtitles_->SelectSubtitleTrack(id);
+        Q_EMIT tracksChanged();
+        Q_EMIT menuChanged(); // selecting a track can flip the subtitles-enabled state
+    }
 }
 
 void ContextMenuModule::openNetwork()

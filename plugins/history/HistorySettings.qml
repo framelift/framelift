@@ -10,7 +10,7 @@ Item {
     id: root
     required property var viewModel
 
-    SettingRow {
+    FLSettingRow {
         anchors.left: parent.left
         anchors.right: parent.right
         title: "Maximum entries"

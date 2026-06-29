@@ -14,13 +14,13 @@ Item {
         anchors.fill: parent
         spacing: 8
 
-        SettingRow {
+        FLSettingRow {
             title: "Scan subdirectories"
             description: "Include child folders when building the playlist for an opened file."
             Switch { checked: root.viewModel.scanSubdirs; onToggled: root.viewModel.scanSubdirs = checked }
         }
 
-        SettingRow {
+        FLSettingRow {
             title: "Maximum scan depth"
             description: "Limits how deep recursive playlist scans may descend."
             SpinBox {
@@ -32,19 +32,19 @@ Item {
             }
         }
 
-        SettingRow {
+        FLSettingRow {
             title: "Mixed playlists"
             description: "Allow playlist scans to include supported non-video media types."
             Switch { checked: root.viewModel.mixedPlaylist; onToggled: root.viewModel.mixedPlaylist = checked }
         }
 
-        SettingRow {
+        FLSettingRow {
             title: "Image slideshow"
             description: "Advance image entries automatically when mixed playlists include images."
             Switch { checked: root.viewModel.imageSlideshow; onToggled: root.viewModel.imageSlideshow = checked }
         }
 
-        SettingRow {
+        FLSettingRow {
             title: "Slideshow duration"
             description: "Seconds to show each image before moving to the next entry."
             TextField {
@@ -55,7 +55,7 @@ Item {
             }
         }
 
-        SettingRow {
+        FLSettingRow {
             title: "Auto reload"
             description: "Refresh the playlist when watched directories change."
             Switch { checked: root.viewModel.autoReload; onToggled: root.viewModel.autoReload = checked }

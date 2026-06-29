@@ -43,6 +43,9 @@ public:
     [[nodiscard]] QVariantList Fields();
     [[nodiscard]] bool Dirty() const;
 
+    // Current draft value for a single "section.key", for hand-authored pages that
+    // bind individual fields instead of iterating the generic `fields` list.
+    Q_INVOKABLE QVariant fieldValue(const QString& key) const;
     Q_INVOKABLE void setFieldValue(const QString& key, const QVariant& value);
     Q_INVOKABLE void save();
     Q_INVOKABLE void reset();
@@ -71,6 +74,47 @@ public:
     [[nodiscard]] bool Dirty() const;
 
     Q_INVOKABLE void setPluginEnabled(const QString& pluginId, bool enabled);
+    Q_INVOKABLE void save();
+    Q_INVOKABLE void reset();
+
+Q_SIGNALS:
+    void changed();
+
+private:
+    SettingsMenu& owner_;
+};
+
+// Dedicated view-model for the Keybinds page: core ("Application") keybinds plus one
+// group per plugin, each action with two capture slots. Delegates to SettingsMenu,
+// which owns the draft state and the conflict/apply logic.
+class KeybindsPageModel final : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QString title READ Title CONSTANT)
+    Q_PROPERTY(QVariantList coreEntries READ CoreEntries NOTIFY changed)
+    Q_PROPERTY(QVariantList pluginGroups READ PluginGroups NOTIFY changed)
+    Q_PROPERTY(bool dirty READ Dirty NOTIFY changed)
+    Q_PROPERTY(bool capturing READ Capturing NOTIFY changed)
+    Q_PROPERTY(QString capturingAction READ CapturingAction NOTIFY changed)
+    Q_PROPERTY(int capturingSlot READ CapturingSlot NOTIFY changed)
+    Q_PROPERTY(QString conflict READ Conflict NOTIFY changed)
+
+public:
+    explicit KeybindsPageModel(SettingsMenu& owner);
+
+    [[nodiscard]] QString Title() const;
+    [[nodiscard]] QVariantList CoreEntries() const;
+    [[nodiscard]] QVariantList PluginGroups() const;
+    [[nodiscard]] bool Dirty() const;
+    [[nodiscard]] bool Capturing() const;
+    [[nodiscard]] QString CapturingAction() const;
+    [[nodiscard]] int CapturingSlot() const;
+    [[nodiscard]] QString Conflict() const;
+
+    Q_INVOKABLE void beginCapture(const QString& action, int slot);
+    Q_INVOKABLE void captureKey(int qtKey, int qtMods);
+    Q_INVOKABLE void cancelCapture();
+    Q_INVOKABLE void clearSlot(const QString& action, int slot);
     Q_INVOKABLE void save();
     Q_INVOKABLE void reset();
 
@@ -121,6 +165,24 @@ public:
     [[nodiscard]] float SettingFloat(const std::string& key);
     [[nodiscard]] std::string SettingString(const std::string& key);
 
+    // Draft value for a key as a typed QVariant (type resolved from the registered
+    // field). Returns an invalid QVariant for unknown keys.
+    [[nodiscard]] QVariant FieldValue(const QString& key);
+
+    // ── Keybinds page support ────────────────────────────────────────────────
+    // All keybind edits are drafts (core in model_, plugin in pluginKeybinds_) and
+    // only applied to the live Hotkeys + persisted on Save().
+    [[nodiscard]] QVariantList CoreKeybindEntries();
+    [[nodiscard]] QVariantList PluginKeybindGroups();
+    void BeginCapture(const QString& action, int slot);
+    void CaptureKey(int qtKey, int qtMods);
+    void CancelCapture();
+    void ClearKeybindSlot(const QString& action, int slot);
+    [[nodiscard]] bool Capturing() const noexcept;
+    [[nodiscard]] QString CapturingActionName() const;
+    [[nodiscard]] int CapturingSlot() const noexcept;
+    [[nodiscard]] QString KeybindConflict() const;
+
 protected:
     const char* ModuleName() const override;
     std::vector<framelift::Keybind> Keybinds() override;
@@ -164,6 +226,13 @@ private:
     void SetCapturing(bool v);
     [[nodiscard]] std::string FindKeyOwnerLabel(const std::string& canonicalKey, const char* exceptAction);
 
+    // Keybind drafts: seed plugin entries, resolve the draft string for an action
+    // (core in model_, plugin in pluginKeybinds_), and apply a canonical key into the
+    // capturing slot (conflict-checked, no live rebind — Save() applies).
+    void SeedPluginKeybinds();
+    [[nodiscard]] std::string* DraftForAction(const std::string& action);
+    void ApplyCanonicalKey(const std::string& keyStr);
+
     bool open_ = false;
     bool dirty_ = false;
     bool isCapturing_ = false;
@@ -174,12 +243,25 @@ private:
     std::string qmlActivePage_;
     std::vector<std::unique_ptr<QObject>> pageModels_;
 
+    // Editable draft of one plugin-registered keybind. `draft` is seeded from the
+    // plugin's live value on open and only written back (via setStr) on Save().
+    struct PluginKeybindDraft
+    {
+        std::string label;
+        std::string action;
+        std::string group;
+        std::string defaultBind;
+        const char* (*getStr)(void*) = nullptr;
+        void (*setStr)(void*, const char*) = nullptr;
+        void* ud = nullptr;
+        std::string draft;
+    };
+
+    std::vector<PluginKeybindDraft> pluginKeybinds_;
+
     std::string capturingName_;
     int capturingSlot_ = 0;
-    std::string* capturingBind_ = nullptr;
-    const char* (*capturingGetStr_)(void*) = nullptr;
-    void (*capturingSetStr_)(void*, const char*) = nullptr;
-    void* capturingUd_ = nullptr;
+    std::string* capturingDraft_ = nullptr; // &model_.Str(coreKey) or &PluginKeybindDraft::draft
     std::string keybindConflict_;
 
     // ── QML pages cache ────────────────────────────────────────────────────────

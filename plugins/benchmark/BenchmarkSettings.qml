@@ -14,13 +14,13 @@ Item {
         anchors.fill: parent
         spacing: 8
 
-        SettingRow {
+        FLSettingRow {
             title: "Limit duration"
             description: "Stop benchmark accumulation after the configured playback duration."
             Switch { checked: root.viewModel.limitDuration; onToggled: root.viewModel.limitDuration = checked }
         }
 
-        SettingRow {
+        FLSettingRow {
             title: "Duration"
             description: "Benchmark run length in seconds."
             TextField {
