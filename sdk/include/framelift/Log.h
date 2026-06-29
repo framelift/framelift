@@ -33,27 +33,50 @@ void Emit(Level level, const std::string& msg);
 // Host-only: configure the backing logger. Defined in modules/host/logging/Log.cpp.
 void Init();
 
+// Runtime gating, configured once from the environment (FL_LOG_LEVEL / FL_LOG_PERF) —
+// read independently by each translation unit (host + every plugin share one process).
+// IsEnabled reports whether a message at `level` should be emitted; PerfActive caches
+// the perf switch so the FRAMELIFT_PERF_* macros below can elide their call when off.
+bool IsEnabled(Level level);
+bool PerfActive();
+
 template <typename... Args>
 void Debug(std::format_string<Args...> fmt, Args&&... args)
 {
+    if (!IsEnabled(Level::Debug))
+    {
+        return;
+    }
     Emit(Level::Debug, std::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
 void Info(std::format_string<Args...> fmt, Args&&... args)
 {
+    if (!IsEnabled(Level::Info))
+    {
+        return;
+    }
     Emit(Level::Info, std::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
 void Warn(std::format_string<Args...> fmt, Args&&... args)
 {
+    if (!IsEnabled(Level::Warn))
+    {
+        return;
+    }
     Emit(Level::Warn, std::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
 void Error(std::format_string<Args...> fmt, Args&&... args)
 {
+    if (!IsEnabled(Level::Error))
+    {
+        return;
+    }
     Emit(Level::Error, std::format(fmt, std::forward<Args>(args)...));
 }
 
@@ -70,5 +93,5 @@ void PerfStart(const char* name);
 double PerfEnd(const char* name);
 } // namespace Log
 
-#define FRAMELIFT_PERF_START(name) ::Log::PerfStart(name)
-#define FRAMELIFT_PERF_END(name) ::Log::PerfEnd(name)
+#define FRAMELIFT_PERF_START(name) (::Log::PerfActive() ? ::Log::PerfStart(name) : (void)0)
+#define FRAMELIFT_PERF_END(name) (::Log::PerfActive() ? ::Log::PerfEnd(name) : -1.0)

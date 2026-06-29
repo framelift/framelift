@@ -155,4 +155,13 @@ void Log::Init()
 
     // Route the host's own Log::* calls into Qt logging.
     SetSink(&QtLogSink);
+
+    // Report the active gating (configured from FL_LOG_LEVEL / FL_LOG_PERF) so it's
+    // obvious from the console what's enabled. Probe IsEnabled rather than re-reading
+    // the env here — the SDK owns that parse.
+    const char* level = IsEnabled(Level::Debug) ? "debug"
+                        : IsEnabled(Level::Info) ? "info"
+                        : IsEnabled(Level::Warn) ? "warn"
+                                                 : "error";
+    Info("log level: {}  perf: {}", level, PerfActive() ? "on" : "off");
 }
