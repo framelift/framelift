@@ -1,7 +1,7 @@
 # Maintainer: FrameLift <https://github.com/FrameLift/FrameLift>
 pkgname=framelift-git
 _pkgname=framelift
-pkgver=0.3.1
+pkgver=0.0.0
 pkgrel=1
 pkgdesc="Qt 6 / Qt Quick video player using FFmpeg and libass (VCS build)"
 arch=('x86_64')
@@ -25,15 +25,12 @@ makedepends=(
   'glslang'
   'vulkan-headers'
 )
-# Tracks feat/qt: the plugins/ runtime layout this PKGBUILD installs (exe +
-# plugins side by side, framelift.*.so) lives only on that branch for now.
-# Switch to the default branch once it merges and the layout is released.
-source=("$_pkgname::git+$url.git#branch=feat/qt")
+source=("$_pkgname::git+$url.git")
 sha256sums=('SKIP')
 
 pkgver() {
   cd "$_pkgname"
-  # Latest tag plus commits since, e.g. 0.3.1.r12.gabc1234
+  # Latest tag plus commits since, e.g. 0.0.0.r12.gabc1234
   git describe --long --tags --abbrev=7 2>/dev/null \
     | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' \
     || printf '0.0.0.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
