@@ -343,6 +343,19 @@ private:
     // before it. seekRefresh_ lets the video worker present one frame while paused.
     bool hasPendingSeek_ = false;
     double seekTarget_ = 0.0;
+    // Held-key seek state (all guarded by mutex_). Two distinct release points, so two
+    // flags — conflating them re-introduces the jump-to-0 on files with audio:
+    //  • seekSettled_  — a post-seek *frame has been painted*. Gates the held-step
+    //    pipeline: the decode loop / workers must show the current seek's frame before
+    //    honouring the next pending seek, so a held key steps visibly instead of freezing.
+    //    Set at the video present (audio deliver for audio-only files).
+    //  • seekClockValid_ — the *authoritative master clock* is re-established (audio clock
+    //    when a device is open, else the video wall clock). Gates the relative-seek anchor
+    //    in Seek(): until true, GetMasterClock() reads ~0, so a repeat must accumulate
+    //    against seekTarget_ instead of re-targeting from the start. The video frame can
+    //    paint before the audio worker re-feeds, so this must NOT key off the video frame.
+    bool seekSettled_ = true;
+    bool seekClockValid_ = true;
     double seekSkipPts_ = -1e18;
     std::atomic<bool> seekRefresh_{false};
     std::atomic<bool> hrSeek_{true}; // PlaybackOptions.hrSeek (exact vs keyframe)

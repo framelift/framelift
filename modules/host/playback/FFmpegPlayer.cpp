@@ -556,6 +556,13 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
                 {
                     std::lock_guard lock(mutex_);
                     videoClockSet_ = false;
+                    // Every applied seek (the RequestSeek kick *and* a demux-driven
+                    // re-seek during a held burst) resets the clocks here, so both gates
+                    // must re-arm: seekSettled_ so the worker re-paints before the next
+                    // re-seek, and seekClockValid_ so a held repeat anchors to seekTarget_
+                    // instead of reading GetMasterClock()==0 and re-targeting from 0.
+                    seekSettled_ = false;
+                    seekClockValid_ = false;
                     subtitleSeekClockOverride_ = seekTo;
                     subtitleSeekClockOverrideActive_ = true;
                 }
@@ -610,7 +617,10 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
             }
             {
                 std::lock_guard lock(mutex_);
-                if (hasPendingSeek_)
+                // Hold off re-seeking until the current seek has painted a frame, so a
+                // burst of held-key repeats steps visibly instead of restarting the
+                // decoder before anything is shown. seekSettled_ flips on the present.
+                if (hasPendingSeek_ && seekSettled_)
                 {
                     reason = Reason::Seek;
                     break;
@@ -816,6 +826,18 @@ void FFmpegPlayer::AudioWorker(AVCodecContext* dec, AVStream* stream, double sta
         if (audioOut_->HasDevice())
         {
             ClearSubtitleSeekClockOverride();
+            std::lock_guard lock(mutex_);
+            // The audio clock is the master when a device is open, and this first
+            // post-seek Feed re-establishes it (lastQueuedPts_ ≈ target) — so the seek
+            // anchor may release now, regardless of whether the video frame has painted.
+            seekClockValid_ = true;
+            // Audio-only: this delivered frame is also the "presented" signal (no video
+            // worker to paint one). With video, the visible settle point is the video
+            // frame — don't let audio race ahead and let the video worker bail unpainted.
+            if (!hasVideo_)
+            {
+                seekSettled_ = true;
+            }
         }
 
         // For audio-only files there is no video worker to drive TimePos.
@@ -1019,6 +1041,7 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
                 videoClockWall_ = std::chrono::steady_clock::now();
                 pauseWall_ = videoClockWall_;
                 subtitleSeekClockOverrideActive_ = false;
+                seekClockValid_ = true; // video wall clock is the master here — anchor may release
             }
         }
 
@@ -1036,7 +1059,9 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
                                hasPendingSeek_;
                     }
                 );
-                if (shutdown_.load() || hasPendingLoad_ || hasPendingSeek_)
+                // Honour a pending seek only once this one has painted (seekSettled_),
+                // so the target frame is shown before the loop bails to re-seek.
+                if (shutdown_.load() || hasPendingLoad_ || (hasPendingSeek_ && seekSettled_))
                 {
                     return true;
                 }
@@ -1093,7 +1118,7 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
                     }
                 );
             }
-            if (shutdown_.load() || hasPendingLoad_ || hasPendingSeek_)
+            if (shutdown_.load() || hasPendingLoad_ || (hasPendingSeek_ && seekSettled_))
             {
                 return true;
             }
@@ -1161,6 +1186,25 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
         FRAMELIFT_PERF_END("seek");
 
         seekRefresh_ = false; // the post-seek frame has been shown
+        bool reseek = false;
+        {
+            // A frame is now on screen for the current seek: the position is live again
+            // (anchor for relative seeks) and the decode loop may honour the next pending
+            // seek. Set here — not at clock-establish — so a held key paints each step.
+            std::lock_guard lock(mutex_);
+            seekSettled_ = true;
+            reseek = hasPendingSeek_; // a newer target (e.g. held key) arrived mid-seek
+        }
+        if (reseek)
+        {
+            // Tear the session down so the decode loop re-seeks to the latest target. The
+            // Abort also frees a demuxer parked in a full Push() — without it the loop
+            // could hang one step short once the key is released (no more repeats to kick).
+            audioQ_->Abort();
+            videoQ_->Abort();
+            subQ_->Abort();
+            Wake();
+        }
 
         EmitDouble(PlayerProperty::TimePos, framePts);
         if (duration_.load() > 0.0)
@@ -1800,6 +1844,10 @@ double FFmpegPlayer::TakePendingSeek()
 {
     std::lock_guard lock(mutex_);
     hasPendingSeek_ = false;
+    // The committed seek's Flush() is about to zero the master clock; clear the
+    // anchor-release gate in the same lock so a held-key Seek() can't read a
+    // momentarily-0 GetMasterClock() and re-target from the start.
+    seekClockValid_ = false;
     return seekTarget_;
 }
 
@@ -1812,6 +1860,11 @@ void FFmpegPlayer::LoadFile(const char* path, double resumePos) noexcept
         pendingPath_ = path ? path : "";
         pendingResume_ = resumePos;
         hasPendingLoad_ = true;
+        // New file starts at a known origin; don't let a stale unsettled seek from the
+        // previous file anchor the first relative seek on this one.
+        seekSettled_ = true;
+        seekClockValid_ = true;
+        seekTarget_ = 0.0;
     }
     // Wake the decode thread and unblock any workers waiting on a queue so the
     // current file is abandoned promptly.
@@ -1867,18 +1920,21 @@ void FFmpegPlayer::Seek(double seconds) noexcept
     {
         return; // nothing loaded — ignore (avoids seeking the next file opened)
     }
-    // Accumulate relative seeks against a still-pending target rather than the master
-    // clock: while a seek is in flight (e.g. a held arrow key auto-repeating) the clock
-    // hasn't advanced to the previous target yet, so basing off it would make every
-    // repeat re-target the same spot instead of stepping further each press.
-    bool pending = false;
-    double pendingTarget = 0.0;
+    // Accumulate relative seeks against the last requested target rather than the
+    // master clock whenever a seek is still settling: while a seek is in flight or its
+    // post-seek clock hasn't been re-established (e.g. a held arrow key auto-repeating),
+    // the master clock reads ~0, so basing off it would make a repeat re-target from the
+    // start instead of stepping further from the previous press.
+    bool useAnchor = false;
+    double anchor = 0.0;
     {
         std::lock_guard lock(mutex_);
-        pending = hasPendingSeek_;
-        pendingTarget = seekTarget_;
+        // Anchor on seekClockValid_, not seekSettled_: the master clock (audio when a
+        // device is open) may still read 0 even after the video frame has painted.
+        useAnchor = hasPendingSeek_ || !seekClockValid_;
+        anchor = seekTarget_;
     }
-    const double base = pending ? pendingTarget : GetMasterClock();
+    const double base = useAnchor ? anchor : GetMasterClock();
     RequestSeek(ClampSeekTarget(base + seconds, duration_.load()));
 }
 
@@ -1893,18 +1949,33 @@ void FFmpegPlayer::SeekAbsolute(double seconds) noexcept
 
 void FFmpegPlayer::RequestSeek(double target) noexcept
 {
+    // Only disturb the running pipeline when the previous seek has already painted a
+    // frame (or none is in flight). While a seek is mid-decode, a new request — e.g. a
+    // held arrow key auto-repeating ~30x/s — just updates the target (latest-wins) and
+    // lets the in-flight seek present first; the decode loop then re-seeks to the newer
+    // target. Aborting on every repeat instead would tear the decoder down before it ever
+    // reaches the target, freezing the picture until the key is released.
+    bool kick = false;
     {
         std::lock_guard lock(mutex_);
         seekTarget_ = target; // latest-wins: coalesces rapid seeks (seek-bar drags)
         hasPendingSeek_ = true;
+        kick = seekSettled_; // pipeline idle / already painted ⇒ safe to restart
+        if (kick)
+        {
+            seekSettled_ = false; // re-settled by the worker that presents the post-seek frame
+        }
     }
-    // Perf timing: measure from the latest request to the first post-seek frame.
-    FRAMELIFT_PERF_START("seek");
-    // Unblock the demux read loop / keep-open wait and any worker mid-present.
-    audioQ_->Abort();
-    videoQ_->Abort();
-    subQ_->Abort();
-    Wake();
+    if (kick)
+    {
+        // Perf timing: measure each applied seek (not each coalesced repeat) to its frame.
+        FRAMELIFT_PERF_START("seek");
+        // Unblock the demux read loop / keep-open wait and any worker mid-present.
+        audioQ_->Abort();
+        videoQ_->Abort();
+        subQ_->Abort();
+        Wake();
+    }
 }
 
 void FFmpegPlayer::SetImageDisplayDuration(double seconds) noexcept
