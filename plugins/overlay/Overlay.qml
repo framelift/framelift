@@ -24,7 +24,7 @@ Item {
             spacing: 12
             Image {
                 anchors.horizontalCenter: parent.horizontalCenter
-                source: "Icon.png"
+                source: "icon.svg"
                 sourceSize.width: 96
                 sourceSize.height: 96
                 width: 96

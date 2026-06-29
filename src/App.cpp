@@ -141,7 +141,7 @@ void App::InitPlatform(
 
     appWindow_ = std::make_unique<QtAppWindow>(title, width, height, graphicsApi);
 
-    (void)appWindow_->SetWindowIcon(":/framelift/assets/Icon.png");
+    (void)appWindow_->SetWindowIcon(":/framelift/assets/icon.svg");
 
     SetupPlayerCallbacks();
 

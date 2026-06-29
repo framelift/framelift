@@ -153,11 +153,11 @@ qt_add_qml_module(
         qml/FrameLift/Controls/GlassPanel.qml
         qml/FrameLift/Controls/ActionButton.qml
         qml/FrameLift/Controls/Drawer.qml)
-set_source_files_properties("${CMAKE_SOURCE_DIR}/assets/img/Icon.png" PROPERTIES QT_RESOURCE_ALIAS Icon.png)
+set_source_files_properties("${CMAKE_SOURCE_DIR}/assets/img/icon.svg" PROPERTIES QT_RESOURCE_ALIAS icon.svg)
 qt_add_resources(
         FrameLift framelift_assets
         PREFIX "/framelift/assets"
-        FILES "${CMAKE_SOURCE_DIR}/assets/img/Icon.png")
+        FILES "${CMAKE_SOURCE_DIR}/assets/img/icon.svg")
 framelift_apply_builtin_module_definitions(FrameLift)
 
 set_target_properties(FrameLift PROPERTIES

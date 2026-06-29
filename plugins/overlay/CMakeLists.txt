@@ -7,8 +7,8 @@ add_framelift_plugin(Overlay
         ${FRAMELIFT_SDK_SOURCES}
 )
 target_include_directories(Overlay PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-set_source_files_properties("${CMAKE_SOURCE_DIR}/assets/img/Icon.png" PROPERTIES QT_RESOURCE_ALIAS Icon.png)
+set_source_files_properties("${CMAKE_SOURCE_DIR}/assets/img/icon.svg" PROPERTIES QT_RESOURCE_ALIAS icon.svg)
 qt_add_resources(
         Overlay overlay_assets
         PREFIX "/qt/qml/FrameLift/Plugins/Overlay"
-        FILES "${CMAKE_SOURCE_DIR}/assets/img/Icon.png")
+        FILES "${CMAKE_SOURCE_DIR}/assets/img/icon.svg")
