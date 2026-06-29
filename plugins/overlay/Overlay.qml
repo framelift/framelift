@@ -89,11 +89,17 @@ Item {
             anchors.margins: 12
             spacing: 12
             FLActionButton {
+                // Mouse-only: never retain keyboard focus, or a click would leave
+                // the button intercepting Space and double-toggling against the host
+                // play/pause hotkey (net no-op — pausing appears broken).
+                focusPolicy: Qt.NoFocus
                 text: root.vm !== null && root.vm.paused ? "Play" : "Pause"
                 onClicked: root.vm.togglePause()
             }
             Slider {
                 id: seekBar
+                // Same reason: don't steal focus and double-handle arrow-key seeks.
+                focusPolicy: Qt.NoFocus
                 Layout.fillWidth: true
                 implicitHeight: 20
                 from: 0
