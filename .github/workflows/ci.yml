@@ -37,7 +37,8 @@ jobs:
             cmake \
             ninja-build \
             git \
-            ca-certificates
+            ca-certificates \
+            qt6-base-dev
       - name: Build & run tests
         run: |
           cmake -S tests -B build-tests -G Ninja -DCMAKE_BUILD_TYPE=Debug
