@@ -156,7 +156,7 @@ Item {
         width: 240
         height: 6
         radius: 3
-        color: "#33FFFFFF"
+        color: '#33ffffff'
         opacity: 0
         visible: opacity > 0
 
@@ -167,7 +167,7 @@ Item {
             radius: parent.radius
             width: parent.width * (root.vm !== null && root.vm.duration > 0
                                    ? Math.min(1, root.vm.position / root.vm.duration) : 0)
-            color: "#888888"
+            color: '#ffffff'
         }
 
         SequentialAnimation {
