@@ -383,7 +383,7 @@ bool FFmpegAudioOutput::Open(int srcRate, const AVChannelLayout& srcLayout, AVSa
 
     sinkDevice_ = preferredDevice_;
     lastQueuedPts_ = 0.0;
-    Log::Info("FFmpegAudioOutput: opened {} Hz {}ch F32 (QAudioSink)", dstRate_, dstChannels_);
+    Log::Debug("FFmpegAudioOutput: opened {} Hz {}ch F32 (QAudioSink)", dstRate_, dstChannels_);
     return true;
 }
 
