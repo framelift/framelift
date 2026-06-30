@@ -26,7 +26,8 @@ framelift_report_builtin_modules()
 # ── Platform media libraries (external FFmpeg + libass) ───────────────────────
 # Defines the `ffmpeg` and `libass` targets: Linux uses system dev packages
 # (libav*-dev / libass-dev); Windows resolves them from the vcpkg manifest
-# (vcpkg.json). This is FrameLift's media playback stack: demux, decode,
+# (vcpkg.json). Qt is resolved separately from a prebuilt install in CI. This is
+# FrameLift's media playback stack: demux, decode,
 # filtering, subtitles, and hardware decode all go through this external FFmpeg
 # target, not through Qt Multimedia's media playback backend.
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftPlatformLibs.cmake")
@@ -220,12 +221,9 @@ endif ()
 
 # ── Runtime DLLs ──────────────────────────────────────────────────────────────
 # On Linux the shared objects are resolved from the system via ldconfig. On
-# Windows Qt6, FFmpeg, and libass all come from vcpkg; their runtime DLLs
-# (Qt6*.dll, avcodec-*.dll, ass-*.dll) and transitive deps (freetype/fontconfig/
-# harfbuzz/fribidi/…) are deployed next to framelift.exe automatically by vcpkg's
-# app-local deployment (VCPKG_APPLOCAL_DEPS) — no manual copy needed. Note: Qt's
-# QML/plugin runtime (platform plugins, QML modules) may additionally need
-# windeployqt; revisit when packaging.
+# Windows, FFmpeg/libass come from vcpkg and Qt comes from a prebuilt Qt install;
+# the CI package job stages the Qt runtime with windeployqt, then copies the
+# FFmpeg/libass runtime DLLs from vcpkg next to framelift.exe.
 
 # ── Linux desktop integration (icon in the GNOME/KDE shell) ───────────────────
 # The shell resolves the dock/overview icon by matching the window app_id /
