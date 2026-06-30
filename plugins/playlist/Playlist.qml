@@ -39,11 +39,11 @@ Item {
                     font.pixelSize: 12
                     Layout.fillWidth: true
                 }
-                FLActionButton { text: "Reload"; implicitHeight: 28; padding: 8; font.pixelSize: 12; onClicked: root.vm.Reload() }
                 FLActionButton {
-                    text: root.vm !== null && root.vm.shuffleEnabled ? "Shuffle on" : "Shuffle"
-                    implicitHeight: 28; padding: 8; font.pixelSize: 12
-                    onClicked: root.vm.ToggleShuffle()
+                    id: actionsButton
+                    text: "⋯"
+                    implicitHeight: 28; implicitWidth: 32; padding: 8; font.pixelSize: 16
+                    onClicked: actionsMenu.popup(actionsButton, 0, actionsButton.height + 4)
                 }
             }
 
@@ -106,6 +106,68 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    // Overflow menu collapsing the per-panel actions (reload, sort, shuffle) so
+    // the header stays compact. Sort and shuffle are checkable to show live state.
+    Menu {
+        id: actionsMenu
+        padding: 6
+        overlap: 0
+
+        background: Rectangle {
+            implicitWidth: 180
+            color: FLTheme.surfaceStrong
+            radius: FLTheme.radius
+            border.color: FLTheme.border
+            border.width: 1
+        }
+
+        component Item_: MenuItem {
+            id: item
+            property bool on: false
+            implicitHeight: 32
+            horizontalPadding: 10
+            font.pixelSize: 13
+            indicator: null
+            contentItem: RowLayout {
+                spacing: 10
+                Text {
+                    Layout.preferredWidth: 14
+                    text: item.checkable && item.on ? "✓" : ""
+                    color: FLTheme.accent
+                    font.pixelSize: 12
+                    font.bold: true
+                    verticalAlignment: Text.AlignVCenter
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: item.text
+                    color: FLTheme.text
+                    font: item.font
+                    elide: Text.ElideRight
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            background: Rectangle {
+                radius: 6
+                color: item.highlighted ? FLTheme.accent : "transparent"
+            }
+        }
+
+        Item_ { text: "Reload"; onTriggered: root.vm.Reload() }
+        Item_ {
+            text: "Sort alphabetically"
+            checkable: true
+            on: root.vm !== null && root.vm.sortByName
+            onTriggered: root.vm.toggleSortByName()
+        }
+        Item_ {
+            text: "Shuffle"
+            checkable: true
+            on: root.vm !== null && root.vm.shuffleEnabled
+            onTriggered: root.vm.ToggleShuffle()
         }
     }
 }

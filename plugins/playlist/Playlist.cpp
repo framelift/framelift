@@ -13,6 +13,7 @@
 #include <QtCore/QStringList>
 #include <QtCore/QVariantMap>
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <numeric>
 #include <random>
@@ -202,6 +203,8 @@ void Playlist::LoadSettings(IModuleSettings& ps)
     imageSlideshow_ = ps.GetBool("imageSlideshow", false);
     slideshowDuration_ = ps.GetFloat("slideshowDuration", 5.0f);
     autoReload_ = ps.GetBool("autoReload", true);
+    sortByName_ = ps.GetBool("sortByName", false);
+    sortByNameActive_ = sortByName_;
 }
 
 void Playlist::SaveSettings(IModuleSettings& ps)
@@ -212,6 +215,7 @@ void Playlist::SaveSettings(IModuleSettings& ps)
     ps.SetBool("imageSlideshow", imageSlideshow_);
     ps.SetFloat("slideshowDuration", slideshowDuration_);
     ps.SetBool("autoReload", autoReload_);
+    ps.SetBool("sortByName", sortByName_);
 }
 
 void Playlist::OnInstall(IModuleContext& ctx)
@@ -300,7 +304,7 @@ void Playlist::OnInstall(IModuleContext& ctx)
 
 void Playlist::ApplySettings(
     bool scanSubdirs, int scanMaxDepth, bool mixedPlaylist, bool imageSlideshow, float slideshowDuration,
-    bool autoReload
+    bool autoReload, bool sortByName
 )
 {
     scanSubdirs_ = scanSubdirs;
@@ -309,6 +313,7 @@ void Playlist::ApplySettings(
     imageSlideshow_ = imageSlideshow;
     slideshowDuration_ = slideshowDuration;
     autoReload_ = autoReload;
+    sortByName_ = sortByName;
 
     if (auto* store = ctx_ ? ctx_->GetService<ISettingsStore>() : nullptr)
     {
@@ -316,7 +321,17 @@ void Playlist::ApplySettings(
         SaveSettings(ps);
         ps.Save();
     }
-    Q_EMIT playlistChanged();
+
+    // Committing the default re-establishes it as the live order and re-sorts.
+    if (sortByNameActive_ != sortByName_)
+    {
+        sortByNameActive_ = sortByName_;
+        Resort();
+    }
+    else
+    {
+        Q_EMIT playlistChanged();
+    }
 }
 
 // ── IModule ──────────────────────────────────────────────────────────────────
@@ -712,15 +727,14 @@ void Playlist::ClearDirectoryWatcher()
 
 void Playlist::RebuildEntries(std::vector<std::string>& files, const std::string& keepPath, const std::string& baseDir)
 {
-    std::ranges::sort(files);
-
     entries_.clear();
     current_ = -1;
     entries_.reserve(files.size() + 1);
     for (auto& f : files)
     {
         auto subfolder = SubfolderOf(f, baseDir);
-        AddFile(std::move(f), std::move(subfolder));
+        auto label = FilenameOf(f);
+        entries_.emplace_back(std::move(f), std::move(label), std::move(subfolder));
     }
 
     // Ensure the file to keep stays in the list even if it wasn't scanned.
@@ -733,8 +747,10 @@ void Playlist::RebuildEntries(std::vector<std::string>& files, const std::string
                                                 );
     if (!keepPath.empty() && !keepFound)
     {
-        AddFile(keepPath, SubfolderOf(keepPath, baseDir));
+        entries_.emplace_back(keepPath, FilenameOf(keepPath), SubfolderOf(keepPath, baseDir));
     }
+
+    SortEntries(entries_);
 
     // Restore current_ by path match.
     for (int i = 0; i < static_cast<int>(entries_.size()); ++i)
@@ -752,6 +768,78 @@ void Playlist::RebuildEntries(std::vector<std::string>& files, const std::string
         ApplyShuffleToEntries();
     }
     Q_EMIT playlistChanged();
+}
+
+void Playlist::SortEntries(std::vector<Entry>& entries) const
+{
+    // Case-insensitive compare of two ASCII-ish strings; locale-independent so the
+    // order is stable across platforms.
+    const auto lessNoCase = [](const std::string& a, const std::string& b)
+    {
+        const std::size_t n = std::min(a.size(), b.size());
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            const int ca = std::tolower(static_cast<unsigned char>(a[i]));
+            const int cb = std::tolower(static_cast<unsigned char>(b[i]));
+            if (ca != cb)
+            {
+                return ca < cb;
+            }
+        }
+        return a.size() < b.size();
+    };
+
+    std::ranges::sort(
+        entries,
+        [&](const Entry& a, const Entry& b)
+        {
+            if (sortByNameActive_)
+            {
+                // By filename, interleaving across subfolders; full path breaks
+                // ties so same-named files in different folders stay deterministic.
+                if (a.label != b.label)
+                {
+                    return lessNoCase(a.label, b.label);
+                }
+                return a.path < b.path;
+            }
+            // By full path so subfolders stay grouped (the historical order).
+            return a.path < b.path;
+        }
+    );
+}
+
+void Playlist::Resort()
+{
+    const std::string currentPath =
+        current_ >= 0 && current_ < static_cast<int>(entries_.size()) ? entries_[current_].path : std::string{};
+
+    if (shuffleEnabled_)
+    {
+        // entries_ stays shuffled; re-sort the backup so disabling shuffle later
+        // restores the newly chosen order.
+        SortEntries(sortedEntries_);
+    }
+    else
+    {
+        SortEntries(entries_);
+        current_ = -1;
+        for (int i = 0; i < static_cast<int>(entries_.size()); ++i)
+        {
+            if (entries_[i].path == currentPath)
+            {
+                current_ = i;
+                break;
+            }
+        }
+    }
+    Q_EMIT playlistChanged();
+}
+
+void Playlist::toggleSortByName()
+{
+    sortByNameActive_ = !sortByNameActive_;
+    Resort();
 }
 
 void Playlist::ToggleShuffle()

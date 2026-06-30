@@ -23,6 +23,7 @@ class Playlist : public QObject, public ModuleBase
     Q_OBJECT
     Q_PROPERTY(bool open READ IsOpen NOTIFY panelStateChanged)
     Q_PROPERTY(bool shuffleEnabled READ IsShuffleEnabled NOTIFY playlistChanged)
+    Q_PROPERTY(bool sortByName READ IsSortByName NOTIFY playlistChanged)
     Q_PROPERTY(int currentIndex READ Current NOTIFY playlistChanged)
     Q_PROPERTY(QVariantList entries READ QmlEntries NOTIFY playlistChanged)
 
@@ -86,10 +87,18 @@ public:
     Q_INVOKABLE void Reload();
     // Toggle shuffle mode; rebuilds the order when enabling.
     Q_INVOKABLE void ToggleShuffle();
+    // Toggle the sort mode for the current session (re-sorts in place, no rescan).
+    // A temporary override of the persisted "sort by name" default setting.
+    Q_INVOKABLE void toggleSortByName();
 
     [[nodiscard]] bool IsShuffleEnabled() const
     {
         return shuffleEnabled_;
+    }
+
+    [[nodiscard]] bool IsSortByName() const
+    {
+        return sortByNameActive_;
     }
 
     [[nodiscard]] bool IsOpen() const
@@ -99,7 +108,7 @@ public:
 
     void ApplySettings(
         bool scanSubdirs, int scanMaxDepth, bool mixedPlaylist, bool imageSlideshow, float slideshowDuration,
-        bool autoReload
+        bool autoReload, bool sortByName
     );
 
 protected:
@@ -158,6 +167,17 @@ private:
     std::vector<Entry> sortedEntries_; // sorted backup; populated when shuffle is on
     void ApplyShuffleToEntries();      // shuffles entries_ in-place, current_ stays valid
 
+    // ── Sort order ─────────────────────────────────────────────────
+    // sortByName_ is the persisted default; sortByNameActive_ is the live mode
+    // (seeded from the default, flipped temporarily via the panel toggle). When
+    // true entries are ordered by filename (case-insensitive) so files interleave
+    // across subfolders; otherwise by full path so subfolders stay grouped.
+    bool sortByNameActive_ = false;
+    // Order entries_ (or sortedEntries_ when shuffle is on) by the active mode.
+    void SortEntries(std::vector<Entry>& entries) const;
+    // Re-apply the active sort to the live list in place, keeping current_.
+    void Resort();
+
     // ── Directory watching ─────────────────────────────────────────────
     std::string watchedDir_;
     uint32_t dirChangedEventType_ = 0;
@@ -201,6 +221,7 @@ private:
     bool imageSlideshow_ = false;
     float slideshowDuration_ = 5.0f;
     bool autoReload_ = true;
+    bool sortByName_ = false;
     bool open_ = false;
     std::unique_ptr<PlaylistSettings> settingsPage_;
 

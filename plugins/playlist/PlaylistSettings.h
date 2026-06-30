@@ -15,6 +15,7 @@ class PlaylistSettings final : public QObject
     Q_PROPERTY(bool imageSlideshow READ ImageSlideshow WRITE SetImageSlideshow NOTIFY changed)
     Q_PROPERTY(float slideshowDuration READ SlideshowDuration WRITE SetSlideshowDuration NOTIFY changed)
     Q_PROPERTY(bool autoReload READ AutoReload WRITE SetAutoReload NOTIFY changed)
+    Q_PROPERTY(bool sortByName READ SortByName WRITE SetSortByName NOTIFY changed)
 
 public:
     explicit PlaylistSettings(Playlist& playlist);
@@ -27,6 +28,7 @@ public:
     [[nodiscard]] bool ImageSlideshow() const;
     [[nodiscard]] float SlideshowDuration() const;
     [[nodiscard]] bool AutoReload() const;
+    [[nodiscard]] bool SortByName() const;
 
     void SetScanSubdirs(bool value);
     void SetScanMaxDepth(int value);
@@ -34,6 +36,7 @@ public:
     void SetImageSlideshow(bool value);
     void SetSlideshowDuration(float value);
     void SetAutoReload(bool value);
+    void SetSortByName(bool value);
 
     Q_INVOKABLE void save();
     Q_INVOKABLE void reset();
@@ -58,4 +61,5 @@ private:
     bool imageSlideshow_ = false;
     float slideshowDuration_ = 5.0f;
     bool autoReload_ = true;
+    bool sortByName_ = false;
 };

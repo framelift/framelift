@@ -61,6 +61,12 @@ Item {
             Switch { checked: root.viewModel.autoReload; onToggled: root.viewModel.autoReload = checked }
         }
 
+        FLSettingRow {
+            title: "Sort by name"
+            description: "Order entries alphabetically by filename, interleaving subfolders instead of grouping by folder."
+            Switch { checked: root.viewModel.sortByName; onToggled: root.viewModel.sortByName = checked }
+        }
+
         Item { Layout.fillHeight: true }
     }
 }

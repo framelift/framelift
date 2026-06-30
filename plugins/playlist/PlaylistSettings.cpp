@@ -46,6 +46,11 @@ bool PlaylistSettings::AutoReload() const
     return autoReload_;
 }
 
+bool PlaylistSettings::SortByName() const
+{
+    return sortByName_;
+}
+
 void PlaylistSettings::SetScanSubdirs(bool value)
 {
     if (scanSubdirs_ != value)
@@ -100,10 +105,19 @@ void PlaylistSettings::SetAutoReload(bool value)
     }
 }
 
+void PlaylistSettings::SetSortByName(bool value)
+{
+    if (sortByName_ != value)
+    {
+        sortByName_ = value;
+        MarkDirty();
+    }
+}
+
 void PlaylistSettings::save()
 {
     playlist_.ApplySettings(
-        scanSubdirs_, scanMaxDepth_, mixedPlaylist_, imageSlideshow_, slideshowDuration_, autoReload_
+        scanSubdirs_, scanMaxDepth_, mixedPlaylist_, imageSlideshow_, slideshowDuration_, autoReload_, sortByName_
     );
     dirty_ = false;
     Q_EMIT changed();
@@ -117,6 +131,7 @@ void PlaylistSettings::reset()
     imageSlideshow_ = false;
     slideshowDuration_ = 5.0f;
     autoReload_ = true;
+    sortByName_ = false;
     dirty_ = true;
     Q_EMIT changed();
 }
@@ -135,6 +150,7 @@ void PlaylistSettings::SeedFromPlaylist()
     imageSlideshow_ = playlist_.imageSlideshow_;
     slideshowDuration_ = playlist_.slideshowDuration_;
     autoReload_ = playlist_.autoReload_;
+    sortByName_ = playlist_.sortByName_;
     dirty_ = false;
 }
 
