@@ -15,6 +15,7 @@
         "vulkan"
       ]
     },
-    "libass"
+    "libass",
+    "vulkan-loader"
   ]
 }
