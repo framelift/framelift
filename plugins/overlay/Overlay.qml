@@ -10,6 +10,7 @@ Item {
     required property var viewModel
     property var vm: viewModel
     property bool controlsVisible: false
+    property bool seekDragging: false
 
     Rectangle {
         anchors.fill: parent
@@ -73,7 +74,7 @@ Item {
     FLGlassPanel {
         id: controls
         visible: root.vm !== null && !root.vm.idle && !root.vm.settingsOpen
-        opacity: root.controlsVisible ? 1 : 0
+        opacity: root.controlsVisible || root.seekDragging ? 1 : 0
 
         // Fixed-width bar, always centred in the window — independent of any open
         // drawers, so it never gets squeezed when both panels are open.
@@ -106,6 +107,15 @@ Item {
                 to: Math.max(0.001, root.vm !== null ? root.vm.duration : 0)
                 value: pressed ? value : root.vm !== null ? root.vm.position : 0
                 onMoved: root.vm.seek(value)
+                onPressedChanged: {
+                    root.seekDragging = pressed
+                    if (pressed) {
+                        root.controlsVisible = true
+                        hideTimer.stop()
+                    } else {
+                        hideTimer.restart()
+                    }
+                }
 
                 background: Rectangle {
                     x: seekBar.leftPadding
@@ -204,6 +214,9 @@ Item {
     Timer {
         id: hideTimer
         interval: 1800
-        onTriggered: root.controlsVisible = false
+        onTriggered: {
+            if (!root.seekDragging)
+                root.controlsVisible = false
+        }
     }
 }
