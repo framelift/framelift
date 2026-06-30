@@ -46,8 +46,8 @@ TEST(PlaylistTest, AddFileAndCount)
 {
     Playlist pl;
     EXPECT_TRUE(pl.Empty());
-    pl.AddFile("/a.mp4");
-    pl.AddFile("/b.mp4");
+    pl.AddFile("/a.mp4", "/");
+    pl.AddFile("/b.mp4", "/");
     EXPECT_EQ(pl.Count(), 2);
     EXPECT_FALSE(pl.Empty());
 }
@@ -55,9 +55,9 @@ TEST(PlaylistTest, AddFileAndCount)
 TEST(PlaylistTest, NextAndPrevWrapAround)
 {
     Playlist pl;
-    pl.AddFile("/a.mp4");
-    pl.AddFile("/b.mp4");
-    pl.AddFile("/c.mp4");
+    pl.AddFile("/a.mp4", "/");
+    pl.AddFile("/b.mp4", "/");
+    pl.AddFile("/c.mp4", "/");
     EXPECT_EQ(pl.Current(), -1);
 
     pl.Next(); // -1 -> 0
@@ -74,7 +74,7 @@ TEST(PlaylistTest, NextAndPrevWrapAround)
 TEST(PlaylistTest, ClearResetsState)
 {
     Playlist pl;
-    pl.AddFile("/a.mp4");
+    pl.AddFile("/a.mp4", "/");
     pl.Next();
     pl.Clear();
     EXPECT_TRUE(pl.Empty());
@@ -114,7 +114,7 @@ TEST(PlaylistTest, LoadFileDrivesPlayerAndPublishesEvent)
 
     Playlist pl;
     pl.Install(ctx); // sets ctx_, subscribes to OpenFileRequestEvent
-    pl.AddFile("/movies/v.mp4");
+    pl.AddFile("/movies/v.mp4", "/");
     pl.Next(); // activates index 0 → LoadFile
 
     EXPECT_EQ(player.loadedPath, "/movies/v.mp4");

@@ -19,7 +19,7 @@ Item {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 12
+            anchors.margins: 6
             spacing: 8
 
             RowLayout {
@@ -47,27 +47,47 @@ Item {
                 }
             }
 
-            ListView {
+            FLNavigableListView {
+                id: view
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                clip: true
-                spacing: 4
                 model: root.vm !== null ? root.vm.entries : []
-                delegate: Rectangle {
+                active: root.vm !== null && root.vm.open
+                // On open, place the cursor on the playing item and bring it
+                // into view; from there Up/Down navigate natively.
+                onActiveChanged: if (active && root.vm !== null) {
+                    currentIndex = root.vm.currentIndex
+                    keepCurrentInView()
+                    forceActiveFocus()
+                }
+                Keys.onReturnPressed: if (currentIndex >= 0 && root.vm !== null) root.vm.activateIndex(currentIndex)
+
+                // The model is rebuilt whenever the active file changes (or on
+                // reload/shuffle), which resets the ListView's currentIndex to
+                // 0. Re-anchor the cursor on the now-playing item so it follows
+                // playback instead of snapping to the first row. Plain
+                // navigation doesn't rebuild the model, so it isn't affected.
+                Connections {
+                    target: root.vm
+                    function onPlaylistChanged() {
+                        view.currentIndex = root.vm.currentIndex
+                        view.keepCurrentInView()
+                    }
+                }
+                delegate: FLListRow {
                     id: row
                     required property var modelData
                     required property int index
-                    property bool hasSubfolder: row.modelData.subfolder.length > 0
-                    width: ListView.view.width
-                    height: row.hasSubfolder ? 46 : 30
-                    radius: 6
-                    color: row.modelData.current ? "#408B5CF6"
-                          : mouse.containsMouse ? "#18FFFFFF" : "transparent"
+                    height: 46
+                    current: row.modelData.current
+                    selected: row.ListView.isCurrentItem
+                    onSelectRequested: { view.currentIndex = row.index; view.forceActiveFocus() }
+                    onActivateRequested: root.vm.activateIndex(row.index)
                     Column {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        anchors.margins: 8
+                        anchors.margins: 6
                         spacing: 1
                         Text {
                             text: row.modelData.label
@@ -77,19 +97,12 @@ Item {
                             font.pixelSize: 12
                         }
                         Text {
-                            visible: row.hasSubfolder
                             text: row.modelData.subfolder
                             color: FLTheme.textMuted
                             elide: Text.ElideMiddle
                             width: parent.width
                             font.pixelSize: 11
                         }
-                    }
-                    MouseArea {
-                        id: mouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: root.vm.activateIndex(row.index)
                     }
                 }
             }

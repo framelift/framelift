@@ -102,7 +102,9 @@ set(_framelift_control_qml
         qml/FrameLift/Controls/FLSpinBox.qml
         qml/FrameLift/Controls/FLComboBox.qml
         qml/FrameLift/Controls/FLSlider.qml
-        qml/FrameLift/Controls/FLKeyCapButton.qml)
+        qml/FrameLift/Controls/FLKeyCapButton.qml
+        qml/FrameLift/Controls/FLNavigableListView.qml
+        qml/FrameLift/Controls/FLListRow.qml)
 # Resource alias is the basename, so each lands at /qt/qml/FrameLift/Controls/<File>.qml.
 foreach (_qml IN LISTS _framelift_control_qml)
     get_filename_component(_qml_alias "${_qml}" NAME)

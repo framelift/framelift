@@ -78,12 +78,6 @@ public:
     // Serialise entries to storagePath_.
     void Save() const noexcept;
 
-    // ── Keyboard navigation ────────────────────────────────────────────────────
-    void CursorUp();
-    void CursorDown();
-    // Open the file under the keyboard cursor via the registered load callback.
-    void ConfirmCursor() const;
-
 protected:
     // ── ModuleBase hooks ────────────────────────────────────────────────────
     const char* ModuleName() const override
@@ -121,7 +115,7 @@ private:
     void Load();
     // Maximum number of entries to retain, sourced from settings (or a fallback).
     [[nodiscard]] int MaxEntries() const;
-    // Rebuild filteredIndices_ from entries_ using searchQuery_; clamps cursor_.
+    // Rebuild filteredIndices_ from entries_ using searchQuery_.
     void RebuildFilter();
 
     // ── Plugin-owned settings ─────────────────────────────────────────────────
@@ -133,7 +127,6 @@ private:
     std::deque<Entry> entries_;
     std::vector<int> filteredIndices_; // indices into entries_ matching searchQuery_
     std::string searchQuery_;
-    int cursor_ = -1; // keyboard-navigation cursor into filteredIndices_, or -1 if none
     std::string storagePath_;
     IJson* json_ = nullptr; // host JSON service for load/save (host-owned; not owned here)
 

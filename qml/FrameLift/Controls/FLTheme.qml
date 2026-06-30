@@ -15,6 +15,7 @@ QtObject {
     readonly property color inputBg: "#26FFFFFF"     // field fill over the dark canvas
     readonly property color hover: "#18FFFFFF"        // subtle hover overlay
     readonly property color accentSoft: "#408B5CF6"   // selected / active highlight
+    readonly property color accentFaint: "#208B5CF6"  // keyboard-cursor highlight
 
     readonly property int radius: 12
     readonly property int spacing: 12

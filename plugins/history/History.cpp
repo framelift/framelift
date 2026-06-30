@@ -189,19 +189,13 @@ bool History::HandleKeyDownEvent(const AppEvent& e)
         return false;
     }
 
-    if (kp.key == Keys::Up)
+    // Navigation and activation are handled natively by the focused QML
+    // ListView (Qt's built-in Up/Down/Return with scroll-to-current). We only
+    // swallow these keys here so they don't also fire global player hotkeys
+    // while the panel is open; the key still reaches the focused QML item
+    // because the host event filter never consumes it.
+    if (kp.key == Keys::Up || kp.key == Keys::Down || kp.key == Keys::Return)
     {
-        CursorUp();
-        return true;
-    }
-    if (kp.key == Keys::Down)
-    {
-        CursorDown();
-        return true;
-    }
-    if (kp.key == Keys::Return && !kp.repeat)
-    {
-        ConfirmCursor();
         return true;
     }
     return false;
@@ -260,7 +254,6 @@ void History::Load()
 void History::Clear()
 {
     entries_.clear();
-    cursor_ = -1;
     searchQuery_.clear();
     filteredIndices_.clear();
     Save();
@@ -309,14 +302,6 @@ void History::RebuildFilter()
         }
     }
 
-    if (filteredIndices_.empty())
-    {
-        cursor_ = -1;
-    }
-    else if (cursor_ >= static_cast<int>(filteredIndices_.size()))
-    {
-        cursor_ = static_cast<int>(filteredIndices_.size()) - 1;
-    }
     Q_EMIT historyChanged();
 }
 
@@ -478,45 +463,6 @@ double History::GetResumePos(const char* path) const noexcept
     return 0.0;
 }
 
-// ── Keyboard navigation ───────────────────────────────────────────────────────
-
-void History::CursorUp()
-{
-    if (filteredIndices_.empty())
-    {
-        return;
-    }
-
-    if (cursor_ - 1 >= 0)
-    {
-        cursor_ -= 1;
-        Q_EMIT historyChanged();
-    }
-}
-
-void History::CursorDown()
-{
-    if (filteredIndices_.empty())
-    {
-        return;
-    }
-
-    const int n = static_cast<int>(filteredIndices_.size());
-    if (cursor_ + 1 < n)
-    {
-        cursor_ += 1;
-        Q_EMIT historyChanged();
-    }
-}
-
-void History::ConfirmCursor() const
-{
-    if (ctx_ && cursor_ >= 0 && cursor_ < static_cast<int>(filteredIndices_.size()))
-    {
-        ctx_->Publish<OpenFileRequestEvent>({entries_[filteredIndices_[cursor_]].path.c_str()});
-    }
-}
-
 void History::SetSearch(const QString& value)
 {
     const std::string next = value.toStdString();
@@ -526,7 +472,6 @@ void History::SetSearch(const QString& value)
     }
     searchQuery_ = next;
     RebuildFilter();
-    cursor_ = filteredIndices_.empty() ? -1 : 0;
 }
 
 QVariantList History::QmlEntries() const
@@ -544,7 +489,6 @@ QVariantList History::QmlEntries() const
         row.insert(QStringLiteral("label"), QString::fromStdString(entry.label));
         row.insert(QStringLiteral("directory"), QString::fromStdString(entry.dir));
         row.insert(QStringLiteral("meta"), QString::fromStdString(entry.meta));
-        row.insert(QStringLiteral("selected"), i == cursor_);
         result.push_back(row);
     }
     entriesCache_ = std::move(result);
@@ -564,9 +508,10 @@ void History::activateIndex(const int filteredIndex)
     {
         return;
     }
-    cursor_ = filteredIndex;
-    Q_EMIT historyChanged();
-    ConfirmCursor();
+    if (ctx_)
+    {
+        ctx_->Publish<OpenFileRequestEvent>({entries_[filteredIndices_[filteredIndex]].path.c_str()});
+    }
 }
 
 void History::publishVisibleWidth(const qreal width)
@@ -584,11 +529,7 @@ void History::SetOpen(const bool value)
         return;
     }
     open_ = value;
-    if (open_)
-    {
-        cursor_ = filteredIndices_.empty() ? -1 : 0;
-    }
-    else
+    if (!open_)
     {
         if (ctx_)
         {

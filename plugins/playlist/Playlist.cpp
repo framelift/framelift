@@ -135,22 +135,22 @@ std::string Playlist::SubfolderOf(const std::string& path, const std::string& ba
 {
     if (base.empty())
     {
-        return {};
+        return "/";
     }
     try
     {
         const auto parent = std::filesystem::path(path).parent_path();
         const auto rel = std::filesystem::relative(parent, std::filesystem::path(base));
         std::string s = rel.generic_string();
-        if (s == "." || s.rfind("..", 0) == 0)
+        if (s.empty() || s == "." || s.rfind("..", 0) == 0)
         {
-            return {};
+            return "/";
         }
-        return s;
+        return "/" + s;
     }
     catch (...)
     {
-        return {};
+        return "/";
     }
 }
 
@@ -357,19 +357,13 @@ bool Playlist::HandleKeyDownEvent(const AppEvent& e)
         return false;
     }
 
-    if (kp.key == Keys::Up)
+    // Navigation and activation are handled natively by the focused QML
+    // ListView (Qt's built-in Up/Down/Return with scroll-to-current). We only
+    // swallow these keys here so they don't also fire global player hotkeys
+    // while the panel is open; the key still reaches the focused QML item
+    // because the host event filter never consumes it.
+    if (kp.key == Keys::Up || kp.key == Keys::Down || kp.key == Keys::Return)
     {
-        CursorUp();
-        return true;
-    }
-    if (kp.key == Keys::Down)
-    {
-        CursorDown();
-        return true;
-    }
-    if (kp.key == Keys::Return && !kp.repeat)
-    {
-        ConfirmCursor();
         return true;
     }
     return false;
@@ -471,9 +465,8 @@ void Playlist::OpenFile(const char* path) noexcept
     // ApplyScanResult() — so a large/nested folder never blocks the start of
     // playback or the UI thread (see ScanShared in the header).
     Clear();
-    AddFile(pathStr);
+    AddFile(pathStr, "/");
     current_ = 0;
-    cursor_ = 0;
     LoadFile(pathStr.c_str());
 
     StartScan(pathStr);
@@ -594,20 +587,10 @@ void Playlist::AddFile(std::string path, std::string subfolder)
     Q_EMIT playlistChanged();
 }
 
-void Playlist::AddFiles(const std::vector<std::string>& paths)
-{
-    entries_.reserve(entries_.size() + paths.size());
-    for (auto& p : paths)
-    {
-        AddFile(p);
-    }
-}
-
 void Playlist::Clear()
 {
     entries_.clear();
     current_ = -1;
-    cursor_ = -1;
     Q_EMIT playlistChanged();
 }
 
@@ -733,7 +716,6 @@ void Playlist::RebuildEntries(std::vector<std::string>& files, const std::string
 
     entries_.clear();
     current_ = -1;
-    cursor_ = -1;
     entries_.reserve(files.size() + 1);
     for (auto& f : files)
     {
@@ -763,7 +745,6 @@ void Playlist::RebuildEntries(std::vector<std::string>& files, const std::string
             break;
         }
     }
-    cursor_ = current_;
 
     if (shuffleEnabled_)
     {
@@ -798,7 +779,6 @@ void Playlist::ToggleShuffle()
                 break;
             }
         }
-        cursor_ = current_;
     }
     Q_EMIT playlistChanged();
 }
@@ -832,46 +812,6 @@ void Playlist::ApplyShuffleToEntries()
         }
     }
     current_ = 0;
-    cursor_ = 0;
-}
-
-// ── Keyboard navigation ───────────────────────────────────────────────────────
-
-void Playlist::CursorUp()
-{
-    if (entries_.empty())
-    {
-        return;
-    }
-
-    if (cursor_ - 1 >= 0)
-    {
-        cursor_ -= 1;
-        Q_EMIT playlistChanged();
-    }
-}
-
-void Playlist::CursorDown()
-{
-    if (entries_.empty())
-    {
-        return;
-    }
-
-    const int n = static_cast<int>(entries_.size());
-    if (cursor_ + 1 < n)
-    {
-        cursor_ += 1;
-        Q_EMIT playlistChanged();
-    }
-}
-
-void Playlist::ConfirmCursor()
-{
-    if (cursor_ >= 0 && cursor_ < static_cast<int>(entries_.size()))
-    {
-        Activate(cursor_);
-    }
 }
 
 QVariantList Playlist::QmlEntries() const
@@ -889,7 +829,6 @@ QVariantList Playlist::QmlEntries() const
         row.insert(QStringLiteral("subfolder"), QString::fromStdString(entries_[i].subfolder));
         row.insert(QStringLiteral("path"), QString::fromStdString(entries_[i].path));
         row.insert(QStringLiteral("current"), i == current_);
-        row.insert(QStringLiteral("cursor"), i == cursor_);
         result.push_back(row);
     }
     entriesCache_ = std::move(result);
@@ -923,16 +862,9 @@ void Playlist::SetOpen(const bool value)
         return;
     }
     open_ = value;
-    if (open_)
+    if (!open_ && ctx_)
     {
-        cursor_ = current_ >= 0 ? current_ : 0;
-    }
-    else
-    {
-        if (ctx_)
-        {
-            ctx_->Publish<PanelLayoutEvent>({0, 0.f});
-        }
+        ctx_->Publish<PanelLayoutEvent>({0, 0.f});
     }
     Q_EMIT playlistChanged();
 }

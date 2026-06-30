@@ -21,7 +21,7 @@ Item {
         ColumnLayout {
             id: panel
             anchors.fill: parent
-            anchors.margins: 12
+            anchors.margins: 6
             spacing: 8
 
             property bool searchOpen: false
@@ -69,33 +69,32 @@ Item {
                     border.color: searchField.activeFocus ? FLTheme.accent : FLTheme.border
                 }
             }
-            ListView {
+            FLNavigableListView {
+                id: view
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                clip: true
-                spacing: 4
                 model: root.vm !== null ? root.vm.entries : []
-                delegate: Rectangle {
+                active: root.vm !== null && root.vm.open && !panel.searchOpen
+                onActiveChanged: if (active) {
+                    currentIndex = 0
+                    forceActiveFocus()
+                }
+                Keys.onReturnPressed: if (currentIndex >= 0 && root.vm !== null) root.vm.activateIndex(currentIndex)
+                delegate: FLListRow {
                     id: row
                     required property var modelData
                     required property int index
-                    width: ListView.view.width
                     height: 58
-                    radius: 6
-                    color: row.modelData.selected ? "#408B5CF6" : mouse.containsMouse ? "#18FFFFFF" : "transparent"
+                    selected: row.ListView.isCurrentItem
+                    onSelectRequested: { view.currentIndex = row.index; view.forceActiveFocus() }
+                    onActivateRequested: root.vm.activateIndex(row.index)
                     Column {
                         anchors.fill: parent
-                        anchors.margins: 8
+                        anchors.margins: 6
                         spacing: 1
                         Text { text: row.modelData.label; color: FLTheme.text; elide: Text.ElideMiddle; width: parent.width; font.pixelSize: 12 }
                         Text { text: row.modelData.directory; color: FLTheme.textMuted; elide: Text.ElideMiddle; width: parent.width; font.pixelSize: 11 }
                         Text { text: row.modelData.meta; color: FLTheme.textMuted; font.pixelSize: 11 }
-                    }
-                    MouseArea {
-                        id: mouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: root.vm.activateIndex(row.index)
                     }
                 }
             }
