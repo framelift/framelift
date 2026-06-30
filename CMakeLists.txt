@@ -73,8 +73,10 @@ configure_file("${CMAKE_SOURCE_DIR}/src/Version.h.in"
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftSdk.cmake")
 
 # ── Main executable ───────────────────────────────────────────────────────────
+# FrameLiftHostSources defines one OBJECT library per built-in module (linked below);
+# the exe itself compiles only the app entry point and the header-only modules.
 include("${CMAKE_SOURCE_DIR}/cmake/FrameLiftHostSources.cmake")
-set(FRAMELIFT_SOURCES ${FRAMELIFT_HOST_SOURCES})
+set(FRAMELIFT_SOURCES ${FRAMELIFT_HOST_CORE_SOURCES} ${FRAMELIFT_HOST_HEADER_ONLY_SOURCES})
 
 if (WIN32)
     enable_language(RC)
@@ -84,9 +86,8 @@ if (WIN32)
 endif ()
 
 add_executable(FrameLift ${FRAMELIFT_SOURCES} ${FRAMELIFT_SDK_SOURCES})
-# AUTOMOC for the Q_OBJECT types in the host modules (window-qt, etc.). Scoped to this
-# target (plugins and tests enable it on their own); set before qt_add_qml_module, which
-# requires AUTOMOC for its metatype/type registration.
+# AUTOMOC for the app entry point and required by qt_add_qml_module's type registration
+# (the module OBJECT libraries enable AUTOMOC on their own targets).
 set_target_properties(FrameLift PROPERTIES AUTOMOC ON)
 set(_framelift_control_qml
         qml/FrameLift/Controls/FLTheme.qml
@@ -143,20 +144,17 @@ target_link_libraries(FrameLift PRIVATE
         FrameLiftSdk OpenGL::GL
         Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Widgets)
 
+# Built-in module OBJECT libraries (defined in FrameLiftHostSources); the exe links the
+# objects + their compile usage requirements.
+get_property(_framelift_host_modules GLOBAL PROPERTY FRAMELIFT_HOST_MODULE_TARGETS)
+target_link_libraries(FrameLift PRIVATE ${_framelift_host_modules})
+
 # Vulkan graphics backend. FrameLift owns the instance/device setup and links the
-# official Vulkan loader; VMA is header-only.
+# official Vulkan loader; VMA is header-only. (The module object libs compile against
+# the Vulkan headers; the exe links the loader.)
 if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
     target_link_libraries(FrameLift PRIVATE
             Vulkan::Vulkan Vulkan::Headers GPUOpen::VulkanMemoryAllocator)
-endif ()
-
-# Compile the video shaders to embedded SPIR-V headers and make the host depend on
-# them (the Vulkan renderer #includes the generated <name>.spv.h from this dir).
-if (FRAMELIFT_MODULE_GRAPHICS_VULKAN)
-    framelift_compile_shader("${CMAKE_SOURCE_DIR}/modules/gfx/vulkan/shaders/video.vert" kVideoVertSpv FL_VIDEO_VERT_SPV)
-    framelift_compile_shader("${CMAKE_SOURCE_DIR}/modules/gfx/vulkan/shaders/video.frag" kVideoFragSpv FL_VIDEO_FRAG_SPV)
-    target_sources(FrameLift PRIVATE "${FL_VIDEO_VERT_SPV}" "${FL_VIDEO_FRAG_SPV}")
-    target_include_directories(FrameLift PRIVATE "${FRAMELIFT_SHADER_GEN_DIR}")
 endif ()
 
 # The external FFmpeg + libass playback backend. This is the only compressed
