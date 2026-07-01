@@ -5,6 +5,7 @@
 #include "SysStats.h"
 
 #include <QtCore/QObject>
+#include <QtCore/QVariantList>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -76,6 +77,7 @@ class Benchmark final : public QObject, public ModuleBase
     Q_OBJECT
     Q_PROPERTY(bool open READ IsOpen NOTIFY changed)
     Q_PROPERTY(QString summary READ Summary NOTIFY changed)
+    Q_PROPERTY(QVariantList sections READ Sections NOTIFY changed)
     Q_PROPERTY(bool accumulating READ Accumulating NOTIFY changed)
     Q_PROPERTY(bool complete READ Complete NOTIFY changed)
 
@@ -94,6 +96,7 @@ public:
     }
 
     [[nodiscard]] QString Summary() const;
+    [[nodiscard]] QVariantList Sections() const;
 
     [[nodiscard]] bool Accumulating() const
     {
@@ -119,6 +122,19 @@ public:
     }
 
     void HandleMediaEvent(const MediaEvent& event) override;
+
+#ifdef FRAMELIFT_BENCHMARK_TESTS
+    void SetSysSampleForTest(const SysSample& sample)
+    {
+        sys_ = sample;
+    }
+
+    void AddGpuStatForTest(double value, SysGpuScope scope)
+    {
+        gpuStatScope_ = scope;
+        gpuStat_.Add(value);
+    }
+#endif
 
 protected:
     std::vector<framelift::Keybind> Keybinds() override;
@@ -164,6 +180,7 @@ private:
     Stat cpuStat_;
     Stat memStat_; // bytes
     Stat gpuStat_;
+    SysGpuScope gpuStatScope_ = SysGpuScope::Unavailable;
     bool accumulating_ = false; // folding samples into the Stats
     bool complete_ = false;     // duration limit reached — results frozen
     double timePos_ = 0.0;      // latest playback position (seconds)

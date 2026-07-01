@@ -1,16 +1,41 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <string_view>
+#include <vector>
+
+enum class SysGpuScope
+{
+    Unavailable,
+    App,
+    Device,
+};
 
 // A single snapshot of process-level OS performance counters.
-// All fields describe THIS process (FrameLift), not the whole machine.
+// CPU/memory always describe THIS process (FrameLift). GPU is app-scoped when
+// the OS exposes per-process/client counters; otherwise it may be a labeled
+// device-wide fallback.
 struct SysSample
 {
     double cpuPercent = 0.0; // CPU usage, normalized across all cores (0-100)
     uint64_t memBytes = 0;   // resident memory / working set, in bytes
     double gpuPercent = 0.0; // best-effort GPU utilization (0-100)
     bool gpuValid = false;   // false → GPU usage unavailable, display "N/A"
+    SysGpuScope gpuScope = SysGpuScope::Unavailable;
 };
+
+#if !defined(_WIN32)
+struct DrmFdinfoCounters
+{
+    std::string clientKey;
+    uint64_t engineNs = 0;
+    bool valid = false;
+};
+
+DrmFdinfoCounters ParseDrmFdinfoCounters(std::string_view contents, std::string_view fallbackKey);
+uint64_t TotalUniqueDrmEngineNs(const std::vector<DrmFdinfoCounters>& samples);
+#endif
 
 // Cross-platform sampler for process CPU / memory / GPU usage.
 //

@@ -234,6 +234,7 @@ add_framelift_plugin_test(framelift_test_benchmark
         "${FRAMELIFT_ROOT}/plugins/benchmark/Benchmark.cpp"
         "${FRAMELIFT_ROOT}/plugins/benchmark/BenchmarkSettings.cpp"
         "${FRAMELIFT_ROOT}/plugins/benchmark/SysStats.cpp")
+target_compile_definitions(framelift_test_benchmark PRIVATE FRAMELIFT_BENCHMARK_TESTS)
 if (WIN32)
     target_link_libraries(framelift_test_benchmark PRIVATE pdh)
 endif ()
