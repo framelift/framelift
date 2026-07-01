@@ -2,7 +2,9 @@
 
 #include <framelift/ModuleABI.h>
 
-#include <gtest/gtest.h>
+#include "QtTestRunner.h"
+
+#include <QtTest/QtTest>
 #include <string>
 #include <utility>
 #include <vector>
@@ -41,90 +43,106 @@ struct PluginFixture
 };
 } // namespace
 
-TEST(PluginResolverTest, AcceptsValidDependencyGraph)
+class PluginResolverTest final : public QObject
 {
-    PluginFixture provider{"framelift.history", List({"history.service"}), EmptyList(), EmptyList(), EmptyList(),
-                           EmptyList()};
-    PluginFixture consumer{"framelift.playlist", EmptyList(), EmptyList(), List({"history.service"}), EmptyList(),
-                           EmptyList()};
+    Q_OBJECT
 
-    const auto decisions = ResolvePlugins({{&provider.info}, {&consumer.info}}, "linux");
+private Q_SLOTS:
 
-    ASSERT_EQ(decisions.size(), 2u);
-    EXPECT_TRUE(decisions[0].accepted);
-    EXPECT_TRUE(decisions[1].accepted);
+    void AcceptsValidDependencyGraph()
+    {
+        PluginFixture provider{"framelift.history", List({"history.service"}), EmptyList(), EmptyList(), EmptyList(),
+                               EmptyList()};
+        PluginFixture consumer{"framelift.playlist",      EmptyList(), EmptyList(),
+                               List({"history.service"}), EmptyList(), EmptyList()};
+
+        const auto decisions = ResolvePlugins({{&provider.info}, {&consumer.info}}, "linux");
+
+        QVERIFY((decisions.size()) == (2u));
+        QVERIFY(decisions[0].accepted);
+        QVERIFY(decisions[1].accepted);
+    }
+
+    void RejectsMissingRequiredPlugin()
+    {
+        PluginFixture consumer{"framelift.playlist", EmptyList(), List({"framelift.history"}),
+                               EmptyList(),          EmptyList(), EmptyList()};
+
+        const auto decisions = ResolvePlugins({{&consumer.info}}, "linux");
+
+        QVERIFY((decisions.size()) == (1u));
+        QVERIFY(!(decisions[0].accepted));
+        QVERIFY((decisions[0].reason.find("framelift.history")) != (std::string::npos));
+    }
+
+    void RejectsMissingRequiredFeature()
+    {
+        PluginFixture consumer{"framelift.playlist",      EmptyList(), EmptyList(),
+                               List({"history.service"}), EmptyList(), EmptyList()};
+
+        const auto decisions = ResolvePlugins({{&consumer.info}}, "linux");
+
+        QVERIFY((decisions.size()) == (1u));
+        QVERIFY(!(decisions[0].accepted));
+        QVERIFY((decisions[0].reason.find("history.service")) != (std::string::npos));
+    }
+
+    void CascadesRejectedDependencies()
+    {
+        PluginFixture provider{"framelift.provider", EmptyList(), EmptyList(),
+                               EmptyList(),          EmptyList(), List({"windows"})};
+        PluginFixture consumer{"framelift.consumer", EmptyList(), List({"framelift.provider"}),
+                               EmptyList(),          EmptyList(), EmptyList()};
+
+        const auto decisions = ResolvePlugins({{&provider.info}, {&consumer.info}}, "linux");
+
+        QVERIFY((decisions.size()) == (2u));
+        QVERIFY(!(decisions[0].accepted));
+        QVERIFY(!(decisions[1].accepted));
+        QVERIFY((decisions[1].reason.find("framelift.provider")) != (std::string::npos));
+    }
+
+    void OptionalFeaturesDoNotGateLoading()
+    {
+        PluginFixture package{"framelift.optional",       EmptyList(), EmptyList(), EmptyList(),
+                              List({"missing.optional"}), EmptyList()};
+
+        const auto decisions = ResolvePlugins({{&package.info}}, "linux");
+
+        QVERIFY((decisions.size()) == (1u));
+        QVERIFY(decisions[0].accepted);
+    }
+
+    void OrdersProviderBeforeOptionalConsumer()
+    {
+        PluginFixture provider{
+            "framelift.context_menu", List({"ui.context_menu"}), EmptyList(), EmptyList(), EmptyList(), EmptyList()
+        };
+        PluginFixture consumer{"framelift.playlist",      EmptyList(), EmptyList(), EmptyList(),
+                               List({"ui.context_menu"}), EmptyList()};
+
+        // Consumer listed first in the input; ordering must still load the provider first.
+        const auto order = OrderPlugins({{&consumer.info}, {&provider.info}});
+        QVERIFY((order.size()) == (2u));
+        QVERIFY((order[0]) == (1u)); // provider (input index 1)
+        QVERIFY((order[1]) == (0u)); // consumer (input index 0)
+    }
+
+    void OrdersIndependentPackagesByPackageId()
+    {
+        PluginFixture zzz{"framelift.zzz", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
+        PluginFixture aaa{"framelift.aaa", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
+
+        const auto order = OrderPlugins({{&zzz.info}, {&aaa.info}});
+        QVERIFY((order.size()) == (2u));
+        QVERIFY((order[0]) == (1u)); // framelift.aaa sorts first
+        QVERIFY((order[1]) == (0u));
+    }
+};
+
+namespace
+{
+const ::framelift::test::Registrar<PluginResolverTest> kRegisterPluginResolverTest{"PluginResolverTest"};
 }
 
-TEST(PluginResolverTest, RejectsMissingRequiredPlugin)
-{
-    PluginFixture consumer{"framelift.playlist", EmptyList(), List({"framelift.history"}), EmptyList(), EmptyList(),
-                           EmptyList()};
-
-    const auto decisions = ResolvePlugins({{&consumer.info}}, "linux");
-
-    ASSERT_EQ(decisions.size(), 1u);
-    EXPECT_FALSE(decisions[0].accepted);
-    EXPECT_NE(decisions[0].reason.find("framelift.history"), std::string::npos);
-}
-
-TEST(PluginResolverTest, RejectsMissingRequiredFeature)
-{
-    PluginFixture consumer{"framelift.playlist", EmptyList(), EmptyList(), List({"history.service"}), EmptyList(),
-                           EmptyList()};
-
-    const auto decisions = ResolvePlugins({{&consumer.info}}, "linux");
-
-    ASSERT_EQ(decisions.size(), 1u);
-    EXPECT_FALSE(decisions[0].accepted);
-    EXPECT_NE(decisions[0].reason.find("history.service"), std::string::npos);
-}
-
-TEST(PluginResolverTest, CascadesRejectedDependencies)
-{
-    PluginFixture provider{"framelift.provider", EmptyList(), EmptyList(), EmptyList(), EmptyList(), List({"windows"})};
-    PluginFixture consumer{"framelift.consumer", EmptyList(), List({"framelift.provider"}), EmptyList(), EmptyList(),
-                           EmptyList()};
-
-    const auto decisions = ResolvePlugins({{&provider.info}, {&consumer.info}}, "linux");
-
-    ASSERT_EQ(decisions.size(), 2u);
-    EXPECT_FALSE(decisions[0].accepted);
-    EXPECT_FALSE(decisions[1].accepted);
-    EXPECT_NE(decisions[1].reason.find("framelift.provider"), std::string::npos);
-}
-
-TEST(PluginResolverTest, OptionalFeaturesDoNotGateLoading)
-{
-    PluginFixture package{"framelift.optional", EmptyList(), EmptyList(), EmptyList(), List({"missing.optional"}),
-                          EmptyList()};
-
-    const auto decisions = ResolvePlugins({{&package.info}}, "linux");
-
-    ASSERT_EQ(decisions.size(), 1u);
-    EXPECT_TRUE(decisions[0].accepted);
-}
-
-TEST(PluginResolverTest, OrdersProviderBeforeOptionalConsumer)
-{
-    PluginFixture provider{"framelift.context_menu", List({"ui.context_menu"}), EmptyList(), EmptyList(), EmptyList(),
-                           EmptyList()};
-    PluginFixture consumer{"framelift.playlist", EmptyList(), EmptyList(), EmptyList(), List({"ui.context_menu"}),
-                           EmptyList()};
-
-    // Consumer listed first in the input; ordering must still load the provider first.
-    const auto order = OrderPlugins({{&consumer.info}, {&provider.info}});
-    ASSERT_EQ(order.size(), 2u);
-    EXPECT_EQ(order[0], 1u); // provider (input index 1)
-    EXPECT_EQ(order[1], 0u); // consumer (input index 0)
-}
-
-TEST(PluginResolverTest, OrdersIndependentPackagesByPackageId)
-{
-    PluginFixture zzz{"framelift.zzz", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
-    PluginFixture aaa{"framelift.aaa", EmptyList(), EmptyList(), EmptyList(), EmptyList(), EmptyList()};
-
-    const auto order = OrderPlugins({{&zzz.info}, {&aaa.info}});
-    ASSERT_EQ(order.size(), 2u);
-    EXPECT_EQ(order[0], 1u); // framelift.aaa sorts first
-    EXPECT_EQ(order[1], 0u);
-}
+#include "PluginResolverTests.moc"

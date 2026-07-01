@@ -5,8 +5,10 @@
 #include <framelift/Log.h>
 #include <framelift/services/ILogBuffer.h>
 
+#include "QtTestRunner.h"
 #include <cstring>
-#include <gtest/gtest.h>
+
+#include <QtTest/QtTest>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -21,10 +23,12 @@ public:
     {
         entries_.emplace_back(entries_.size() + 1, 0LL, level, std::string(msg));
     }
+
     [[nodiscard]] unsigned long long LatestSeq() const noexcept override
     {
         return entries_.empty() ? 0 : std::get<0>(entries_.back());
     }
+
     unsigned long long ReadSince(const unsigned long long after, const Visitor v, void* ud) const noexcept override
     {
         unsigned long long last = after;
@@ -48,6 +52,7 @@ class FakeContext final : public IModuleContext
 {
 public:
     ILogBuffer* logs = nullptr;
+
     void* GetServiceRaw(const char* id) const noexcept override
     {
         if (logs && std::strcmp(id, ILogBuffer::InterfaceId) == 0)
@@ -56,70 +61,93 @@ public:
         }
         return nullptr;
     }
-    void RegisterServiceRaw(const char*, void*) noexcept override {}
-    void SubscribeRaw(const char*, void (*)(const void*, void*), void*, void (*)(void*)) noexcept override {}
-    void PublishRaw(const char*, const void*) noexcept override {}
+
+    void RegisterServiceRaw(const char*, void*) noexcept override
+    {
+    }
+
+    void SubscribeRaw(const char*, void (*)(const void*, void*), void*, void (*)(void*)) noexcept override
+    {
+    }
+
+    void PublishRaw(const char*, const void*) noexcept override
+    {
+    }
 };
 } // namespace
 
-TEST(LogViewerTest, ShowsBacklogOnOpen)
+class LogViewerTest final : public QObject
 {
-    FakeLogBuffer buf;
-    buf.Push(static_cast<int>(Log::Level::Info), "hello");
-    buf.Push(static_cast<int>(Log::Level::Warn), "world");
+    Q_OBJECT
 
-    FakeContext ctx;
-    ctx.logs = &buf;
+private Q_SLOTS:
 
-    LogViewer v;
-    v.Install(ctx);
+    void ShowsBacklogOnOpen()
+    {
+        FakeLogBuffer buf;
+        buf.Push(static_cast<int>(Log::Level::Info), "hello");
+        buf.Push(static_cast<int>(Log::Level::Warn), "world");
 
-    EXPECT_TRUE(v.QmlLines().isEmpty()); // closed: nothing pulled yet
-    v.Toggle();                          // open → must drain backlog immediately
-    EXPECT_TRUE(v.IsOpen());
-    EXPECT_EQ(v.QmlLines().size(), 2);
+        FakeContext ctx;
+        ctx.logs = &buf;
+
+        LogViewer v;
+        v.Install(ctx);
+
+        QVERIFY(v.QmlLines().isEmpty()); // closed: nothing pulled yet
+        v.Toggle();                      // open → must drain backlog immediately
+        QVERIFY(v.IsOpen());
+        QVERIFY((v.QmlLines().size()) == (2));
+    }
+
+    // LogViewer is exercised without a host context: with no ILogBuffer wired up the
+    // ring buffer stays empty, so these cover the context-free public surface
+    // (visibility, filter state, line projection).
+
+    void StartsClosed()
+    {
+        const LogViewer v;
+        QVERIFY(!(v.IsOpen()));
+    }
+
+    void ToggleAndCloseAreIdempotent()
+    {
+        LogViewer v;
+        v.Toggle();
+        QVERIFY(v.IsOpen());
+        v.close();
+        QVERIFY(!(v.IsOpen()));
+        v.close(); // closing an already-closed viewer is a no-op
+        QVERIFY(!(v.IsOpen()));
+    }
+
+    void FilterTextRoundTrips()
+    {
+        LogViewer v;
+        v.SetFilterText(QStringLiteral("error"));
+        QVERIFY((v.FilterText()) == (QStringLiteral("error")));
+    }
+
+    void PerfOnlyRoundTrips()
+    {
+        LogViewer v;
+        QVERIFY(!(v.PerfOnly()));
+        v.SetPerfOnly(true);
+        QVERIFY(v.PerfOnly());
+    }
+
+    void LinesEmptyWithoutLogBuffer()
+    {
+        LogViewer v;
+        QVERIFY(v.QmlLines().isEmpty());
+        v.clearLines(); // safe with nothing buffered
+        QVERIFY(v.QmlLines().isEmpty());
+    }
+};
+
+namespace
+{
+const ::framelift::test::Registrar<LogViewerTest> kRegisterLogViewerTest{"LogViewerTest"};
 }
 
-// LogViewer is exercised without a host context: with no ILogBuffer wired up the
-// ring buffer stays empty, so these cover the context-free public surface
-// (visibility, filter state, line projection).
-
-TEST(LogViewerTest, StartsClosed)
-{
-    const LogViewer v;
-    EXPECT_FALSE(v.IsOpen());
-}
-
-TEST(LogViewerTest, ToggleAndCloseAreIdempotent)
-{
-    LogViewer v;
-    v.Toggle();
-    EXPECT_TRUE(v.IsOpen());
-    v.close();
-    EXPECT_FALSE(v.IsOpen());
-    v.close(); // closing an already-closed viewer is a no-op
-    EXPECT_FALSE(v.IsOpen());
-}
-
-TEST(LogViewerTest, FilterTextRoundTrips)
-{
-    LogViewer v;
-    v.SetFilterText(QStringLiteral("error"));
-    EXPECT_EQ(v.FilterText(), QStringLiteral("error"));
-}
-
-TEST(LogViewerTest, PerfOnlyRoundTrips)
-{
-    LogViewer v;
-    EXPECT_FALSE(v.PerfOnly());
-    v.SetPerfOnly(true);
-    EXPECT_TRUE(v.PerfOnly());
-}
-
-TEST(LogViewerTest, LinesEmptyWithoutLogBuffer)
-{
-    LogViewer v;
-    EXPECT_TRUE(v.QmlLines().isEmpty());
-    v.clearLines(); // safe with nothing buffered
-    EXPECT_TRUE(v.QmlLines().isEmpty());
-}
+#include "LogViewerTests.moc"

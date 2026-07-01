@@ -1,83 +1,99 @@
 #include "PluginConfig.h"
 #include "TempIni.h"
 
+#include "QtTestRunner.h"
 #include <fstream>
-#include <gtest/gtest.h>
+
+#include <QtTest/QtTest>
 #include <iterator>
 #include <string>
 
-TEST(PluginConfigTest, AbsentIdDefaultsToEnabled)
+class PluginConfigTest final : public QObject
 {
-    const PluginConfig cfg; // nothing loaded
-    EXPECT_TRUE(cfg.IsEnabled("framelift.anything"));
-    EXPECT_TRUE(cfg.DisabledIds().empty());
-}
+    Q_OBJECT
 
-TEST(PluginConfigTest, MissingFileLeavesEverythingEnabled)
-{
-    PluginConfig cfg;
-    cfg.Load(UniqueTempPath().string()); // file does not exist
-    EXPECT_TRUE(cfg.IsEnabled("framelift.overlay"));
-    EXPECT_TRUE(cfg.DisabledIds().empty());
-}
+private Q_SLOTS:
 
-TEST(PluginConfigTest, LoadParsesRowsAndDefaultsUnlisted)
-{
-    const TempFile f("# header\nframelift.overlay=disabled\nframelift.playlist=enabled\n");
+    void AbsentIdDefaultsToEnabled()
+    {
+        const PluginConfig cfg; // nothing loaded
+        QVERIFY(cfg.IsEnabled("framelift.anything"));
+        QVERIFY(cfg.DisabledIds().empty());
+    }
 
-    PluginConfig cfg;
-    cfg.Load(f.str());
+    void MissingFileLeavesEverythingEnabled()
+    {
+        PluginConfig cfg;
+        cfg.Load(UniqueTempPath().string()); // file does not exist
+        QVERIFY(cfg.IsEnabled("framelift.overlay"));
+        QVERIFY(cfg.DisabledIds().empty());
+    }
 
-    EXPECT_FALSE(cfg.IsEnabled("framelift.overlay"));
-    EXPECT_TRUE(cfg.IsEnabled("framelift.playlist"));
-    EXPECT_TRUE(cfg.IsEnabled("framelift.history")); // unlisted ⇒ enabled
+    void LoadParsesRowsAndDefaultsUnlisted()
+    {
+        const TempFile f("# header\nframelift.overlay=disabled\nframelift.playlist=enabled\n");
 
-    const auto disabled = cfg.DisabledIds();
-    EXPECT_EQ(disabled.size(), 1u);
-    EXPECT_TRUE(disabled.contains("framelift.overlay"));
-}
+        PluginConfig cfg;
+        cfg.Load(f.str());
 
-TEST(PluginConfigTest, SetAndSaveRoundTrip)
-{
-    const TempFile f;
+        QVERIFY(!(cfg.IsEnabled("framelift.overlay")));
+        QVERIFY(cfg.IsEnabled("framelift.playlist"));
+        QVERIFY(cfg.IsEnabled("framelift.history")); // unlisted ⇒ enabled
+
+        const auto disabled = cfg.DisabledIds();
+        QVERIFY((disabled.size()) == (1u));
+        QVERIFY(disabled.contains("framelift.overlay"));
+    }
+
+    void SetAndSaveRoundTrip()
+    {
+        const TempFile f;
+        {
+            PluginConfig cfg;
+            cfg.Set("framelift.overlay", false);
+            cfg.Set("framelift.playlist", true);
+            cfg.Save(f.str());
+        }
+
+        PluginConfig reloaded;
+        reloaded.Load(f.str());
+        QVERIFY(!(reloaded.IsEnabled("framelift.overlay")));
+        QVERIFY(reloaded.IsEnabled("framelift.playlist"));
+    }
+
+    void EnsureKnownAddsAsEnabledWithoutOverriding()
     {
         PluginConfig cfg;
         cfg.Set("framelift.overlay", false);
-        cfg.Set("framelift.playlist", true);
-        cfg.Save(f.str());
+        cfg.EnsureKnown({"framelift.overlay", "framelift.history"});
+
+        QVERIFY(!(cfg.IsEnabled("framelift.overlay"))); // existing state preserved
+        QVERIFY(cfg.IsEnabled("framelift.history"));    // newly known ⇒ enabled
     }
 
-    PluginConfig reloaded;
-    reloaded.Load(f.str());
-    EXPECT_FALSE(reloaded.IsEnabled("framelift.overlay"));
-    EXPECT_TRUE(reloaded.IsEnabled("framelift.playlist"));
-}
+    void SaveWritesSortedRowsWithHeader()
+    {
+        const TempFile f;
+        PluginConfig cfg;
+        cfg.Set("framelift.zzz", true);
+        cfg.Set("framelift.aaa", false);
+        cfg.Save(f.str());
 
-TEST(PluginConfigTest, EnsureKnownAddsAsEnabledWithoutOverriding)
+        std::ifstream in(f.str());
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+        QVERIFY((text.rfind("# FrameLift plugin enablement", 0)) == (0u)); // starts with the header
+        const auto aaa = text.find("framelift.aaa=disabled");
+        const auto zzz = text.find("framelift.zzz=enabled");
+        QVERIFY((aaa) != (std::string::npos));
+        QVERIFY((zzz) != (std::string::npos));
+        QVERIFY((aaa) < (zzz)); // sorted by id
+    }
+};
+
+namespace
 {
-    PluginConfig cfg;
-    cfg.Set("framelift.overlay", false);
-    cfg.EnsureKnown({"framelift.overlay", "framelift.history"});
-
-    EXPECT_FALSE(cfg.IsEnabled("framelift.overlay")); // existing state preserved
-    EXPECT_TRUE(cfg.IsEnabled("framelift.history"));  // newly known ⇒ enabled
+const ::framelift::test::Registrar<PluginConfigTest> kRegisterPluginConfigTest{"PluginConfigTest"};
 }
 
-TEST(PluginConfigTest, SaveWritesSortedRowsWithHeader)
-{
-    const TempFile f;
-    PluginConfig cfg;
-    cfg.Set("framelift.zzz", true);
-    cfg.Set("framelift.aaa", false);
-    cfg.Save(f.str());
-
-    std::ifstream in(f.str());
-    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-
-    EXPECT_EQ(text.rfind("# FrameLift plugin enablement", 0), 0u); // starts with the header
-    const auto aaa = text.find("framelift.aaa=disabled");
-    const auto zzz = text.find("framelift.zzz=enabled");
-    ASSERT_NE(aaa, std::string::npos);
-    ASSERT_NE(zzz, std::string::npos);
-    EXPECT_LT(aaa, zzz); // sorted by id
-}
+#include "PluginConfigTests.moc"

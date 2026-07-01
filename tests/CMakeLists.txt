@@ -13,23 +13,11 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     project(FrameLiftTests LANGUAGES CXX)
 endif ()
 
-include(FetchContent)
-FetchContent_Declare(
-        googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG v1.15.2
-        GIT_SHALLOW TRUE
-)
-# Match the test exe's CRT on MSVC (no effect on GCC/Clang).
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-
 # JSON — backs the host JsonServiceImpl (Qt6::Core QJson), compiled into the History
 # test so its persistence round-trips exercise the real backend.
-find_package(Qt6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Test)
 
 enable_testing()
-include(GoogleTest)
 find_package(Threads REQUIRED)
 
 set(FRAMELIFT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
@@ -55,6 +43,22 @@ set(FRAMELIFT_SDK_TEST_SOURCES
         "${FRAMELIFT_ROOT}/sdk/src/KeyNames.cpp"
         "${FRAMELIFT_ROOT}/sdk/src/Log.cpp"
 )
+
+set(FRAMELIFT_QT_TEST_RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/support/QtTestRunner.cpp")
+
+function(framelift_qt_discover_tests target)
+    set(_FL_TEST_INCLUDE_FILE "${CMAKE_CURRENT_BINARY_DIR}/${target}_qt_tests.cmake")
+    file(WRITE "${_FL_TEST_INCLUDE_FILE}" "")
+    add_custom_target(${target}_qt_discover ALL
+            COMMAND ${CMAKE_COMMAND}
+            -D "TEST_TARGET=$<TARGET_FILE:${target}>"
+            -D "TEST_WORKING_DIR=$<TARGET_FILE_DIR:${target}>"
+            -D "TEST_INCLUDE_FILE=${_FL_TEST_INCLUDE_FILE}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/support/DiscoverQtTests.cmake"
+            VERBATIM)
+    add_dependencies(${target}_qt_discover ${target})
+    set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${_FL_TEST_INCLUDE_FILE}")
+endfunction()
 
 # ── framelift_tests: pure-logic + platform-builder suites (no plugin entry symbols) ─
 add_executable(framelift_tests
@@ -82,6 +86,7 @@ add_executable(framelift_tests
         unit/media/FFmpegSubtitleBlendTests.cpp
         unit/media/FFmpegTrackLabelTests.cpp
         unit/gfx/VulkanQueueLockTests.cpp
+        ${FRAMELIFT_QT_TEST_RUNNER}
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/PluginConfig.cpp"
         "${FRAMELIFT_ROOT}/modules/host/module-runtime/ModuleContext.cpp"
@@ -95,7 +100,8 @@ add_executable(framelift_tests
         "${FRAMELIFT_ROOT}/sdk/src/Log.cpp"
 )
 set_target_properties(framelift_tests PROPERTIES
-        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF
+        AUTOMOC ON)
 target_include_directories(framelift_tests PRIVATE
         "${FRAMELIFT_ROOT}/sdk/include"
         "${FRAMELIFT_ROOT}/src"
@@ -104,26 +110,29 @@ target_include_directories(framelift_tests PRIVATE
         "${FRAMELIFT_ROOT}/tests/support"  # TempIni.h for PluginConfig/ModuleSettings tests
         "${FRAMELIFT_ROOT}/plugins/playlist"
 )
-target_link_libraries(framelift_tests PRIVATE GTest::gtest_main GTest::gmock Threads::Threads Qt6::Core Qt6::Gui)
+target_link_libraries(framelift_tests PRIVATE Threads::Threads Qt6::Core Qt6::Gui Qt6::Test)
 framelift_apply_coverage(framelift_tests)
-gtest_discover_tests(framelift_tests)
+framelift_qt_discover_tests(framelift_tests)
 
 add_executable(framelift_tests_vulkan_off
         unit/gfx/VulkanModuleDisabledTests.cpp
+        ${FRAMELIFT_QT_TEST_RUNNER}
         "${FRAMELIFT_ROOT}/modules/host/settings/Settings.cpp"
 )
 set_target_properties(framelift_tests_vulkan_off PROPERTIES
-        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF
+        AUTOMOC ON)
 target_compile_definitions(framelift_tests_vulkan_off PRIVATE FRAMELIFT_MODULE_GRAPHICS_VULKAN=0)
 target_include_directories(framelift_tests_vulkan_off PRIVATE
         "${FRAMELIFT_ROOT}/sdk/include"
         "${FRAMELIFT_ROOT}/src"
         ${FRAMELIFT_GRAPHICS_TEST_INCLUDE_DIRS}
         ${FRAMELIFT_HOST_MODULE_TEST_INCLUDE_DIRS}
+        "${FRAMELIFT_ROOT}/tests/support"
 )
-target_link_libraries(framelift_tests_vulkan_off PRIVATE GTest::gtest_main Threads::Threads Qt6::Core)
+target_link_libraries(framelift_tests_vulkan_off PRIVATE Threads::Threads Qt6::Core Qt6::Test)
 framelift_apply_coverage(framelift_tests_vulkan_off)
-gtest_discover_tests(framelift_tests_vulkan_off)
+framelift_qt_discover_tests(framelift_tests_vulkan_off)
 
 # ── Helper: one test exe per plugin ───────────────────────────────────────────
 # add_framelift_plugin_test(NAME [EMIT_MODULE_ENTRY] <test.cpp> <plugin.cpp> [extra .cpp]...)
@@ -145,7 +154,7 @@ function(add_framelift_plugin_test name)
             endif ()
         endif ()
     endforeach ()
-    add_executable(${name} ${_FL_TEST_SOURCES} ${FRAMELIFT_SDK_TEST_SOURCES})
+    add_executable(${name} ${_FL_TEST_SOURCES} ${FRAMELIFT_SDK_TEST_SOURCES} ${FRAMELIFT_QT_TEST_RUNNER})
     set_target_properties(${name} PROPERTIES
             CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF
             AUTOMOC ON)
@@ -174,9 +183,9 @@ function(add_framelift_plugin_test name)
             "${FRAMELIFT_ROOT}/plugins/log-viewer"
     )
     target_link_libraries(${name} PRIVATE
-            GTest::gtest_main GTest::gmock Threads::Threads Qt6::Core Qt6::Gui)
+            Threads::Threads Qt6::Core Qt6::Gui Qt6::Test)
     framelift_apply_coverage(${name})
-    gtest_discover_tests(${name})
+    framelift_qt_discover_tests(${name})
 endfunction()
 
 # ── Per-plugin behaviour suites ───────────────────────────────────────────────

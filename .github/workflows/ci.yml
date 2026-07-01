@@ -23,7 +23,7 @@ env:
 
 jobs:
   # ── Unit tests ──────────────────────────────────────────────────────────────
-  # Native-Linux GoogleTest suite over the platform-independent logic. Runs first;
+  # Native-Linux QtTest suite over the platform-independent logic. Runs first;
   # the build jobs depend on it via `needs:`.
   test:
     runs-on: ubuntu-latest
