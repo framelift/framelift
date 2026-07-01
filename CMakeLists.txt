@@ -11,10 +11,16 @@ option(FRAMELIFT_BUILD_TESTS "Build the unit tests (tests/)" OFF)
 # and embed their Qt Quick surfaces as QML modules.
 option(FRAMELIFT_BUILD_PLUGINS "Build the runtime plugin DLLs/SOs (plugins/)" ON)
 
+# Build-only hook for CTest launch smokes. Off in normal app/release builds so
+# test-only environment controls do not exist in the shipped executable.
+option(FRAMELIFT_BUILD_LAUNCH_TESTS "Build CTest launch smoke hooks for the app" OFF)
+
 # Display string shown in the UI; defaults to the numeric version for local/release builds.
 if (NOT DEFINED FRAMELIFT_VERSION_DISPLAY OR FRAMELIFT_VERSION_DISPLAY STREQUAL "")
     set(FRAMELIFT_VERSION_DISPLAY "${FRAMELIFT_VERSION}")
 endif ()
+
+enable_testing()
 
 include(FetchContent)
 
@@ -126,6 +132,11 @@ qt_add_resources(
         PREFIX "/framelift/assets"
         FILES "${CMAKE_SOURCE_DIR}/assets/img/icon.svg")
 framelift_apply_builtin_module_definitions(FrameLift)
+if (FRAMELIFT_BUILD_LAUNCH_TESTS)
+    target_compile_definitions(FrameLift PRIVATE FRAMELIFT_BUILD_LAUNCH_TESTS=1)
+else ()
+    target_compile_definitions(FrameLift PRIVATE FRAMELIFT_BUILD_LAUNCH_TESTS=0)
+endif ()
 
 set_target_properties(FrameLift PROPERTIES
         CXX_STANDARD 23
@@ -240,6 +251,40 @@ endif ()
 # under the cross-compile); the dedicated CI `test` job builds tests/ standalone.
 if (FRAMELIFT_BUILD_TESTS)
     add_subdirectory(tests)
+endif ()
+
+# ── Runtime launch smoke tests ────────────────────────────────────────────────
+# Exercise the real executable plus runtime plugins/QML without joining the
+# standalone pure-logic tests/ project. Linux CI can run this headlessly through
+# Qt's offscreen platform and software scene-graph backend.
+if (UNIX AND NOT APPLE AND FRAMELIFT_BUILD_PLUGINS AND FRAMELIFT_BUILD_LAUNCH_TESTS)
+    set(_framelift_launch_env
+            "QT_QPA_PLATFORM=offscreen"
+            "QT_QUICK_BACKEND=software"
+            "FL_BACKEND=opengl"
+            "FL_LOG_LEVEL=debug"
+            "FRAMELIFT_TEST_EXIT_AFTER_MS=1500"
+            "XDG_CONFIG_HOME=${CMAKE_BINARY_DIR}/test-config/framelift_launch_opengl_offscreen")
+    set(_framelift_launch_fail_regex
+            "TypeError"
+            "ReferenceError"
+            "QML .* root object is not"
+            "QML .* skipped"
+            "FrameLift startup failed"
+            "Segmentation fault"
+            "core dumped"
+            "Aborted"
+            "Assertion"
+            "AddressSanitizer"
+            "UndefinedBehaviorSanitizer")
+    add_test(NAME framelift_launch_opengl_offscreen
+            COMMAND $<TARGET_FILE:FrameLift>)
+    set_tests_properties(framelift_launch_opengl_offscreen PROPERTIES
+            WORKING_DIRECTORY "$<TARGET_FILE_DIR:FrameLift>"
+            LABELS launch
+            TIMEOUT 20
+            ENVIRONMENT "${_framelift_launch_env}"
+            FAIL_REGULAR_EXPRESSION "${_framelift_launch_fail_regex}")
 endif ()
 
 # ── Plugin SDK packaging ──────────────────────────────────────────────────────

@@ -208,11 +208,13 @@ jobs:
           cmake -S . -B "$BUILD_DIR" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DFRAMELIFT_BUILD_TESTS=OFF \
+            -DFRAMELIFT_BUILD_LAUNCH_TESTS=ON \
             -DFRAMELIFT_VERSION="$VERSION" \
             -DFRAMELIFT_VERSION_DISPLAY="$VERSION_DISPLAY"
           cmake --build "$BUILD_DIR" --parallel
           test -f "$BUILD_DIR/framelift"
           test -f "$BUILD_DIR/plugins/framelift.playlist.so"
+          ctest --test-dir "$BUILD_DIR" -L launch --output-on-failure
           (cd "$BUILD_DIR" && tar -czf FrameLift-linux-x64.tar.gz framelift plugins)
       - name: Upload artifact
         uses: actions/upload-artifact@v4

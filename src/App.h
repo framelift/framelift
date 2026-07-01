@@ -58,6 +58,9 @@ private:
 
     void Dispatch(const AppEvent& e);
     void DrainMediaEvents();
+#if FRAMELIFT_BUILD_LAUNCH_TESTS
+    void ScheduleTestExitIfRequested();
+#endif
 
     // The window's scene-graph video node calls this on the GUI thread with the target
     // framebuffer size: lazily adopts Qt's GL context + builds the renderer on first call,

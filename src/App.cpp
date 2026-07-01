@@ -19,6 +19,10 @@
 #include <utility>
 #include <vector>
 
+#if FRAMELIFT_BUILD_LAUNCH_TESTS
+#include <QtCore/QTimer>
+#endif
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -528,6 +532,33 @@ void App::Dispatch(const AppEvent& e)
     registry_.OnEvent(e);
 }
 
+#if FRAMELIFT_BUILD_LAUNCH_TESTS
+void App::ScheduleTestExitIfRequested()
+{
+    bool ok = false;
+    int delayMs = qEnvironmentVariableIntValue("FRAMELIFT_TEST_EXIT_AFTER_MS", &ok);
+    if (!ok)
+    {
+        return;
+    }
+    if (delayMs < 0)
+    {
+        delayMs = 0;
+    }
+
+    Log::Info("test exit requested after {} ms", delayMs);
+    QTimer::singleShot(
+        delayMs,
+        [this]
+        {
+            AppEvent quit{};
+            quit.type = AppEventType::Quit;
+            Dispatch(quit);
+        }
+    );
+}
+#endif
+
 void App::ResizeToVideo() const
 {
     if (appWindow_->IsFullscreen())
@@ -571,6 +602,9 @@ int App::Run()
     }
 
     FRAMELIFT_PERF_END("app-start");
+#if FRAMELIFT_BUILD_LAUNCH_TESTS
+    ScheduleTestExitIfRequested();
+#endif
 
     // Qt owns the loop now: show the window and run QGuiApplication::exec(). The
     // demand-driven semantics are preserved by scheduling repaints (QQuickWindow::update)
