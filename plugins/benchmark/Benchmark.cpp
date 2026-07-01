@@ -3,6 +3,7 @@
 
 #include <QtCore/QStringList>
 #include <QtCore/QTimer>
+#include <QtCore/QVariantMap>
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -95,6 +96,11 @@ void Benchmark::OnInstall(IModuleContext& ctx)
                     memStat_.Add(static_cast<double>(sys_.memBytes));
                     if (sys_.gpuValid)
                     {
+                        if (gpuStatScope_ != sys_.gpuScope)
+                        {
+                            gpuStat_.Reset();
+                            gpuStatScope_ = sys_.gpuScope;
+                        }
                         gpuStat_.Add(sys_.gpuPercent);
                     }
                 }
@@ -161,27 +167,101 @@ QString Fps(const double ms)
 {
     return ms > 0.0 ? QString::number(1000.0 / ms, 'f', 0) : QStringLiteral("0");
 }
+
+QString GpuLabel(const SysGpuScope scope)
+{
+    switch (scope)
+    {
+    case SysGpuScope::App:
+        return QStringLiteral("GPU app");
+    case SysGpuScope::Device:
+        return QStringLiteral("GPU device");
+    case SysGpuScope::Unavailable:
+        break;
+    }
+    return QStringLiteral("GPU");
+}
+
+QVariantMap MetricRow(QString label, QString value, QString detail = {})
+{
+    QVariantMap row;
+    row.insert(QStringLiteral("label"), std::move(label));
+    row.insert(QStringLiteral("value"), std::move(value));
+    row.insert(QStringLiteral("detail"), std::move(detail));
+    return row;
+}
+
+QVariantMap MetricSection(QString title, QVariantList rows)
+{
+    QVariantMap section;
+    section.insert(QStringLiteral("title"), std::move(title));
+    section.insert(QStringLiteral("rows"), std::move(rows));
+    return section;
+}
+
+QString AvgMaxDetail(const Stat& stat, const char* unit = "")
+{
+    if (stat.count == 0)
+    {
+        return {};
+    }
+    return QStringLiteral("avg %1%3 / max %2%3").arg(stat.Avg(), 0, 'f', 0).arg(stat.max, 0, 'f', 0).arg(unit);
+}
 } // namespace
 
-QString Benchmark::Summary() const
+QVariantList Benchmark::Sections() const
 {
     const double liveFps = frameMsSmoothed_ > 0.0 ? 1000.0 / frameMsSmoothed_ : 0.0;
-    QStringList rows;
-    rows << QStringLiteral("UI  %1 fps  ·  %2 ms").arg(liveFps, 0, 'f', 0).arg(frameMsSmoothed_, 0, 'f', 1);
+    QVariantList sections;
+
+    QVariantList liveRows;
+    liveRows << MetricRow(
+        QStringLiteral("UI"), QStringLiteral("%1 fps").arg(liveFps, 0, 'f', 0),
+        QStringLiteral("%1 ms").arg(frameMsSmoothed_, 0, 'f', 1)
+    );
+    liveRows << MetricRow(
+        QStringLiteral("CPU app"), QStringLiteral("%1%").arg(sys_.cpuPercent, 0, 'f', 0), AvgMaxDetail(cpuStat_, "%")
+    );
+    const double toMiB = 1.0 / (1024.0 * 1024.0);
+    liveRows << MetricRow(
+        QStringLiteral("Mem app"), QStringLiteral("%1 MB").arg(static_cast<double>(sys_.memBytes) * toMiB, 0, 'f', 0),
+        memStat_.count == 0 ? QString{}
+                            : QStringLiteral("avg %1 MB / max %2 MB")
+                                  .arg(memStat_.Avg() * toMiB, 0, 'f', 0)
+                                  .arg(memStat_.max * toMiB, 0, 'f', 0)
+    );
+    if (sys_.gpuValid)
+    {
+        liveRows << MetricRow(
+            GpuLabel(sys_.gpuScope), QStringLiteral("%1%").arg(sys_.gpuPercent, 0, 'f', 0), AvgMaxDetail(gpuStat_, "%")
+        );
+    }
+    else
+    {
+        liveRows << MetricRow(QStringLiteral("GPU"), QStringLiteral("N/A"));
+    }
+    sections << MetricSection(QStringLiteral("Live"), liveRows);
 
     // ── Aggregated run results (only once samples exist) ─────────────────────────
     if (frameStat_.count > 0)
     {
+        QVariantList runRows;
         // FPS min/max invert frame-time max/min: the slowest frame is the lowest fps.
-        rows << QStringLiteral("FPS    avg %1  min %2  max %3")
-                    .arg(Fps(frameStat_.Avg()), Fps(frameStat_.max), Fps(frameStat_.min));
-        rows << QStringLiteral("Frame  avg %1  min %2  max %3  σ %4 ms")
-                    .arg(frameStat_.Avg(), 0, 'f', 1)
-                    .arg(frameStat_.min, 0, 'f', 1)
-                    .arg(frameStat_.max, 0, 'f', 1)
-                    .arg(frameStat_.Std(), 0, 'f', 2);
-        rows << QStringLiteral("Lows   1% %1 fps  ·  0.1% %2 fps")
-                    .arg(Fps(PercentileMs(frameSamples_, 99.0)), Fps(PercentileMs(frameSamples_, 99.9)));
+        runRows << MetricRow(
+            QStringLiteral("FPS"), QStringLiteral("avg %1").arg(Fps(frameStat_.Avg())),
+            QStringLiteral("min %1 / max %2").arg(Fps(frameStat_.max), Fps(frameStat_.min))
+        );
+        runRows << MetricRow(
+            QStringLiteral("Frame"), QStringLiteral("avg %1 ms").arg(frameStat_.Avg(), 0, 'f', 1),
+            QStringLiteral("min %1 / max %2 / σ %3")
+                .arg(frameStat_.min, 0, 'f', 1)
+                .arg(frameStat_.max, 0, 'f', 1)
+                .arg(frameStat_.Std(), 0, 'f', 2)
+        );
+        runRows << MetricRow(
+            QStringLiteral("Lows"), QStringLiteral("1% %1 fps").arg(Fps(PercentileMs(frameSamples_, 99.0))),
+            QStringLiteral("0.1% %1 fps").arg(Fps(PercentileMs(frameSamples_, 99.9)))
+        );
 
         const double avgMs = frameStat_.Avg();
         const auto stutter = static_cast<int64_t>(std::count_if(
@@ -191,48 +271,56 @@ QString Benchmark::Summary() const
                 return v > 2.0 * avgMs;
             }
         ));
-        rows << QStringLiteral("Stutter %1 (>2× avg)  ·  frames %2  ·  %3 s")
-                    .arg(stutter)
-                    .arg(frameStat_.count)
-                    .arg(timePos_, 0, 'f', 0);
-    }
-
-    // ── Process performance: live value + run avg/max ────────────────────────────
-    rows << QStringLiteral("CPU  %1%  (avg %2 / max %3)")
-                .arg(sys_.cpuPercent, 0, 'f', 0)
-                .arg(cpuStat_.Avg(), 0, 'f', 0)
-                .arg(cpuStat_.max, 0, 'f', 0);
-    const double toMiB = 1.0 / (1024.0 * 1024.0);
-    rows << QStringLiteral("Mem  %1 MB  (avg %2 / max %3)")
-                .arg(static_cast<double>(sys_.memBytes) * toMiB, 0, 'f', 0)
-                .arg(memStat_.Avg() * toMiB, 0, 'f', 0)
-                .arg(memStat_.max * toMiB, 0, 'f', 0);
-    if (sys_.gpuValid)
-    {
-        rows << QStringLiteral("GPU  %1%  (avg %2 / max %3)")
-                    .arg(sys_.gpuPercent, 0, 'f', 0)
-                    .arg(gpuStat_.Avg(), 0, 'f', 0)
-                    .arg(gpuStat_.max, 0, 'f', 0);
-    }
-    else
-    {
-        rows << QStringLiteral("GPU  N/A");
+        runRows << MetricRow(
+            QStringLiteral("Stutter"), QString::number(stutter),
+            QStringLiteral(">2x avg / frames %1 / %2 s").arg(frameStat_.count).arg(timePos_, 0, 'f', 0)
+        );
+        sections << MetricSection(QStringLiteral("Run"), runRows);
     }
 
     // ── Context: what produced these numbers ─────────────────────────────────────
-    rows << QStringLiteral("Decoder  %1").arg(QString::fromStdString(hwDec_));
+    QVariantList contextRows;
+    contextRows << MetricRow(QStringLiteral("Decoder"), QString::fromStdString(hwDec_));
     QString backend = gfxBackend_.empty() ? QStringLiteral("unknown") : QString::fromStdString(gfxBackend_);
     if (gpuIsNvidia_)
     {
-        backend += QStringLiteral(" · NVIDIA");
+        backend += QStringLiteral(" / NVIDIA");
     }
-    rows << QStringLiteral("Backend  %1").arg(backend);
+    contextRows << MetricRow(QStringLiteral("Backend"), backend);
     if (videoW_ > 0 && videoH_ > 0)
     {
-        rows << QStringLiteral("Video  %1×%2").arg(videoW_).arg(videoH_);
+        contextRows << MetricRow(QStringLiteral("Video"), QStringLiteral("%1x%2").arg(videoW_).arg(videoH_));
     }
-    rows << QStringLiteral("Dropped %1  ·  Mistimed %2").arg(dropped_).arg(mistimed_);
-    rows << QStringLiteral("Decode err %1  ·  Cache miss %2").arg(decodeErrors_).arg(cacheMisses_);
+    contextRows << MetricRow(
+        QStringLiteral("Frames"), QStringLiteral("dropped %1").arg(dropped_),
+        QStringLiteral("mistimed %1").arg(mistimed_)
+    );
+    contextRows << MetricRow(
+        QStringLiteral("Decode"), QStringLiteral("errors %1").arg(decodeErrors_),
+        QStringLiteral("cache misses %1").arg(cacheMisses_)
+    );
+    sections << MetricSection(QStringLiteral("Playback"), contextRows);
+
+    return sections;
+}
+
+QString Benchmark::Summary() const
+{
+    QStringList rows;
+    for (const QVariant& sectionValue : Sections())
+    {
+        const QVariantMap section = sectionValue.toMap();
+        for (const QVariant& rowValue : section.value(QStringLiteral("rows")).toList())
+        {
+            const QVariantMap row = rowValue.toMap();
+            const QString label = row.value(QStringLiteral("label")).toString();
+            const QString value = row.value(QStringLiteral("value")).toString();
+            const QString detail = row.value(QStringLiteral("detail")).toString();
+            rows
+                << (detail.isEmpty() ? QStringLiteral("%1  %2").arg(label, value)
+                                     : QStringLiteral("%1  %2  (%3)").arg(label, value, detail));
+        }
+    }
     return rows.join('\n');
 }
 
@@ -268,6 +356,7 @@ void Benchmark::ResetStats()
     cpuStat_.Reset();
     memStat_.Reset();
     gpuStat_.Reset();
+    gpuStatScope_ = SysGpuScope::Unavailable;
     decodeErrors_ = cacheMisses_ = 0;
     videoW_ = videoH_ = 0;
     complete_ = false;
