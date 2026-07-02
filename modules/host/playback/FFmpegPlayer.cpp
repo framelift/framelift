@@ -185,12 +185,7 @@ void FFmpegPlayer::ClearSubtitleSeekClockOverride()
 double FFmpegPlayer::VideoWallClock()
 {
     std::lock_guard lock(mutex_);
-    if (!videoClockSet_)
-    {
-        return 0.0;
-    }
-    const auto ref = paused_.load() ? pauseWall_ : std::chrono::steady_clock::now();
-    return videoClockPts_ + std::chrono::duration<double>(ref - videoClockWall_).count();
+    return videoClock_.Read(paused_.load(), std::chrono::steady_clock::now());
 }
 
 // ── Decode-thread helpers ─────────────────────────────────────────────────────

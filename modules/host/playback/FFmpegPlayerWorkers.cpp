@@ -261,12 +261,8 @@ void FFmpegPlayer::VideoWorker(AVCodecContext* dec, AVStream* stream, int dstW, 
         if (!audioOut_->HasDevice())
         {
             std::lock_guard lock(mutex_);
-            if (!videoClockSet_)
+            if (videoClock_.EstablishOnce(framePts, std::chrono::steady_clock::now()))
             {
-                videoClockSet_ = true;
-                videoClockPts_ = framePts;
-                videoClockWall_ = std::chrono::steady_clock::now();
-                pauseWall_ = videoClockWall_;
                 subtitleSeekClockOverrideActive_ = false;
                 seekClockValid_ = true; // video wall clock is the master here — anchor may release
             }

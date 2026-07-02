@@ -69,15 +69,7 @@ void FFmpegPlayer::SetPause(bool paused) noexcept
     audioOut_->SetPaused(paused);
     {
         std::lock_guard lock(mutex_);
-        const auto now = std::chrono::steady_clock::now();
-        if (paused)
-        {
-            pauseWall_ = now;
-        }
-        else if (videoClockSet_)
-        {
-            videoClockWall_ += now - pauseWall_; // shift baseline past the pause gap
-        }
+        videoClock_.OnPauseEdge(paused, std::chrono::steady_clock::now());
     }
     Wake();
     EmitFlag(PlayerProperty::Pause, paused);

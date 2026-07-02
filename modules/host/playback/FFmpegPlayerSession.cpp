@@ -51,7 +51,7 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
     {
         std::lock_guard lock(mutex_);
         hwDecName_ = "no"; // reset until the video decoder is (re)armed below
-        videoClockSet_ = false;
+        videoClock_.Reset();
         subtitleSeekClockOverrideActive_ = false;
         hasPendingSeek_ = false; // discard any seek queued before this load
         hasPendingAudioSwitch_ = false;
@@ -319,7 +319,7 @@ void FFmpegPlayer::PlayFile(const std::string& path, double resumePos)
                 audioOut_->Flush();
                 {
                     std::lock_guard lock(mutex_);
-                    videoClockSet_ = false;
+                    videoClock_.Reset();
                     // Every applied seek (the RequestSeek kick *and* a demux-driven
                     // re-seek during a held burst) resets the clocks here, so both gates
                     // must re-arm: seekSettled_ so the worker re-paints before the next

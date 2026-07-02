@@ -2,6 +2,7 @@
 
 #include <framelift/platform/IMediaPlayer.h>
 
+#include "FFmpegClock.h" // VideoWallClockState
 #include "FFmpegSidecarScan.h"
 #include "FFmpegSubtitles.h"
 #include "FFmpegTrackSelect.h"
@@ -373,12 +374,10 @@ private:
     std::string mediaTitle_;                        // metadata title (guarded by mutex_)
     std::string hwDecName_ = "no";                  // active hw decoder name / "no" (guarded by mutex_)
 
-    // Video-only wall clock baseline (guarded by mutex_): maps a pts to a wall time
-    // so the fallback clock can be frozen across pause.
-    double videoClockPts_ = 0.0;
-    bool videoClockSet_ = false;
-    std::chrono::steady_clock::time_point videoClockWall_;
-    std::chrono::steady_clock::time_point pauseWall_;
+    // Video-only wall clock baseline (guarded by mutex_ — see VideoWallClockState's
+    // locking note): maps a pts to a wall time so the fallback clock can be frozen
+    // across pause.
+    VideoWallClockState videoClock_;
 
     // Toggle state mirrors (defaults match the player's initial state).
     bool muteEnabled_ = false;
