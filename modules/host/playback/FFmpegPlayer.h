@@ -29,6 +29,7 @@ struct AVStream;
 struct AVFormatContext;
 struct AVFrame;
 struct AVBufferRef;
+struct AVPacket;
 
 class FFmpegAudioOutput;
 class FFmpegPacketQueue;
@@ -179,6 +180,40 @@ private:
     // demux + audio/video workers for the file (PlayFile) until EOF / new load / quit.
     void DecodeThreadMain();
     void PlayFile(const std::string& path, double resumePos);
+
+    // ── Demux-session phases (decode thread; bodies in FFmpegPlayerSession.cpp) ─
+    // The per-file libav state travels in a SessionContext, defined only in the
+    // session TU (it is libav-heavy). PlayFile is the ~40-line skeleton that
+    // sequences these phases.
+    struct SessionContext;
+    enum class SessionEndReason : std::uint8_t
+    {
+        Eof,  // demuxer reached end of file
+        Stop, // shutdown or a new file load
+        Seek, // a seek was requested
+    };
+    // Open the container and read stream info; on failure emits the end event +
+    // summary and returns false (nothing to close).
+    [[nodiscard]] bool OpenSessionInputs(const std::string& path, SessionContext& ctx);
+    // Open the (optional) video decoder, arming hardware decode when configured.
+    void OpenVideoDecoder(SessionContext& ctx);
+    // Discover sidecars, build the track list, bind the default audio/subtitle
+    // selections. False ⇒ nothing at all plays (already emitted + cleaned up).
+    [[nodiscard]] bool BindSelectedTracks(const std::string& path, SessionContext& ctx);
+    // Publish duration/title/FileLoaded (ends the "file-load-metadata" span).
+    void PublishLoadedMetadata(const std::string& path, SessionContext& ctx);
+    // Rebind audio/subtitle to a pending Select* request (workers are joined).
+    void ApplyPendingTrackSwitches(const std::string& path, SessionContext& ctx);
+    // Apply a pending seek (NaN ⇒ none; cleared on return) and flush/reset the
+    // packet queues + read-ahead accounting for the next demux run.
+    void ApplySeekAndPrepareQueues(double& seekTo, SessionContext& ctx);
+    // Spawn the workers, demux until EOF/stop/seek, stop the queues and join.
+    [[nodiscard]] SessionEndReason RunDemuxSession(SessionContext& ctx, AVPacket* pkt);
+    // EOF: emit EndFile (per still-image hold rules) and park on the last frame.
+    // False ⇒ stopping; true ⇒ a seek arrived and the session resumes.
+    [[nodiscard]] bool HoldAtEndOfFile(const SessionContext& ctx);
+    // Emit the session summary and free every per-file resource.
+    void CloseSession(SessionContext& ctx, AVPacket*& pkt);
 
     // Per-file worker bodies (each on its own thread, spawned by PlayFile).
     void AudioWorker(AVCodecContext* dec, AVStream* stream, double startOffset);
